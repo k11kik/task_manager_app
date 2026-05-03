@@ -516,7 +516,7 @@ export default function App() {
     setIsSyncing(true);
     try {
       const csvContent = getCSVData();
-      const fileName = `FocusFlow_Log_${user?.email?.split('@')[0] || 'local'}.csv`;
+      const fileName = `TaskManager_Log_${user?.email?.split('@')[0] || 'local'}.csv`;
       
       const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
       const writable = await fileHandle.createWritable();
@@ -654,7 +654,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `FocusFlow_Export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
+      link.setAttribute('download', `TaskManager_Export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -805,7 +805,7 @@ export default function App() {
               </div>
               <div>
                 <h3 className="text-xl font-bold mb-2">Sync to Cloud</h3>
-                <p className="text-sm opacity-80 leading-relaxed">Sign in to securely access your FocusFlow system across all devices with real-time sync.</p>
+                <p className="text-sm opacity-80 leading-relaxed">Sign in to securely access your Task Manager system across all devices with real-time sync.</p>
               </div>
               <button 
                 onClick={() => handleSignIn()}

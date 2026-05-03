@@ -1,5 +1,5 @@
 {
-  "name": "FocusFlow Task Manager",
+  "name": "Task Manager",
   "description": "A structured task management app based on daily focus and weekly review cycles, featuring automatic archiving and project-based organization.",
   "requestFramePermissions": [],
   "majorCapabilities": []
