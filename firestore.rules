@@ -20,7 +20,30 @@ service cloud.firestore {
 
     // Task Security
     match /tasks/{taskId} {
-      allow read, write: if true;
+      function isValidTask(data) {
+        return data.userId == request.auth.uid 
+          && data.title is string && data.title.size() <= 500
+          && data.project is string && data.project.size() <= 100
+          && data.category in ['Urgent', 'Focus', 'Archive', 'Trash']
+          && data.createdAt is number
+          && data.updatedAt is number
+          && data.isDone is bool
+          && (!('notes' in data) || (data.notes is string && data.notes.size() <= 5000));
+      }
+
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() 
+        && isValidTask(request.resource.data)
+        && request.resource.data.userId == request.auth.uid;
+        
+      allow update: if isSignedIn() 
+        && resource.data.userId == request.auth.uid
+        && isValidTask(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+        
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     // Settings Security

@@ -1,4 +1,4 @@
-export type Category = 'Urgent' | 'Focus' | 'Archive';
+export type Category = 'Urgent' | 'Focus' | 'Archive' | 'Trash';
 
 export interface Task {
   id: string;

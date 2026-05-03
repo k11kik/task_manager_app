@@ -75,7 +75,7 @@ export default function App() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskProject, setNewTaskProject] = useState('');
   const [isPickingDaily, setIsPickingDaily] = useState(false);
-  const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash'>('dashboard');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,7 +86,6 @@ export default function App() {
   const [settings, setSettings] = useState({
     urgentLimit: 3,
     archiveThresholdDays: 30,
-    warningThreshold: 15,
     criticalThreshold: 30,
     isLocalBackupEnabled: false,
     localBackupPath: ''
@@ -127,7 +126,6 @@ export default function App() {
         setSettings({
           urgentLimit: data.urgentLimit || 3,
           archiveThresholdDays: data.archiveThresholdDays || 30,
-          warningThreshold: data.warningThreshold || 15,
           criticalThreshold: data.criticalThreshold || 30,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || ''
@@ -138,7 +136,6 @@ export default function App() {
           userId: user.uid,
           urgentLimit: 3,
           archiveThresholdDays: 30,
-          warningThreshold: 15,
           criticalThreshold: 30,
           isLocalBackupEnabled: false,
           localBackupPath: ''
@@ -244,14 +241,16 @@ export default function App() {
     const focusTasksCount = tasks.filter(t => t.category === 'Focus' && !t.isDone).length;
     const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
     
+    const warningThreshold = Math.floor(settings.criticalThreshold * 0.7);
     let gaugeColor = 'bg-indigo-400';
     let textColor = 'text-white';
-    if (focusTasksCount > settings.criticalThreshold) {
-      gaugeColor = 'bg-red-500';
-      textColor = 'text-red-400 font-black';
-    } else if (focusTasksCount > settings.warningThreshold) {
-      gaugeColor = 'bg-amber-400';
-      textColor = 'text-amber-400 font-black';
+    
+    if (focusTasksCount >= settings.criticalThreshold) {
+      gaugeColor = 'bg-red-600';
+      textColor = 'text-red-500 font-black';
+    } else if (focusTasksCount >= warningThreshold) {
+      gaugeColor = 'bg-orange-400';
+      textColor = 'text-orange-400 font-black';
     }
 
     return {
@@ -261,6 +260,7 @@ export default function App() {
       focusTasksCount,
       gaugeColor,
       textColor,
+      warningThreshold,
       morningRoutineReady: urgentCount >= settings.urgentLimit,
       loadPercentage: Math.min((focusTasksCount / settings.criticalThreshold) * 100, 100)
     };
@@ -291,6 +291,16 @@ export default function App() {
     const archiveTasks = filteredTasks.filter(t => t.category === 'Archive');
     const grouped: Record<string, Task[]> = {};
     archiveTasks.forEach(t => {
+      if (!grouped[t.project]) grouped[t.project] = [];
+      grouped[t.project].push(t);
+    });
+    return grouped;
+  }, [filteredTasks]);
+
+  const groupedTrashTasks = useMemo(() => {
+    const trashTasks = filteredTasks.filter(t => t.category === 'Trash');
+    const grouped: Record<string, Task[]> = {};
+    trashTasks.forEach(t => {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
@@ -373,10 +383,54 @@ export default function App() {
 
   const deleteTask = async (id: string) => {
     if (!user) return;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+
+    if (task.category === 'Trash') {
+      // If already in trash, perm delete
+      try {
+        await deleteDoc(doc(db, 'tasks', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `tasks/${id}`);
+      }
+    } else {
+      // Move to trash
+      try {
+        await updateDoc(doc(db, 'tasks', id), { 
+          category: 'Trash', 
+          updatedAt: Date.now() 
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
+      }
+    }
+  };
+
+  const permanentlyDeleteTask = async (id: string) => {
+    if (!user) return;
     try {
       await deleteDoc(doc(db, 'tasks', id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `tasks/${id}`);
+    }
+  };
+
+  const emptyTrash = async () => {
+    if (!user) return;
+    const trashTasks = tasks.filter(t => t.category === 'Trash');
+    if (trashTasks.length === 0) return;
+
+    if (!window.confirm(`Permanently delete all ${trashTasks.length} items in the trash? This cannot be undone.`)) return;
+
+    try {
+      const batch = writeBatch(db);
+      trashTasks.forEach(t => {
+        batch.delete(doc(db, 'tasks', t.id));
+      });
+      await batch.commit();
+      setError(`${trashTasks.length} items permanently deleted.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'batch/empty-trash');
     }
   };
 
@@ -489,6 +543,33 @@ export default function App() {
     }
   }, [tasks, settings.isLocalBackupEnabled, dirHandle]);
 
+  // Trash Auto-Cleanup Effect (30 days)
+  useEffect(() => {
+    if (!user || tasks.length === 0) return;
+
+    const cleanupTrash = async () => {
+      const now = Date.now();
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+      const expiredTrash = tasks.filter(t => t.category === 'Trash' && (now - t.updatedAt) > thirtyDaysMs);
+      
+      if (expiredTrash.length > 0) {
+        try {
+          const batch = writeBatch(db);
+          expiredTrash.forEach(t => {
+            batch.delete(doc(db, 'tasks', t.id));
+          });
+          await batch.commit();
+          console.log(`Auto-cleaned ${expiredTrash.length} expired trash items.`);
+        } catch (err) {
+          console.error("Auto-cleanup trash failed", err);
+        }
+      }
+    };
+
+    const timer = setTimeout(cleanupTrash, 10000); // Run once shortly after load
+    return () => clearTimeout(timer);
+  }, [user, tasks]);
+
   const cleanupArchive = async (thresholdDays?: number) => {
     if (!user) return;
     try {
@@ -506,14 +587,17 @@ export default function App() {
         return;
       }
 
-      if (!window.confirm(`Are you sure you want to delete ${archiveTasks.length} archived tasks? This cannot be undone.`)) return;
+      if (!window.confirm(`Are you sure you want to move ${archiveTasks.length} archived tasks to the Trash?`)) return;
 
       const batch = writeBatch(db);
       archiveTasks.forEach(task => {
-        batch.delete(doc(db, 'tasks', task.id));
+        batch.update(doc(db, 'tasks', task.id), {
+          category: 'Trash',
+          updatedAt: now
+        });
       });
       await batch.commit();
-      setError(`Archive Cleaned: Removed ${archiveTasks.length} legacy entries.`);
+      setError(`Archive Updated: Moved ${archiveTasks.length} entries to Trash.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'batch/cleanup-archive');
     }
@@ -637,6 +721,12 @@ export default function App() {
               Archive
             </button>
             <button 
+              onClick={() => setViewMode('trash')}
+              className={cn("pb-4 -mb-4 transition-colors", viewMode === 'trash' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
+            >
+              Trash
+            </button>
+            <button 
               onClick={() => setViewMode('settings')}
               className={cn("pb-4 -mb-4 transition-colors", viewMode === 'settings' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
             >
@@ -666,6 +756,16 @@ export default function App() {
                 <span className="text-[10px] font-black tracking-widest uppercase opacity-40">authenticated</span>
                 <span className="font-bold text-slate-700">{user.displayName || user.email}</span>
               </div>
+              <button 
+                onClick={() => setViewMode('trash')}
+                className={cn(
+                  "w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group",
+                  viewMode === 'trash' && "bg-red-50 text-red-500 border-red-100"
+                )}
+                title="Trash Bin"
+              >
+                <Trash2 size={16} />
+              </button>
               <button 
                 onClick={logOut}
                 className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group"
@@ -765,11 +865,15 @@ export default function App() {
             <div className="space-y-3">
               <div className="flex justify-between text-xs">
                 <span>Focus Backlog</span>
-                <span className={cn("font-mono transition-colors", stats.textColor)}>{stats.focusTasksCount} items</span>
+                <span className={cn("font-mono transition-colors", stats.textColor)}>{stats.focusTasksCount} / {settings.criticalThreshold}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span>System Archive</span>
                 <span className="text-white font-mono">{stats.archived}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span>Trash Bin</span>
+                <span className="text-white font-mono italic">{tasks.filter(t => t.category === 'Trash').length}</span>
               </div>
               <div className="h-1.5 bg-slate-700 rounded-full mt-4 overflow-hidden">
                 <div 
@@ -779,7 +883,7 @@ export default function App() {
               </div>
               <div className="flex justify-between items-center mt-2">
                 <p className="text-[10px] opacity-60">
-                  {stats.focusTasksCount > settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount > settings.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}
+                  {stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}
                 </p>
                 <p className="text-[10px] font-mono opacity-40">{Math.round(stats.loadPercentage)}%</p>
               </div>
@@ -978,6 +1082,64 @@ export default function App() {
                 )}
               </div>
             </section>
+          ) : viewMode === 'trash' ? (
+            /* Trash Mode */
+            <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/30 border-red-100 h-full">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-2 gap-4">
+                <div>
+                  <h3 className="font-bold flex items-center gap-2 text-red-700 text-lg">
+                    <Trash2 size={22} className="text-red-400" />
+                    Trash Bin
+                  </h3>
+                  <p className="text-[10px] uppercase font-black tracking-widest text-red-400 mt-1">
+                    Items will be permanently deleted after 30 days
+                  </p>
+                </div>
+                
+                <button 
+                  onClick={emptyTrash}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 rounded-xl text-[10px] font-black text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-sm uppercase tracking-wider"
+                >
+                  <Zap size={12} />
+                  Empty Trash
+                </button>
+              </div>
+              
+              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+                {Object.keys(groupedTrashTasks).length > 0 ? (
+                  (Object.entries(groupedTrashTasks) as [string, Task[]][]).map(([project, tasks]) => (
+                    <div key={project} className="space-y-3">
+                      <div className="flex items-center gap-4 px-2">
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400 bg-white/50 px-2 py-0.5 rounded border border-red-100">
+                          {project}
+                        </h4>
+                        <div className="h-px flex-1 bg-red-100"></div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                        <AnimatePresence mode="popLayout">
+                          {tasks.map(task => (
+                            <TaskCard 
+                              key={task.id} 
+                              task={task} 
+                              onToggle={() => toggleDone(task.id)}
+                              onMove={(newCat) => moveTask(task.id, newCat)}
+                              onDelete={() => deleteTask(task.id)}
+                              onEdit={() => setEditingTask(task)}
+                              variant="Trash"
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
+                    <Trash2 size={48} strokeWidth={1} />
+                    <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">Trash Bin is Empty</span>
+                  </div>
+                )}
+              </div>
+            </section>
           ) : (
             /* Settings Mode */
             <section className="flex flex-col rounded-2xl border p-8 min-h-0 bg-white border-slate-200 h-full overflow-y-auto custom-scrollbar">
@@ -1024,40 +1186,44 @@ export default function App() {
                       <Activity size={18} />
                       <h3 className="font-bold text-sm uppercase tracking-wider">Health Metrics</h3>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div className="space-y-3">
+                    <div className="space-y-8">
+                      <div className="space-y-4">
                         <div className="flex justify-between items-end">
-                          <label className="text-xs font-bold text-amber-600 uppercase">Warning Threshold</label>
-                          <input 
-                            type="number"
-                            className="w-16 bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono font-bold outline-none focus:ring-1 focus:ring-amber-500"
-                            value={settings.warningThreshold}
-                            onChange={(e) => saveSettings({ ...settings, warningThreshold: Math.max(1, parseInt(e.target.value) || 1) })}
-                          />
+                          <div>
+                            <p className="font-bold text-slate-900">Critical Threshold</p>
+                            <p className="text-xs text-slate-500">Maximum focus tasks before critical alert. Warning is at 70%.</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <input 
+                              type="number"
+                              className="w-16 bg-white border border-slate-200 rounded px-2 py-1 text-sm font-mono font-bold outline-none focus:ring-1 focus:ring-red-500 text-center"
+                              value={settings.criticalThreshold}
+                              onChange={(e) => saveSettings({ ...settings, criticalThreshold: Math.max(5, parseInt(e.target.value) || 5) })}
+                            />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Items</span>
+                          </div>
                         </div>
                         <input 
-                          type="range" min="1" max="50" step="1"
-                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                          value={settings.warningThreshold}
-                          onChange={(e) => saveSettings({ ...settings, warningThreshold: parseInt(e.target.value) })}
-                        />
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-end">
-                          <label className="text-xs font-bold text-red-600 uppercase">Critical Threshold</label>
-                          <input 
-                            type="number"
-                            className="w-16 bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono font-bold outline-none focus:ring-1 focus:ring-red-500"
-                            value={settings.criticalThreshold}
-                            onChange={(e) => saveSettings({ ...settings, criticalThreshold: Math.max(2, parseInt(e.target.value) || 2) })}
-                          />
-                        </div>
-                        <input 
-                          type="range" min="5" max="100" step="1"
-                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
+                          type="range" min="5" max="100" step="5"
+                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-600"
                           value={settings.criticalThreshold}
                           onChange={(e) => saveSettings({ ...settings, criticalThreshold: parseInt(e.target.value) })}
                         />
+                        <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <span>5 items</span>
+                          <span>100 items</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200/60">
+                        <div className="bg-white p-3 rounded-xl border border-slate-100 flex flex-col items-center">
+                          <span className="text-[9px] font-black uppercase text-orange-400 tracking-tighter mb-1">Warning (70%)</span>
+                          <span className="text-lg font-mono font-bold text-orange-400">{Math.floor(settings.criticalThreshold * 0.7)}</span>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-slate-100 flex flex-col items-center">
+                          <span className="text-[9px] font-black uppercase text-red-500 tracking-tighter mb-1">Critical (100%)</span>
+                          <span className="text-lg font-mono font-bold text-red-600">{settings.criticalThreshold}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1274,7 +1440,7 @@ interface TaskCardProps {
   onMove: (cat: Category) => void;
   onDelete: () => void;
   onEdit: () => void;
-  variant?: 'Urgent' | 'Focus' | 'Archive';
+  variant?: 'Urgent' | 'Focus' | 'Archive' | 'Trash';
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, onEdit, variant = 'Focus' }) => {
@@ -1303,7 +1469,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
         <p className="text-[9px] font-bold text-slate-400 leading-none tracking-wider uppercase font-mono">
           ({formatDate(task.createdAt)}) <span className="text-indigo-600 opacity-60">[{task.project}]</span>
         </p>
-        {variant === 'Archive' && (
+        {(variant === 'Archive' || variant === 'Trash') && (
           <button 
             onClick={(e) => { e.stopPropagation(); onMove('Focus'); }}
             className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-0.5 pointer-events-auto"
@@ -1338,13 +1504,13 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
         </div>
 
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {variant !== 'Urgent' && task.category !== 'Archive' && (
+          {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
             <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-1 hover:bg-red-50 text-red-500 rounded" title="Level to Urgent">
               <Zap size={10} />
             </button>
           )}
-          {variant !== 'Focus' && (
-            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-1 hover:bg-indigo-50 text-indigo-500 rounded" title="Level to Focus">
+          {(variant === 'Archive' || variant === 'Trash' || variant === 'Urgent') && (
+            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-1 hover:bg-indigo-50 text-indigo-500 rounded" title="Move to Focus">
               <Target size={10} />
             </button>
           )}
@@ -1361,14 +1527,20 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
                       <Zap size={12} className="text-red-400" /> Move to Urgent
                     </button>
                   )}
-                  {variant !== 'Archive' && (
+                  {variant !== 'Archive' && variant !== 'Trash' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Archive'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-600 border-b border-slate-50 flex items-center gap-2">
                       <ArchiveIcon size={12} className="text-slate-400" /> Move to Archive
                     </button>
                   )}
-                  <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
-                    <Trash2 size={12} className="text-red-400" /> Delete Permanently
-                  </button>
+                  {variant !== 'Trash' ? (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Trash'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                       <Trash2 size={12} className="text-red-400" /> Move to Trash
+                    </button>
+                  ) : (
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                      <Trash2 size={12} className="text-red-400" /> Delete Permanently
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -1569,7 +1741,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 Move to Urgent
               </button>
             )}
-            {task.category !== 'Archive' && (
+            {task.category !== 'Archive' && task.category !== 'Trash' && (
               <button 
                 onClick={() => { onMove('Archive'); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all group"
@@ -1578,13 +1750,32 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 Archive Task
               </button>
             )}
-            <button 
-              onClick={() => { if(confirm('Delete this task permanently?')) { onDelete(); onClose(); } }}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-red-500 hover:bg-red-50 hover:border-red-200 transition-all"
-            >
-              <Trash2 size={16} className="text-red-300" />
-              Delete Permanently
-            </button>
+            {task.category !== 'Trash' ? (
+              <button 
+                onClick={() => { onMove('Trash'); onClose(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-red-500 hover:bg-red-50 hover:border-red-200 transition-all"
+              >
+                <Trash2 size={16} className="text-red-300" />
+                Move to Trash
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <button 
+                  onClick={() => { onMove('Focus'); onClose(); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all"
+                >
+                  <RefreshCcw size={16} className="text-indigo-400" />
+                  Restore to Focus
+                </button>
+                <button 
+                  onClick={() => { if(confirm('Delete this task permanently?')) { onDelete(); onClose(); } }}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-lg shadow-red-100"
+                >
+                  <Trash2 size={16} />
+                  Delete Permanently
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="mt-auto pt-8">
