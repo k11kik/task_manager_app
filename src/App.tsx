@@ -762,16 +762,6 @@ export default function App() {
                 <span className="font-bold text-slate-700">{user.displayName || user.email}</span>
               </div>
               <button 
-                onClick={() => setViewMode('trash')}
-                className={cn(
-                  "w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group",
-                  viewMode === 'trash' && "bg-red-50 text-red-500 border-red-100"
-                )}
-                title="Trash Bin"
-              >
-                <Trash2 size={16} />
-              </button>
-              <button 
                 onClick={logOut}
                 className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group"
                 title="Log Out"
@@ -1160,6 +1150,45 @@ export default function App() {
                 </div>
 
                 <div className="space-y-12">
+                  {/* Account Information */}
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    <div className="flex items-center gap-2 mb-4 text-slate-600">
+                      <UserIcon size={18} />
+                      <h3 className="font-bold text-sm uppercase tracking-wider">Account Information</h3>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm bg-indigo-50 flex items-center justify-center text-indigo-400">
+                          {user?.photoURL ? (
+                            <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <UserIcon size={24} />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900">{user?.displayName || 'Personal Account'}</p>
+                          <p className="text-xs text-slate-500">{user?.email || 'Not signed in'}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={cn(
+                          "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border",
+                          user ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-slate-100 text-slate-400 border-slate-200"
+                        )}>
+                          {user ? 'Cloud Synced' : 'Local Only'}
+                        </span>
+                        {user && (
+                          <button 
+                            onClick={logOut}
+                            className="text-[10px] font-bold text-red-500 hover:underline flex items-center gap-1"
+                          >
+                            <LogOut size={10} /> Disconnect account
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Urgent Limits */}
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-4 text-amber-600">
