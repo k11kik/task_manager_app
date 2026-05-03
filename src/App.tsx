@@ -923,7 +923,7 @@ export default function App() {
                   <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded border uppercase text-red-400 border-red-100">{settings.urgentLimit} Slots</span>
                 </div>
                 
-                <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar pb-40">
                   <AnimatePresence mode="popLayout">
                     {filteredTasks
                       .filter(t => t.category === 'Urgent')
@@ -963,7 +963,7 @@ export default function App() {
                   </button>
                 </div>
                 
-                <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
                   {Object.keys(groupedFocusTasks).length > 0 ? (
                     (Object.entries(groupedFocusTasks) as [string, Task[]][]).map(([project, tasks]) => (
                       <div key={project} className="space-y-3">
@@ -1047,7 +1047,7 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
                 {Object.keys(groupedArchiveTasks).length > 0 ? (
                   (Object.entries(groupedArchiveTasks) as [string, Task[]][]).map(([project, tasks]) => (
                     <div key={project} className="space-y-3">
@@ -1105,7 +1105,7 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
                 {Object.keys(groupedTrashTasks).length > 0 ? (
                   (Object.entries(groupedTrashTasks) as [string, Task[]][]).map(([project, tasks]) => (
                     <div key={project} className="space-y-3">
@@ -1445,6 +1445,18 @@ interface TaskCardProps {
 
 const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, onEdit, variant = 'Focus' }) => {
   const [showMenu, setShowMenu] = useState(false);
+  const [openUpwards, setOpenUpwards] = useState(false);
+  const buttonRef = React.useRef<HTMLDivElement>(null);
+
+  const toggleMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showMenu && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUpwards(spaceBelow < 180); // 180px is approx the menu height
+    }
+    setShowMenu(!showMenu);
+  };
 
   return (
     <motion.div
@@ -1514,14 +1526,17 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
               <Target size={10} />
             </button>
           )}
-          <div className="relative">
-            <button onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} className="p-1 hover:bg-slate-100 text-slate-400 rounded">
+          <div className="relative" ref={buttonRef}>
+            <button onClick={toggleMenu} className="p-1 hover:bg-slate-100 text-slate-400 rounded">
               <MoreVertical size={10} />
             </button>
             {showMenu && (
               <>
                 <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
-                <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden">
+                <div className={cn(
+                  "absolute right-0 w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                  openUpwards ? "bottom-full mb-1" : "top-full mt-1"
+                )}>
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
                       <Zap size={12} className="text-red-400" /> Move to Urgent
