@@ -534,14 +534,28 @@ export default function App() {
     if (!window.confirm("Final confirmation: Delete everything and start fresh?")) return;
 
     try {
+      console.log("Starting full database purge for user:", user.uid);
       const batch = writeBatch(db);
+      let count = 0;
+      
+      // Delete everything currently in local state
       tasks.forEach(t => {
         batch.delete(doc(db, 'tasks', t.id));
+        count++;
       });
+      
+      if (count === 0) {
+        setError("No tasks found to delete in current session.");
+        return;
+      }
+
       await batch.commit();
-      setError("Database Purged: All tasks have been removed.");
-      localStorage.removeItem('focusflow_tasks'); // Also clear local cache to prevent re-migration
+      console.log(`Successfully purged ${count} tasks.`);
+      setError(`Database Purged: ${count} tasks have been removed.`);
+      localStorage.removeItem('focusflow_tasks'); 
+      localStorage.removeItem('focusflow_settings');
     } catch (err) {
+      console.error("Purge failed:", err);
       handleFirestoreError(err, OperationType.DELETE, 'batch/purge-all');
     }
   };
