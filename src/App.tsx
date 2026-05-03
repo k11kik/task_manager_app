@@ -16,7 +16,8 @@ import {
   ArrowRightLeft,
   Trash2,
   Settings as SettingsIcon,
-  Activity
+  Activity,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays, isAfter, subMonths } from 'date-fns';
@@ -199,6 +200,40 @@ export default function App() {
         : t
     ));
     setIsPickingDaily(false);
+  };
+
+  const exportTasks = () => {
+    try {
+      const headers = ['ID', 'Category', 'Project', 'Title', 'Notes', 'IsDone', 'CreatedAt', 'UpdatedAt'];
+      const rows = tasks.map(t => [
+        t.id,
+        t.category,
+        t.project,
+        `"${t.title.replace(/"/g, '""')}"`,
+        `"${(t.notes || '').replace(/"/g, '""')}"`,
+        t.isDone ? 'Yes' : 'No',
+        new Date(t.createdAt).toISOString(),
+        new Date(t.updatedAt).toISOString()
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(r => r.join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `FocusFlow_Export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError('Export Failed: An error occurred while generating the CSV.');
+    }
   };
 
   return (
@@ -609,6 +644,27 @@ export default function App() {
                         <option value={90}>90 Days (Relaxed)</option>
                         <option value={99999}>Never (Manual only)</option>
                       </select>
+                    </div>
+                  </div>
+
+                  {/* Data Management */}
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    <div className="flex items-center gap-2 mb-4 text-emerald-600">
+                      <Download size={18} />
+                      <h3 className="font-bold text-sm uppercase tracking-wider">Data Management</h3>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900">Export Knowledge Base</p>
+                        <p className="text-xs text-slate-500">Download all tasks (Focus, Urgent, Archive) as a CSV file.</p>
+                      </div>
+                      <button 
+                        onClick={exportTasks}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-100"
+                      >
+                        <Download size={14} />
+                        Download CSV
+                      </button>
                     </div>
                   </div>
                 </div>
