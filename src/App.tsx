@@ -521,42 +521,43 @@ export default function App() {
 
   const purgeAllData = async () => {
     if (!user) return;
-    if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will attempt to delete EVERY task detected in your session from the database. Proceed?")) return;
+    if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will try to delete EVERY task in the 'tasks' collection for your ID. Proceed?")) return;
 
     try {
-      setError("Purge in progress... check console for logs.");
-      console.log("PURGE: Starting individual doc deletion for", tasks.length, "docs");
+      setError("Purge started. Clearing cloud data...");
+      
+      // Fetch all docs directly from the collection to ensure we see what's on the server
+      const snap = await getDocs(query(collection(db, 'tasks'), where('userId', '==', user.uid)));
+      console.log(`Found ${snap.size} tasks to delete.`);
       
       let successCount = 0;
       let failCount = 0;
-      const errors: string[] = [];
 
-      for (const t of tasks) {
+      for (const d of snap.docs) {
         try {
-          await deleteDoc(doc(db, 'tasks', t.id));
+          await deleteDoc(d.ref);
           successCount++;
-          console.log(`PURGE SUCCESS: ${t.id}`);
-        } catch (err: any) {
-          console.error(`PURGE FAIL: ${t.id}`, err);
+        } catch (err) {
+          console.error(`Failed to delete doc ${d.id}:`, err);
           failCount++;
-          errors.push(`${t.id}: ${err.message}`);
         }
       }
 
-      // Hard reset local state
-      setTasks([]);
+      // Final step: Clear local storage and Firestore persistence cache
       localStorage.clear();
       sessionStorage.clear();
       
-      if (failCount > 0) {
-        const uniqueErrors = Array.from(new Set(errors));
-        setError(`Purge Result: ${successCount} removed, ${failCount} FAILED. Errors: ${uniqueErrors.slice(0, 2).join(', ')}`);
-        console.error("The following errors prevented full purge:", uniqueErrors);
-      } else {
-        setError(`Purge Complete: ${successCount} documents wiped from cloud.`);
-        setTimeout(() => window.location.reload(), 2000);
-      }
+      setError(`Purge ended: ${successCount} deleted, ${failCount} failed. Resetting local cache...`);
+      
+      // Wait a moment for the toast to be seen
+      setTimeout(async () => {
+        const { clearFirestoreCache } = await import('./lib/firebase');
+        await clearFirestoreCache();
+        window.location.reload();
+      }, 3000);
+      
     } catch (err: any) {
+      console.error("Purge Error:", err);
       setError(`Purge Error: ${err.message}`);
     }
   };
