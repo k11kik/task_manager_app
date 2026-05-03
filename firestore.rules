@@ -43,7 +43,7 @@ service cloud.firestore {
         && isValidTask(request.resource.data)
         && request.resource.data.userId == resource.data.userId;
         
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn();
     }
 
     // Settings Security

@@ -21,7 +21,8 @@ import {
   Download,
   LogOut,
   User as UserIcon,
-  LogIn
+  LogIn,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays } from 'date-fns';
@@ -524,6 +525,24 @@ export default function App() {
       setError(`Archive Cleaned: Removed ${archiveTasks.length} legacy entries.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'batch/cleanup-archive');
+    }
+  };
+
+  const purgeAllData = async () => {
+    if (!user) return;
+    if (!window.confirm("CRITICAL: This will PERMANENTLY delete ALL your tasks. This action cannot be undone. Are you absolutely sure?")) return;
+    if (!window.confirm("Final confirmation: Delete everything and start fresh?")) return;
+
+    try {
+      const batch = writeBatch(db);
+      tasks.forEach(t => {
+        batch.delete(doc(db, 'tasks', t.id));
+      });
+      await batch.commit();
+      setError("Database Purged: All tasks have been removed.");
+      localStorage.removeItem('focusflow_tasks'); // Also clear local cache to prevent re-migration
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'batch/purge-all');
     }
   };
 
@@ -1120,6 +1139,25 @@ export default function App() {
                               <Zap size={10} /> Permission needed to resume logging after browser refresh.
                             </p>
                           )}
+                        </div>
+                      </div>
+
+                      <div className="pt-6 border-t border-slate-200">
+                        <p className="font-bold text-red-600 flex items-center gap-2 mb-1">
+                          <AlertTriangle size={16} /> Danger Zone
+                        </p>
+                        <p className="text-[10px] text-slate-500 mb-4 uppercase font-black tracking-widest">Database Maintenance & Repair</p>
+                        
+                        <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+                          <p className="text-[11px] text-red-800 font-bold mb-3 leading-relaxed">
+                            If you have legacy tasks from another account or corrupted test data that cannot be removed normally, use this to force reset your database.
+                          </p>
+                          <button 
+                            onClick={purgeAllData}
+                            className="w-full py-3 bg-red-600 text-white rounded-lg text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center justify-center gap-2"
+                          >
+                            <Trash2 size={14} /> Purge All Database Content
+                          </button>
                         </div>
                       </div>
 
