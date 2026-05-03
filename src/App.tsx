@@ -14,15 +14,51 @@ import {
   X,
   RefreshCcw,
   ArrowRightLeft,
+  ArrowUpRight,
   Trash2,
   Settings as SettingsIcon,
   Activity,
-  Download
+  Download,
+  LogOut,
+  User as UserIcon,
+  LogIn
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, differenceInDays, isAfter, subMonths } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
+import { auth, db, signIn, logOut } from './lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { 
+  collection, 
+  doc, 
+  onSnapshot, 
+  query, 
+  where, 
+  setDoc, 
+  deleteDoc, 
+  updateDoc, 
+  addDoc,
+  getDocs,
+  getDoc,
+  writeBatch
+} from 'firebase/firestore';
+
+// Add types for File System Access API
+declare global {
+  interface Window {
+    showDirectoryPicker: (options?: { mode?: 'read' | 'readwrite'; startIn?: string }) => Promise<FileSystemDirectoryHandle>;
+  }
+}
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
 
 const THEME_CATEGORIES = [
   { id: 'Urgent', label: 'Urgent', icon: Zap, color: 'bg-red-50/50 border-red-100', accent: 'bg-red-500', text: 'text-red-700', badge: 'text-red-400 border-red-100', desc: '3 Slots' },
@@ -30,6 +66,8 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<string>('All');
@@ -38,55 +76,172 @@ export default function App() {
   const [isPickingDaily, setIsPickingDaily] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings'>('dashboard');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+
   const [settings, setSettings] = useState({
     urgentLimit: 3,
     archiveThresholdDays: 30,
     warningThreshold: 15,
-    criticalThreshold: 30
+    criticalThreshold: 30,
+    isLocalBackupEnabled: false,
+    localBackupPath: ''
   });
 
-  // Load from localeStorage
-  useEffect(() => {
-    const savedTasks = localStorage.getItem('focusflow_tasks');
-    const savedSettings = localStorage.getItem('focusflow_settings');
+  const handleFirestoreError = (err: unknown, operationType: OperationType, path: string | null) => {
+    const errInfo = {
+      error: err instanceof Error ? err.message : String(err),
+      authInfo: {
+        userId: auth.currentUser?.uid,
+        email: auth.currentUser?.email,
+        emailVerified: auth.currentUser?.emailVerified,
+      },
+      operationType,
+      path
+    };
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+    setError(`Database Error: ${errInfo.error}`);
+  };
 
-    if (savedSettings) {
-      const parsedSettings = JSON.parse(savedSettings);
-      setSettings(parsedSettings);
-      
-      // Auto-archive sweep based on loaded settings
-      if (savedTasks) {
-        const parsedTasks = JSON.parse(savedTasks);
-        const updatedTasks = parsedTasks.map((t: Task) => {
-          if (t.category !== 'Archive' && differenceInDays(Date.now(), t.updatedAt) >= parsedSettings.archiveThresholdDays) {
-            return { ...t, category: 'Archive' as Category, updatedAt: Date.now() };
-          }
-          return t;
-        });
-        setTasks(updatedTasks);
-      }
-    } else if (savedTasks) {
-      setTasks(JSON.parse(savedTasks));
-    }
+  // Auth State
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
+  // Settings Sync
   useEffect(() => {
-    localStorage.setItem('focusflow_tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    if (!user) return;
 
+    const settingsRef = doc(db, 'settings', user.uid);
+    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setSettings({
+          urgentLimit: data.urgentLimit || 3,
+          archiveThresholdDays: data.archiveThresholdDays || 30,
+          warningThreshold: data.warningThreshold || 15,
+          criticalThreshold: data.criticalThreshold || 30,
+          isLocalBackupEnabled: data.isLocalBackupEnabled || false,
+          localBackupPath: data.localBackupPath || ''
+        });
+      } else {
+        // Init default settings for new user
+        setDoc(settingsRef, {
+          userId: user.uid,
+          urgentLimit: 3,
+          archiveThresholdDays: 30,
+          warningThreshold: 15,
+          criticalThreshold: 30,
+          isLocalBackupEnabled: false,
+          localBackupPath: ''
+        }).catch(err => handleFirestoreError(err, OperationType.WRITE, `settings/${user.uid}`));
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, `settings/${user.uid}`));
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Tasks Sync
   useEffect(() => {
-    localStorage.setItem('focusflow_settings', JSON.stringify(settings));
-  }, [settings]);
-
-  const [error, setError] = useState<string | null>(null);
-
-  // Clear error after 5 seconds
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => setError(null), 5000);
-      return () => clearTimeout(timer);
+    if (!user) {
+      setTasks([]);
+      return;
     }
-  }, [error]);
+
+    const tasksQuery = query(collection(db, 'tasks'), where('userId', '==', user.uid));
+    const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+      const taskList: Task[] = [];
+      snapshot.forEach((doc) => {
+        taskList.push({ id: doc.id, ...doc.data() } as Task);
+      });
+      setTasks(taskList);
+      
+      // Auto-archive sweep based on loaded settings
+      const now = Date.now();
+      taskList.forEach(async (t) => {
+        if (t.category !== 'Archive' && differenceInDays(now, t.updatedAt) >= settings.archiveThresholdDays) {
+          try {
+            await updateDoc(doc(db, 'tasks', t.id), { 
+              category: 'Archive', 
+              updatedAt: now 
+            });
+          } catch (err) {
+            handleFirestoreError(err, OperationType.UPDATE, `tasks/${t.id}`);
+          }
+        }
+      });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'tasks'));
+
+    return () => unsubscribe();
+  }, [user, settings.archiveThresholdDays]);
+
+  // Migration Helper
+  useEffect(() => {
+    if (!user || authLoading) return;
+
+    const migrate = async () => {
+      const savedTasks = localStorage.getItem('focusflow_tasks');
+      const savedSettings = localStorage.getItem('focusflow_settings');
+
+      if (savedTasks || savedSettings) {
+        const hasData = await getDocs(query(collection(db, 'tasks'), where('userId', '==', user.uid)));
+        if (hasData.empty) {
+          // Trigger migration
+          if (savedSettings) {
+            const parsed = JSON.parse(savedSettings);
+            await setDoc(doc(db, 'settings', user.uid), {
+              userId: user.uid,
+              ...parsed
+            }).catch(e => console.error("Migration settings error", e));
+          }
+
+          if (savedTasks) {
+            const parsed = JSON.parse(savedTasks);
+            const batch = writeBatch(db);
+            parsed.forEach((t: any) => {
+              const newRef = doc(collection(db, 'tasks'));
+              batch.set(newRef, {
+                ...t,
+                userId: user.uid,
+                createdAt: Number(t.createdAt) || Date.now(),
+                updatedAt: Number(t.updatedAt) || Date.now(),
+              });
+            });
+            await batch.commit().catch(e => console.error("Migration tasks error", e));
+          }
+          
+          // Clear local storage after migration
+          localStorage.removeItem('focusflow_tasks');
+          localStorage.removeItem('focusflow_settings');
+          setError("Local data has been migrated to the cloud.");
+        }
+      }
+    };
+
+    migrate();
+  }, [user, authLoading]);
+
+  // Save Settings wrapper
+  const saveSettings = async (updates: Partial<typeof settings>) => {
+    if (!user) return;
+    
+    setSettings(prev => {
+      const next = { ...prev, ...updates };
+      // Trigger Firestore update with the most current state
+      setDoc(doc(db, 'settings', user.uid), {
+        userId: user.uid,
+        ...next
+      }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `settings/${user.uid}`));
+      return next;
+    });
+  };
 
   const projects = useMemo(() => {
     const p = Array.from(new Set(tasks.map(t => t.project)));
@@ -141,12 +296,22 @@ export default function App() {
     return grouped;
   }, [filteredTasks]);
 
-  const handleAddTask = (e: React.FormEvent) => {
+  const groupedArchiveTasks = useMemo(() => {
+    const archiveTasks = filteredTasks.filter(t => t.category === 'Archive');
+    const grouped: Record<string, Task[]> = {};
+    archiveTasks.forEach(t => {
+      if (!grouped[t.project]) grouped[t.project] = [];
+      grouped[t.project].push(t);
+    });
+    return grouped;
+  }, [filteredTasks]);
+
+  const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle.trim() || !newTaskProject.trim()) return;
+    if (!newTaskTitle.trim() || !newTaskProject.trim() || !user) return;
     
-    const newTask: Task = {
-      id: crypto.randomUUID(),
+    const newTask = {
+      userId: user.uid,
       title: newTaskTitle,
       project: newTaskProject,
       category: 'Focus',
@@ -155,13 +320,19 @@ export default function App() {
       isDone: false,
       notes: '',
     };
-    setTasks([newTask, ...tasks]);
-    setNewTaskTitle('');
-    setNewTaskProject('');
-    setViewMode('dashboard');
+
+    try {
+      await addDoc(collection(db, 'tasks'), newTask);
+      setNewTaskTitle('');
+      setNewTaskProject('');
+      setViewMode('dashboard');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'tasks');
+    }
   };
 
-  const moveTask = (id: string, newCategory: Category) => {
+  const moveTask = async (id: string, newCategory: Category) => {
+    if (!user) return;
     if (newCategory === 'Urgent') {
       const isAlreadyUrgent = tasks.find(t => t.id === id)?.category === 'Urgent';
       if (!isAlreadyUrgent) {
@@ -172,54 +343,193 @@ export default function App() {
         }
       }
     }
-    setTasks(tasks.map(t => t.id === id ? { ...t, category: newCategory, updatedAt: Date.now() } : t));
+    try {
+      await updateDoc(doc(db, 'tasks', id), { 
+        category: newCategory, 
+        updatedAt: Date.now() 
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
+    }
   };
 
-  const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t));
-    setEditingTask(null);
+  const updateTask = async (id: string, updates: Partial<Task>) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'tasks', id), { 
+        ...updates, 
+        updatedAt: Date.now() 
+      });
+      setEditingTask(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
+    }
   };
 
-  const toggleDone = (id: string) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, isDone: !t.isDone, updatedAt: Date.now() } : t));
+  const toggleDone = async (id: string) => {
+    if (!user) return;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    try {
+      await updateDoc(doc(db, 'tasks', id), { 
+        isDone: !task.isDone, 
+        updatedAt: Date.now() 
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
+    }
   };
 
-  const deleteTask = (id: string) => {
-    setTasks(tasks.filter(t => t.id !== id));
+  const deleteTask = async (id: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'tasks', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `tasks/${id}`);
+    }
   };
 
-  const pickDailyTasks = (selectedIds: string[]) => {
+  const pickDailyTasks = async (selectedIds: string[]) => {
+    if (!user) return;
     const currentUrgentCount = tasks.filter(t => t.category === 'Urgent').length;
     if (currentUrgentCount + selectedIds.length > settings.urgentLimit) {
       setError(`Daily Pick Violation: This batch would exceed the ${settings.urgentLimit} slot limit.`);
       return;
     }
-    setTasks(tasks.map(t => 
-      selectedIds.includes(t.id) 
-        ? { ...t, category: 'Urgent' as Category, updatedAt: Date.now() } 
-        : t
-    ));
-    setIsPickingDaily(false);
+
+    try {
+      const batch = writeBatch(db);
+      const now = Date.now();
+      selectedIds.forEach(id => {
+        batch.update(doc(db, 'tasks', id), { 
+          category: 'Urgent', 
+          updatedAt: now 
+        });
+      });
+      await batch.commit();
+      setIsPickingDaily(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'batch/tasks');
+    }
+  };
+
+  const handleSignIn = async () => {
+    try {
+      await signIn();
+    } catch (err) {
+      setError("Sign in failed.");
+    }
+  };
+
+  const getCSVData = () => {
+    const headers = ['ID', 'Category', 'Project', 'Title', 'Notes', 'IsDone', 'CreatedAt', 'UpdatedAt'];
+    const rows = tasks.map(t => [
+      t.id,
+      t.category,
+      t.project,
+      `"${t.title.replace(/"/g, '""')}"`,
+      `"${(t.notes || '').replace(/"/g, '""')}"`,
+      t.isDone ? 'Yes' : 'No',
+      new Date(t.createdAt).toISOString(),
+      new Date(t.updatedAt).toISOString()
+    ]);
+
+    return [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+  };
+
+  const selectBackupFolder = async () => {
+    try {
+      if (!window.showDirectoryPicker) {
+        setError("Your browser does not support the File System Access API. Please use a Chromium-based browser (Chrome, Edge) on Desktop.");
+        return;
+      }
+      const handle = await window.showDirectoryPicker({
+        mode: 'readwrite'
+      });
+      setDirHandle(handle);
+      
+      await saveSettings({ 
+        localBackupPath: handle.name, 
+        isLocalBackupEnabled: true 
+      });
+    } catch (err: any) {
+      if (err.name === 'SecurityError' || err.message?.includes('Cross origin sub frames')) {
+        setError("Security Restriction: Local folder access is blocked in the preview window. Please click 'Open in New Tab' to use this feature.");
+      } else if (err.name !== 'AbortError') {
+        setError(`Folder selection failed: ${err.message}`);
+      }
+    }
+  };
+
+  const syncToLocalSystem = async (manual = false) => {
+    if (!settings.isLocalBackupEnabled || tasks.length === 0 || !dirHandle) return;
+
+    setIsSyncing(true);
+    try {
+      const csvContent = getCSVData();
+      const fileName = `FocusFlow_Log_${user?.email?.split('@')[0] || 'local'}.csv`;
+      
+      const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(csvContent);
+      await writable.close();
+      
+      setLastSyncTime(Date.now());
+      if (manual) setError("Log saved to selected folder.");
+    } catch (err: any) {
+      console.error("Local backup failed", err);
+      setError(`Local Backup Error: ${err.message}. You may need to grant permission again.`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Auto-sync effect
+  useEffect(() => {
+    if (settings.isLocalBackupEnabled && tasks.length > 0 && dirHandle) {
+      const timer = setTimeout(() => {
+        syncToLocalSystem();
+      }, 5000); // 5s debounce
+      return () => clearTimeout(timer);
+    }
+  }, [tasks, settings.isLocalBackupEnabled, dirHandle]);
+
+  const cleanupArchive = async (thresholdDays?: number) => {
+    if (!user) return;
+    try {
+      const now = Date.now();
+      const cutoff = thresholdDays ? now - (thresholdDays * 24 * 60 * 60 * 1000) : null;
+      
+      const archiveTasks = tasks.filter(t => {
+        if (t.category !== 'Archive') return false;
+        if (!cutoff) return true; // Delete all
+        return t.updatedAt < cutoff;
+      });
+
+      if (archiveTasks.length === 0) {
+        setError("No tasks match the cleanup criteria.");
+        return;
+      }
+
+      if (!window.confirm(`Are you sure you want to delete ${archiveTasks.length} archived tasks? This cannot be undone.`)) return;
+
+      const batch = writeBatch(db);
+      archiveTasks.forEach(task => {
+        batch.delete(doc(db, 'tasks', task.id));
+      });
+      await batch.commit();
+      setError(`Archive Cleaned: Removed ${archiveTasks.length} legacy entries.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'batch/cleanup-archive');
+    }
   };
 
   const exportTasks = () => {
     try {
-      const headers = ['ID', 'Category', 'Project', 'Title', 'Notes', 'IsDone', 'CreatedAt', 'UpdatedAt'];
-      const rows = tasks.map(t => [
-        t.id,
-        t.category,
-        t.project,
-        `"${t.title.replace(/"/g, '""')}"`,
-        `"${(t.notes || '').replace(/"/g, '""')}"`,
-        t.isDone ? 'Yes' : 'No',
-        new Date(t.createdAt).toISOString(),
-        new Date(t.updatedAt).toISOString()
-      ]);
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(r => r.join(','))
-      ].join('\n');
+      const csvContent = getCSVData();
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -253,6 +563,14 @@ export default function App() {
             <div className="flex-1">
               <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-0.5">System Exception</p>
               <p className="text-sm font-bold leading-tight">{error}</p>
+              {error.toLowerCase().includes("open in new tab") && (
+                <button 
+                  onClick={() => window.open(window.location.href, '_blank')}
+                  className="mt-2 px-3 py-1 bg-white text-indigo-600 text-[10px] font-black uppercase rounded shadow-sm hover:bg-slate-50 transition-all font-mono"
+                >
+                  Open in New Tab
+                </button>
+              )}
             </div>
             <button onClick={() => setError(null)} className="p-1 hover:bg-white/10 rounded">
               <X size={16} />
@@ -302,14 +620,41 @@ export default function App() {
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">
+          {user ? (
+            <div className="flex items-center gap-3">
+              {isSyncing && (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100 animate-pulse">
+                  <RefreshCcw size={10} className="animate-spin" /> Saving Log
+                </div>
+              )}
+              <div className="flex flex-col items-end hidden sm:flex">
+                <span className="text-[10px] font-black tracking-widest uppercase opacity-40">authenticated</span>
+                <span className="font-bold text-slate-700">{user.displayName || user.email}</span>
+              </div>
+              <button 
+                onClick={logOut}
+                className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group"
+                title="Log Out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={() => handleSignIn()}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+            >
+              <LogIn size={16} />
+              Sign In
+            </button>
+          )}
+          <div className="hidden lg:block text-slate-300">|</div>
           <div className={cn(
             "hidden lg:flex px-3 py-1 rounded-full border font-medium transition-colors",
             stats.morningRoutineReady ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-amber-50 text-amber-700 border-amber-200"
           )}>
             Morning Routine: {stats.urgentCount}/{settings.urgentLimit} Slots
           </div>
-          <div className="hidden lg:block text-slate-300">|</div>
-          <div className="text-slate-400 font-medium italic">Friday Review: Tracking</div>
         </div>
       </header>
 
@@ -318,48 +663,67 @@ export default function App() {
         
         {/* Sidebar / Input Section */}
         <aside className="col-span-12 lg:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 shrink-0">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">New Task Entry</h2>
-            <form onSubmit={handleAddTask} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-600">Project Code</label>
-                <div className="relative">
-                  <input 
-                    list="project-suggestions"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="e.g. CORE, DEV"
-                    value={newTaskProject}
-                    onChange={(e) => setNewTaskProject(e.target.value)}
+          {!user ? (
+            <div className="bg-indigo-600 rounded-2xl p-8 text-white flex flex-col items-center text-center gap-6 shadow-xl shadow-indigo-100">
+              <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center">
+                <Target size={32} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold mb-2">Sync to Cloud</h3>
+                <p className="text-sm opacity-80 leading-relaxed">Sign in to securely access your FocusFlow system across all devices with real-time sync.</p>
+              </div>
+              <button 
+                onClick={() => handleSignIn()}
+                className="w-full py-4 bg-white text-indigo-600 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
+              >
+                <LogIn size={18} />
+                Continue with Google
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 shrink-0">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">New Task Entry</h2>
+              <form onSubmit={handleAddTask} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-600">Project Code</label>
+                  <div className="relative">
+                    <input 
+                      list="project-suggestions"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="e.g. CORE, DEV"
+                      value={newTaskProject}
+                      onChange={(e) => setNewTaskProject(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
+                      }}
+                    />
+                    <datalist id="project-suggestions">
+                      {projects.filter(p => p !== 'All').map(p => <option key={p} value={p} />)}
+                    </datalist>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-600">Task Detail</label>
+                  <textarea 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-24 resize-none" 
+                    placeholder="What needs to be done? (Cmd/Ctrl+Enter to save)"
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
                     onKeyDown={(e) => {
                       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
                     }}
                   />
-                  <datalist id="project-suggestions">
-                    {projects.filter(p => p !== 'All').map(p => <option key={p} value={p} />)}
-                  </datalist>
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-600">Task Detail</label>
-                <textarea 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-24 resize-none" 
-                  placeholder="What needs to be done? (Cmd/Ctrl+Enter to save)"
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
-                  }}
-                />
-              </div>
-              <button 
-                type="submit"
-                disabled={!newTaskTitle.trim() || !newTaskProject.trim()}
-                className="w-full bg-indigo-600 text-white font-semibold py-2 rounded-lg text-sm shadow-md shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50"
-              >
-                Add to Focus
-              </button>
-            </form>
-          </div>
+                <button 
+                  type="submit"
+                  disabled={!newTaskTitle.trim() || !newTaskProject.trim()}
+                  className="w-full bg-indigo-600 text-white font-semibold py-2 rounded-lg text-sm shadow-md shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  Add to Focus
+                </button>
+              </form>
+            </div>
+          )}
 
           <div className="bg-slate-800 text-slate-300 rounded-xl p-5 shrink-0">
             <h2 className="text-sm font-bold uppercase tracking-wider mb-4">Workflow Health</h2>
@@ -499,38 +863,79 @@ export default function App() {
           ) : viewMode === 'archive' ? (
             /* Archive Mode */
             <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-slate-50/50 border-slate-200 h-full">
-              <div className="flex items-center justify-between mb-4 px-2">
-                <h3 className="font-bold flex items-center gap-2 text-slate-700">
-                  <ArchiveIcon size={20} />
-                  System Archive (Reviewing {settings.archiveThresholdDays}-day items)
-                </h3>
-                <button 
-                   onClick={() => setTasks(tasks.filter(t => t.category !== 'Archive'))}
-                   className="text-[10px] font-bold text-red-500 uppercase tracking-tight hover:underline transition-all flex items-center gap-1"
-                >
-                  <Trash2 size={12} /> Clear Entire Archive
-                </button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-2 gap-4">
+                <div>
+                  <h3 className="font-bold flex items-center gap-2 text-slate-700 text-lg">
+                    <ArchiveIcon size={22} className="text-slate-400" />
+                    System Archive
+                  </h3>
+                  <p className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-1">
+                    Reviewing items archived within {settings.archiveThresholdDays} days
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="relative group">
+                    <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:border-red-200 hover:text-red-500 transition-all shadow-sm">
+                      <Trash2 size={12} />
+                      Cleanup Options
+                    </button>
+                    <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[180px] z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                      <button 
+                        onClick={() => cleanupArchive(30)}
+                        className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
+                      >
+                        <span>Older than 1 Month</span>
+                        <span className="text-[9px] opacity-50 font-normal normal-case">Items inactive for 30+ days</span>
+                      </button>
+                      <button 
+                        onClick={() => cleanupArchive(7)}
+                        className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
+                      >
+                        <span>Older than 1 Week</span>
+                        <span className="text-[9px] opacity-50 font-normal normal-case">Items inactive for 7+ days</span>
+                      </button>
+                      <div className="h-px bg-slate-100 my-1 mx-2"></div>
+                      <button 
+                        onClick={() => cleanupArchive()}
+                        className="w-full text-left px-4 py-2 text-[10px] font-black text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                      >
+                        <Zap size={10} strokeWidth={3} />
+                        Purge All Archive
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
               
-              <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
-                  <AnimatePresence mode="popLayout">
-                    {filteredTasks
-                      .filter(t => t.category === 'Archive')
-                      .map(task => (
-                        <TaskCard 
-                          key={task.id} 
-                          task={task} 
-                          onToggle={() => toggleDone(task.id)}
-                          onMove={(newCat) => moveTask(task.id, newCat)}
-                          onDelete={() => deleteTask(task.id)}
-                          onEdit={() => setEditingTask(task)}
-                          variant="Archive"
-                        />
-                      ))}
-                  </AnimatePresence>
-                </div>
-                {filteredTasks.filter(t => t.category === 'Archive').length === 0 && (
+              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+                {Object.keys(groupedArchiveTasks).length > 0 ? (
+                  (Object.entries(groupedArchiveTasks) as [string, Task[]][]).map(([project, tasks]) => (
+                    <div key={project} className="space-y-3">
+                      <div className="flex items-center gap-4 px-2">
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 bg-white/50 px-2 py-0.5 rounded border border-slate-100">
+                          {project}
+                        </h4>
+                        <div className="h-px flex-1 bg-slate-200"></div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                        <AnimatePresence mode="popLayout">
+                          {tasks.map(task => (
+                            <TaskCard 
+                              key={task.id} 
+                              task={task} 
+                              onToggle={() => toggleDone(task.id)}
+                              onMove={(newCat) => moveTask(task.id, newCat)}
+                              onDelete={() => deleteTask(task.id)}
+                              onEdit={() => setEditingTask(task)}
+                              variant="Archive"
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  ))
+                ) : (
                   <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                     <ArchiveIcon size={48} strokeWidth={1} />
                     <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">Archive Empty</span>
@@ -566,12 +971,12 @@ export default function App() {
                       </div>
                       <div className="flex items-center gap-3">
                         <button 
-                          onClick={() => setSettings(s => ({ ...s, urgentLimit: Math.max(1, s.urgentLimit - 1) }))}
+                          onClick={() => saveSettings({ ...settings, urgentLimit: Math.max(1, settings.urgentLimit - 1) })}
                           className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors font-bold shadow-sm"
                         >-</button>
                         <span className="w-10 text-center font-mono font-bold text-xl">{settings.urgentLimit}</span>
                         <button 
-                          onClick={() => setSettings(s => ({ ...s, urgentLimit: s.urgentLimit + 1 }))}
+                          onClick={() => saveSettings({ ...settings, urgentLimit: settings.urgentLimit + 1 })}
                           className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors font-bold shadow-sm"
                         >+</button>
                       </div>
@@ -592,14 +997,14 @@ export default function App() {
                             type="number"
                             className="w-16 bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono font-bold outline-none focus:ring-1 focus:ring-amber-500"
                             value={settings.warningThreshold}
-                            onChange={(e) => setSettings(s => ({ ...s, warningThreshold: Math.max(1, parseInt(e.target.value) || 1) }))}
+                            onChange={(e) => saveSettings({ ...settings, warningThreshold: Math.max(1, parseInt(e.target.value) || 1) })}
                           />
                         </div>
                         <input 
                           type="range" min="1" max="50" step="1"
                           className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
                           value={settings.warningThreshold}
-                          onChange={(e) => setSettings(s => ({ ...s, warningThreshold: parseInt(e.target.value) }))}
+                          onChange={(e) => saveSettings({ ...settings, warningThreshold: parseInt(e.target.value) })}
                         />
                       </div>
                       <div className="space-y-3">
@@ -609,14 +1014,14 @@ export default function App() {
                             type="number"
                             className="w-16 bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono font-bold outline-none focus:ring-1 focus:ring-red-500"
                             value={settings.criticalThreshold}
-                            onChange={(e) => setSettings(s => ({ ...s, criticalThreshold: Math.max(2, parseInt(e.target.value) || 2) }))}
+                            onChange={(e) => saveSettings({ ...settings, criticalThreshold: Math.max(2, parseInt(e.target.value) || 2) })}
                           />
                         </div>
                         <input 
                           type="range" min="5" max="100" step="1"
                           className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
                           value={settings.criticalThreshold}
-                          onChange={(e) => setSettings(s => ({ ...s, criticalThreshold: parseInt(e.target.value) }))}
+                          onChange={(e) => saveSettings({ ...settings, criticalThreshold: parseInt(e.target.value) })}
                         />
                       </div>
                     </div>
@@ -636,7 +1041,7 @@ export default function App() {
                       <select 
                         className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
                         value={settings.archiveThresholdDays}
-                        onChange={(e) => setSettings(s => ({ ...s, archiveThresholdDays: parseInt(e.target.value) }))}
+                        onChange={(e) => saveSettings({ archiveThresholdDays: parseInt(e.target.value) })}
                       >
                         <option value={7}>7 Days (Aggressive)</option>
                         <option value={14}>14 Days (Balanced)</option>
@@ -649,22 +1054,105 @@ export default function App() {
 
                   {/* Data Management */}
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                    <div className="flex items-center gap-2 mb-4 text-emerald-600">
+                    <div className="flex items-center gap-2 mb-6 text-emerald-600">
                       <Download size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Data Management</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">Sync & Backup</h3>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-slate-900">Export Knowledge Base</p>
-                        <p className="text-xs text-slate-500">Download all tasks (Focus, Urgent, Archive) as a CSV file.</p>
+                    
+                    <div className="space-y-6">
+                      {/* Local Backup */}
+                      <div className="pb-6 border-b border-slate-200">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <p className="font-bold text-slate-900">Local Folder Log</p>
+                            <p className="text-xs text-slate-500">Continuous CSV snapshots to your machine.</p>
+                          </div>
+                          <button 
+                            onClick={() => saveSettings({ isLocalBackupEnabled: !settings.isLocalBackupEnabled })}
+                            disabled={!dirHandle}
+                            className={cn(
+                                "w-12 h-6 rounded-full p-1 transition-all duration-300",
+                                settings.isLocalBackupEnabled ? "bg-indigo-600" : "bg-slate-300",
+                                !dirHandle && "opacity-50 cursor-not-allowed"
+                            )}
+                          >
+                            <div className={cn(
+                              "w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300",
+                              settings.isLocalBackupEnabled ? "translate-x-6" : "translate-x-0"
+                            )} />
+                          </button>
+                        </div>
+                        
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-inner">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Local Directory Path</label>
+                              <div className="text-xs font-mono break-all py-1.5 text-slate-600 bg-slate-50 px-2 rounded border border-slate-100 flex items-center gap-2">
+                                <Activity size={10} className="shrink-0 opacity-50" />
+                                {settings.localBackupPath || 'No folder selected'}
+                              </div>
+                            </div>
+                            <div className="flex gap-1 shrink-0 pt-5">
+                              <button 
+                                onClick={selectBackupFolder}
+                                className={cn(
+                                  "p-1.5 px-3 rounded text-[10px] font-bold transition-colors",
+                                  !dirHandle && settings.localBackupPath 
+                                    ? "bg-amber-500 hover:bg-amber-600 text-white animate-pulse" 
+                                    : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                )}
+                              >
+                                {!dirHandle && settings.localBackupPath ? 'Authorize Session' : 'Select Folder'}
+                              </button>
+                              {window.self !== window.top && (
+                                <button 
+                                  onClick={() => window.open(window.location.href, '_blank')}
+                                  className="p-1.5 px-2 bg-slate-100 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-200 transition-colors"
+                                  title="Open in new tab to enable"
+                                >
+                                  <ArrowUpRight size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {settings.localBackupPath && !dirHandle && (
+                            <p className="text-[9px] text-amber-600 mt-2 font-bold flex items-center gap-1">
+                              <Zap size={10} /> Permission needed to resume logging after browser refresh.
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <button 
-                        onClick={exportTasks}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-100"
-                      >
-                        <Download size={14} />
-                        Download CSV
-                      </button>
+
+                      <div className="pt-4 flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-slate-900">Manual Export</p>
+                          <p className="text-xs text-slate-500">Download immediate CSV snapshot.</p>
+                        </div>
+                        <button 
+                          onClick={exportTasks}
+                          className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-100"
+                        >
+                          <Download size={14} />
+                          Download CSV
+                        </button>
+                      </div>
+
+                      {settings.isLocalBackupEnabled && (
+                        <div className="bg-white rounded-xl p-4 border border-slate-200 flex items-center justify-between mt-4">
+                          <div className="flex items-center gap-3 text-slate-600">
+                            <Activity size={16} />
+                            <div className="text-xs">
+                              <p className="font-bold">Automated Sync Status</p>
+                              <p className="opacity-60">{lastSyncTime ? `Last saved: ${format(lastSyncTime, 'PPpp')}` : 'Waiting for changes...'}</p>
+                            </div>
+                          </div>
+                          {isSyncing && (
+                            <div className="flex items-center gap-1 text-[10px] text-indigo-600 font-bold">
+                              <RefreshCcw size={12} className="animate-spin" /> Syncing...
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -753,7 +1241,8 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
         "bg-white rounded-xl p-4 shadow-sm border border-slate-200 group hover:border-indigo-300 transition-all flex flex-col cursor-pointer",
         variant === 'Urgent' && "border-l-4 border-l-red-500",
         variant === 'Archive' && "opacity-70 grayscale",
-        task.isDone && "grayscale opacity-50"
+        task.isDone && "grayscale opacity-50",
+        showMenu && "relative z-30 shadow-xl border-indigo-200"
       )}
     >
       <div className="flex items-center justify-between mb-1.5 pointer-events-none">

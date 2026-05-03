@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "Task": {
+      "title": "Task",
+      "description": "A productivity task in the system",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the owner" },
+        "title": { "type": "string" },
+        "project": { "type": "string" },
+        "category": { "type": "string", "enum": ["Urgent", "Focus", "Archive"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "isDone": { "type": "boolean" },
+        "notes": { "type": "string" }
+      },
+      "required": ["userId", "title", "project", "category", "createdAt", "updatedAt", "isDone"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User specific app configuration",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "urgentLimit": { "type": "number" },
+        "archiveThresholdDays": { "type": "number" },
+        "warningThreshold": { "type": "number" },
+        "criticalThreshold": { "type": "number" },
+        "isLocalBackupEnabled": { "type": "boolean" },
+        "localBackupPath": { "type": "string" }
+      },
+      "required": ["userId", "urgentLimit", "archiveThresholdDays", "warningThreshold", "criticalThreshold", "isLocalBackupEnabled", "localBackupPath"]
+    }
+  },
+  "firestore": {
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Collection of tasks"
+    },
+    "/settings/{userId}": {
+      "schema": "UserSettings",
+      "description": "User specific settings"
+    }
+  }
+}
