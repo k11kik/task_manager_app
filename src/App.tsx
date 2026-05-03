@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Plus, 
+  Layout, 
   Search, 
   Calendar, 
   Archive as ArchiveIcon, 
@@ -701,12 +701,17 @@ export default function App() {
       {/* Header Navigation */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-8">
-          <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setViewMode('dashboard')}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+          >
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
-              <Target size={20} />
+              <Layout size={18} />
             </div>
-            <h1 className="text-xl font-bold tracking-tight">SystematicFlow</h1>
-          </div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-800">
+              <span className="text-indigo-600">S</span>ystematic <span className="text-indigo-600">T</span>ask <span className="text-indigo-600">M</span>anager
+            </h1>
+          </button>
           <nav className="hidden md:flex gap-6 text-sm font-medium text-slate-500">
             <button 
               onClick={() => setViewMode('dashboard')}
