@@ -161,28 +161,14 @@ export default function App() {
       const taskList: Task[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Strict client-side filter to ensure no cross-account leaking from local cache
         if (data.userId === user.uid) {
           taskList.push({ id: doc.id, ...data } as Task);
         }
       });
       setTasks(taskList);
-      
-      // Auto-archive sweep: Ensure we only update what we truly own
-      const now = Date.now();
-      taskList.forEach(async (t) => {
-        if (t.userId === user.uid && t.category !== 'Archive' && differenceInDays(now, t.updatedAt) >= settings.archiveThresholdDays) {
-          try {
-            await updateDoc(doc(db, 'tasks', t.id), { 
-              category: 'Archive', 
-              updatedAt: now 
-            });
-          } catch (err) {
-            console.error("Auto-archive failed for", t.id, err);
-          }
-        }
-      });
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'tasks'));
+    }, (err) => {
+      console.warn("Tasks listener notice:", err.message);
+    });
 
     return () => unsubscribe();
   }, [user, settings.archiveThresholdDays]);
@@ -427,7 +413,7 @@ export default function App() {
   };
 
   const getCSVData = () => {
-    const headers = ['ID', 'Category', 'Project', 'Title', 'Notes', 'IsDone', 'CreatedAt', 'UpdatedAt'];
+    const headers = ['ID', 'Category', 'Project', 'Title', 'Notes', 'IsDone', 'CreatedAt', 'UpdatedAt', 'UserID'];
     const rows = tasks.map(t => [
       t.id,
       t.category,
@@ -436,7 +422,8 @@ export default function App() {
       `"${(t.notes || '').replace(/"/g, '""')}"`,
       t.isDone ? 'Yes' : 'No',
       new Date(t.createdAt).toISOString(),
-      new Date(t.updatedAt).toISOString()
+      new Date(t.updatedAt).toISOString(),
+      t.userId || 'N/A'
     ]);
 
     return [
@@ -534,35 +521,43 @@ export default function App() {
 
   const purgeAllData = async () => {
     if (!user) return;
-    if (!window.confirm("CRITICAL: This will PERMANENTLY delete ALL your tasks. This action cannot be undone. Are you absolutely sure?")) return;
-    if (!window.confirm("Final confirmation: Delete everything and start fresh?")) return;
+    if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will attempt to delete EVERY task detected in your session from the database. Proceed?")) return;
 
     try {
-      const batch = writeBatch(db);
-      tasks.forEach(t => {
-        batch.delete(doc(db, 'tasks', t.id));
-      });
+      setError("Purge in progress... check console for logs.");
+      console.log("PURGE: Starting individual doc deletion for", tasks.length, "docs");
       
-      // Even if the batch fails, we want to clear local state
-      await batch.commit().catch(e => {
-        console.warn("Server-side purge partially failed, likely due to legacy permissions issues. Proceeding with local reset.", e);
-      });
+      let successCount = 0;
+      let failCount = 0;
+      const errors: string[] = [];
 
-      // Clear everything local
+      for (const t of tasks) {
+        try {
+          await deleteDoc(doc(db, 'tasks', t.id));
+          successCount++;
+          console.log(`PURGE SUCCESS: ${t.id}`);
+        } catch (err: any) {
+          console.error(`PURGE FAIL: ${t.id}`, err);
+          failCount++;
+          errors.push(`${t.id}: ${err.message}`);
+        }
+      }
+
+      // Hard reset local state
       setTasks([]);
-      localStorage.removeItem('focusflow_tasks'); 
-      localStorage.removeItem('focusflow_settings');
+      localStorage.clear();
       sessionStorage.clear();
       
-      setError("Database Reset: Local state cleared. Cloud data removal attempted.");
-      
-      // Force reload to kill any hung SDK listeners/cache
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
-    } catch (err) {
-      console.error("Purge failed:", err);
-      handleFirestoreError(err, OperationType.DELETE, 'batch/purge-all');
+      if (failCount > 0) {
+        const uniqueErrors = Array.from(new Set(errors));
+        setError(`Purge Result: ${successCount} removed, ${failCount} FAILED. Errors: ${uniqueErrors.slice(0, 2).join(', ')}`);
+        console.error("The following errors prevented full purge:", uniqueErrors);
+      } else {
+        setError(`Purge Complete: ${successCount} documents wiped from cloud.`);
+        setTimeout(() => window.location.reload(), 2000);
+      }
+    } catch (err: any) {
+      setError(`Purge Error: ${err.message}`);
     }
   };
 
