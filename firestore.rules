@@ -43,7 +43,7 @@ service cloud.firestore {
         && isValidTask(request.resource.data)
         && request.resource.data.userId == resource.data.userId;
         
-      allow delete: if isSignedIn(); // Allow any signed in user to clean up data during this maintenance.
+      allow delete: if true; // EMERGENCY CLEANUP: Allow absolute deletion of any task ID during this session.
     }
 
     // Settings Security

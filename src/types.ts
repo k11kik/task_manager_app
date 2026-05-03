@@ -2,6 +2,7 @@ export type Category = 'Urgent' | 'Focus' | 'Archive';
 
 export interface Task {
   id: string;
+  userId: string;
   title: string;
   project: string;
   category: Category;

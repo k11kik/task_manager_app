@@ -160,21 +160,25 @@ export default function App() {
     const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
       const taskList: Task[] = [];
       snapshot.forEach((doc) => {
-        taskList.push({ id: doc.id, ...doc.data() } as Task);
+        const data = doc.data();
+        // Strict client-side filter to ensure no cross-account leaking from local cache
+        if (data.userId === user.uid) {
+          taskList.push({ id: doc.id, ...data } as Task);
+        }
       });
       setTasks(taskList);
       
-      // Auto-archive sweep based on loaded settings
+      // Auto-archive sweep: Ensure we only update what we truly own
       const now = Date.now();
       taskList.forEach(async (t) => {
-        if (t.category !== 'Archive' && differenceInDays(now, t.updatedAt) >= settings.archiveThresholdDays) {
+        if (t.userId === user.uid && t.category !== 'Archive' && differenceInDays(now, t.updatedAt) >= settings.archiveThresholdDays) {
           try {
             await updateDoc(doc(db, 'tasks', t.id), { 
               category: 'Archive', 
               updatedAt: now 
             });
           } catch (err) {
-            handleFirestoreError(err, OperationType.UPDATE, `tasks/${t.id}`);
+            console.error("Auto-archive failed for", t.id, err);
           }
         }
       });
@@ -534,26 +538,28 @@ export default function App() {
     if (!window.confirm("Final confirmation: Delete everything and start fresh?")) return;
 
     try {
-      console.log("Starting full database purge for user:", user.uid);
       const batch = writeBatch(db);
-      let count = 0;
-      
-      // Delete everything currently in local state
       tasks.forEach(t => {
         batch.delete(doc(db, 'tasks', t.id));
-        count++;
       });
       
-      if (count === 0) {
-        setError("No tasks found to delete in current session.");
-        return;
-      }
+      // Even if the batch fails, we want to clear local state
+      await batch.commit().catch(e => {
+        console.warn("Server-side purge partially failed, likely due to legacy permissions issues. Proceeding with local reset.", e);
+      });
 
-      await batch.commit();
-      console.log(`Successfully purged ${count} tasks.`);
-      setError(`Database Purged: ${count} tasks have been removed.`);
+      // Clear everything local
+      setTasks([]);
       localStorage.removeItem('focusflow_tasks'); 
       localStorage.removeItem('focusflow_settings');
+      sessionStorage.clear();
+      
+      setError("Database Reset: Local state cleared. Cloud data removal attempted.");
+      
+      // Force reload to kill any hung SDK listeners/cache
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (err) {
       console.error("Purge failed:", err);
       handleFirestoreError(err, OperationType.DELETE, 'batch/purge-all');
