@@ -1333,10 +1333,8 @@ export default function App() {
 
         {/* Sidebar / Input Section */}
         <aside className={cn(
-          "flex-col gap-6 overflow-y-auto overflow-x-hidden custom-scrollbar transition-all",
-          mobileView === 'summary' && viewMode === 'dashboard' 
-            ? "flex fixed inset-0 lg:relative lg:inset-auto z-[50] lg:z-0 bg-[#f8fafc] lg:bg-transparent p-4 lg:p-0 pt-16 lg:pt-0 pb-24 lg:pb-0 lg:col-span-3" 
-            : "hidden lg:flex lg:col-span-3 lg:pb-0"
+          "col-span-12 lg:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pb-20 lg:pb-0",
+          (viewMode !== 'dashboard' || mobileView !== 'summary') && "hidden lg:flex"
         )}>
           {!user ? (
             <div className="bg-indigo-600 rounded-2xl p-8 text-white flex flex-col items-center text-center gap-6 shadow-xl shadow-indigo-100">
