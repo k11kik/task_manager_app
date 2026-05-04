@@ -7,12 +7,12 @@
   "theme_color": "#3b82f6",
   "icons": [
     {
-      "src": "/STM_icon.png",
+      "src": "/trifocus_icon.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/STM_icon.png",
+      "src": "/trifocus_icon.png",
       "sizes": "512x512",
       "type": "image/png"
     }
