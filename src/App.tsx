@@ -103,7 +103,8 @@ export default function App() {
     archiveThresholdDays: 30,
     criticalThreshold: 30,
     isLocalBackupEnabled: false,
-    localBackupPath: ''
+    localBackupPath: '',
+    sections: ['General', 'Lab', 'Private']
   });
 
   const handleFirestoreError = (err: unknown, operationType: OperationType, path: string | null) => {
@@ -159,7 +160,8 @@ export default function App() {
           archiveThresholdDays: data.archiveThresholdDays || 30,
           criticalThreshold: data.criticalThreshold || 30,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
-          localBackupPath: data.localBackupPath || ''
+          localBackupPath: data.localBackupPath || '',
+          sections: data.sections || ['General', 'Lab', 'Private']
         });
       } else {
         // Init default settings for new user
@@ -169,7 +171,8 @@ export default function App() {
           archiveThresholdDays: 30,
           criticalThreshold: 30,
           isLocalBackupEnabled: false,
-          localBackupPath: ''
+          localBackupPath: '',
+          sections: ['General', 'Lab', 'Private']
         }).catch(err => handleFirestoreError(err, OperationType.WRITE, `settings/${user.uid}`));
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `settings/${user.uid}`));
@@ -311,9 +314,12 @@ export default function App() {
       })
       .sort((a, b) => {
         // Priority 1: Starred
-        if (a.isStarred !== b.isStarred) return a.isStarred ? -1 : 1;
-        // Priority 2: Recency
-        return b.updatedAt - a.updatedAt;
+        const starA = !!a.isStarred;
+        const starB = !!b.isStarred;
+        if (starA !== starB) return starA ? -1 : 1;
+        
+        // Priority 2: Recency (Updated at descending)
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
   }, [tasks, searchTerm, selectedProject, activeSection]);
 
@@ -465,6 +471,50 @@ export default function App() {
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
+    }
+  };
+
+  const addSection = async (name: string) => {
+    if (!user || !name.trim()) return;
+    const next = [...settings.sections, name.trim()];
+    try {
+      await updateDoc(doc(db, 'settings', user.uid), { sections: next });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
+    }
+  };
+
+  const renameSection = async (oldName: string, newName: string) => {
+    if (!user || !newName.trim()) return;
+    const next = settings.sections.map(s => s === oldName ? newName.trim() : s);
+    try {
+      // 1. Update settings
+      await updateDoc(doc(db, 'settings', user.uid), { sections: next });
+      
+      // 2. Update all tasks in this section
+      const batch = writeBatch(db);
+      const affectedTasks = tasks.filter(t => t.section === oldName);
+      affectedTasks.forEach(t => {
+        batch.update(doc(db, 'tasks', t.id), { section: newName.trim() });
+      });
+      await batch.commit();
+
+      if (activeSection === oldName) setActiveSection(newName.trim());
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
+    }
+  };
+
+  const deleteSection = async (name: string) => {
+    if (!user || name === 'General') return;
+    if (!window.confirm(`Delete section "${name}"? Tasks will stay but section tag will be removed.`)) return;
+
+    const next = settings.sections.filter(s => s !== name);
+    try {
+      await updateDoc(doc(db, 'settings', user.uid), { sections: next });
+      if (activeSection === name) setActiveSection('General');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
     }
   };
 
@@ -806,21 +856,54 @@ export default function App() {
                 </p>
               </div>
             </button>
-            <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 py-2">
-              <p className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Switch Section</p>
-              {SECTIONS.map(s => (
+            <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[60] py-2">
+              <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sections</p>
                 <button 
-                  key={s}
-                  onClick={() => setActiveSection(s)}
-                  className={cn(
-                    "w-full text-left px-4 py-2.5 text-xs font-bold transition-all flex items-center justify-between",
-                    activeSection === s ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                  )}
+                  onClick={() => {
+                    const name = window.prompt("New Section Name?");
+                    if (name) addSection(name);
+                  }}
+                  className="text-indigo-600 hover:text-indigo-700 p-1"
                 >
-                  {s}
-                  {activeSection === s && <CheckCircle2 size={12} />}
+                  <Plus size={14} />
                 </button>
-              ))}
+              </div>
+              <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                {settings.sections.map(s => (
+                  <div key={s} className="group/item flex items-center">
+                    <button 
+                      onClick={() => setActiveSection(s)}
+                      className={cn(
+                        "flex-1 text-left px-4 py-2.5 text-xs font-bold transition-all flex items-center justify-between",
+                        activeSection === s ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                      )}
+                    >
+                      {s}
+                      {activeSection === s && <CheckCircle2 size={12} />}
+                    </button>
+                    {s !== 'General' && (
+                      <div className="flex px-2 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => {
+                            const name = window.prompt("Rename Section?", s);
+                            if (name) renameSection(s, name);
+                          }}
+                          className="p-1 hover:text-indigo-600 text-slate-300"
+                        >
+                          <SettingsIcon size={12} />
+                        </button>
+                        <button 
+                          onClick={() => deleteSection(s)}
+                          className="p-1 hover:text-red-600 text-slate-300"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
           <nav className="hidden lg:flex gap-6 text-sm font-medium text-slate-500">
@@ -853,12 +936,24 @@ export default function App() {
 
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-2 mr-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-100 bg-slate-50/50">
+            <button 
+              onClick={() => {
+                if (!dirHandle) selectBackupFolder();
+              }}
+              title={dirHandle ? `Backing up to local folder` : "Select local backup folder"}
+              className="group/sync relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white transition-all"
+            >
               <Globe size={12} className={cn(isSyncing ? "text-indigo-500 animate-spin" : (dirHandle ? "text-emerald-500" : "text-slate-300"))} />
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
                 {isSyncing ? 'Syncing' : (dirHandle ? 'Synced' : 'Off')}
               </span>
-            </div>
+              
+              {dirHandle && (
+                <div className="absolute top-full right-0 mt-2 w-48 bg-slate-900 text-white p-2 rounded-lg text-[9px] font-mono opacity-0 invisible group-hover/sync:opacity-100 group-hover/sync:visible transition-all z-[70] shadow-xl">
+                  PATH: {settings.localBackupPath || 'Authorized Local Folder'}
+                </div>
+              )}
+            </button>
           </div>
           
           {user ? (
@@ -995,9 +1090,12 @@ export default function App() {
                   <label className="text-xs font-semibold text-slate-600 uppercase tracking-widest text-[9px] opacity-60">Memos (Optional)</label>
                   <textarea 
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-16 resize-none" 
-                    placeholder="Context, sub-tasks..."
+                    placeholder="Context, sub-tasks... (Cmd/Ctrl+Enter to save)"
                     value={newTaskNotes}
                     onChange={(e) => setNewTaskNotes(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
+                    }}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1010,12 +1108,15 @@ export default function App() {
                       <input 
                         type="url"
                         className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] focus:ring-2 focus:ring-indigo-500 outline-none"
-                        placeholder="https://..."
+                        placeholder="https://... (Cmd/Ctrl+Enter to save)"
                         value={u}
                         onChange={(e) => {
                           const next = [...newTaskUrls];
                           next[i] = e.target.value;
                           setNewTaskUrls(next);
+                        }}
+                        onKeyDown={(e) => {
+                          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
                         }}
                       />
                     </div>
@@ -1032,7 +1133,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="bg-slate-800 text-slate-300 rounded-xl p-5 shrink-0">
+          <div className="bg-slate-800 text-slate-300 rounded-xl p-5 shrink-0 hidden md:block">
             <h2 className="text-sm font-bold uppercase tracking-wider mb-4">Workflow Health</h2>
             <div className="space-y-3">
               <div className="flex justify-between text-xs">
@@ -1084,9 +1185,12 @@ export default function App() {
         {/* Task Columns */}
         <div className="col-span-12 lg:col-span-9 h-full min-h-0 overflow-hidden">
           {viewMode === 'dashboard' ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full pb-20 lg:pb-0">
               {/* Urgent Column */}
-              <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/50 border-red-100">
+              <section className={cn(
+                "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/50 border-red-100 transition-all",
+                mobileView === 'urgent' ? "flex fixed inset-0 z-[45] bg-red-50 p-6 pt-20" : (mobileView !== 'summary' ? "hidden lg:flex" : "flex")
+              )}>
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="font-bold flex items-center gap-2 text-red-700">
                     <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-red-500"></span>
@@ -1107,6 +1211,7 @@ export default function App() {
                           onMove={(newCat) => moveTask(task.id, newCat)}
                           onDelete={() => deleteTask(task.id)}
                           onEdit={() => setEditingTask(task)}
+                          onStar={() => toggleStar(task.id)}
                           variant="Urgent"
                         />
                       ))}
@@ -1121,7 +1226,10 @@ export default function App() {
               </section>
 
               {/* Focus Column (Spans 2) */}
-              <section className="col-span-1 md:col-span-2 flex flex-col rounded-2xl border p-4 min-h-0 bg-indigo-50/50 border-indigo-100">
+              <section className={cn(
+                "col-span-1 md:col-span-2 flex flex-col rounded-2xl border p-4 min-h-0 bg-indigo-50/50 border-indigo-100 transition-all",
+                mobileView === 'focus' ? "flex fixed inset-0 z-[45] bg-indigo-50 p-6 pt-20" : (mobileView !== 'summary' ? "hidden lg:flex" : "flex")
+              )}>
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="font-bold flex items-center gap-2 text-indigo-700">
                     <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-indigo-500"></span>
@@ -1166,6 +1274,7 @@ export default function App() {
                                     onMove={(newCat) => moveTask(task.id, newCat)}
                                     onDelete={() => deleteTask(task.id)}
                                     onEdit={() => setEditingTask(task)}
+                                    onStar={() => toggleStar(task.id)}
                                     variant="Focus"
                                   />
                                 ))}
@@ -1695,7 +1804,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
         onEdit();
       }}
       className={cn(
-        "bg-white rounded-xl p-4 shadow-sm border border-slate-200 group hover:border-indigo-300 transition-all flex flex-col cursor-pointer",
+        "bg-white rounded-xl p-3 md:p-4 shadow-sm border border-slate-200 group hover:border-indigo-300 transition-all flex flex-col cursor-pointer",
         variant === 'Urgent' && "border-l-4 border-l-red-500",
         variant === 'Archive' && "opacity-70 grayscale",
         task.isDone && "grayscale opacity-50",
@@ -1733,7 +1842,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
           )}
         </div>
       </div>
-      <p className={cn("text-sm font-semibold text-slate-800 leading-tight mb-2 break-words", task.isDone && "line-through text-slate-400")}>
+      <p className={cn("text-xs md:text-sm font-semibold text-slate-800 leading-tight mb-2 break-words", task.isDone && "line-through text-slate-400")}>
         {task.title}
       </p>
 
@@ -1978,6 +2087,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 <textarea 
                   autoFocus
                   className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-lg font-medium outline-none transition-all resize-none h-24"
+                  placeholder="Task detail... (Cmd/Ctrl+Enter to save)"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -2003,7 +2113,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Memos / Context</label>
               <textarea 
-                placeholder="Add details, or sub-tasks..."
+                placeholder="Memos / context... (Cmd/Ctrl+Enter to save)"
                 className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all resize-none h-32"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -2029,10 +2139,13 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                   <div key={idx} className="flex gap-2">
                     <input 
                       type="url"
-                      placeholder="https://..."
+                      placeholder="https://... (Cmd/Ctrl+Enter to save)"
                       className="flex-1 px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-xl text-sm font-medium outline-none transition-all"
                       value={u}
                       onChange={(e) => updateUrlField(idx, e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit(e);
+                      }}
                     />
                     {urls.length > 1 && (
                       <button 
