@@ -1034,7 +1034,7 @@ export default function App() {
               </div>
               <div className="flex flex-col items-start leading-none">
                 <h1 className="text-sm font-black tracking-tighter text-slate-800 uppercase">
-                  STM <span className="text-indigo-600">v2.2</span>
+                  TriFocus <span className="text-indigo-600">v2.2</span>
                 </h1>
                 <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-0.5">
                   <span className="truncate max-w-[80px]">{activeSection}</span> <ChevronDown size={10} className={cn("transition-transform", showSectionMenu && "rotate-180")} />
@@ -1830,7 +1830,7 @@ export default function App() {
 
                       <div className="bg-white p-4 rounded-2xl border border-slate-100">
                         <p className="text-xs font-bold text-slate-800 mb-1">Import Data</p>
-                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Restore from STM CSV</p>
+                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Restore from TriFocus CSV</p>
                         <label className="flex items-center justify-center gap-2 w-full py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all cursor-pointer">
                           <Upload size={14} /> Import CSV
                           <input type="file" accept=".csv" className="hidden" onChange={handleCSVImport} />
@@ -2155,7 +2155,7 @@ export default function App() {
           </div>
         </div>
         <div className="text-[10px] font-mono text-slate-400 font-extrabold ml-4 uppercase">
-          Systematic Task Manager V2.2
+          TriFocus V2.2
         </div>
       </footer>
 

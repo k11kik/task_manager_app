@@ -1,6 +1,6 @@
 {
-  "name": "Systematic Task Manager",
-  "short_name": "SysTask",
+  "name": "TriFocus",
+  "short_name": "TriFocus",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
