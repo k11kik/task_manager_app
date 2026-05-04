@@ -18,6 +18,7 @@
   }
 
   /* Date input placeholder/value color */
+  input[type="date"]::-webkit-datetime-edit,
   input[type="date"]::-webkit-datetime-edit-text,
   input[type="date"]::-webkit-datetime-edit-month-field,
   input[type="date"]::-webkit-datetime-edit-day-field,

@@ -334,6 +334,8 @@ export default function App() {
     const doneTodayCount = tasks.filter(t => t.isDone && t.updatedAt >= todayStart.getTime()).length;
     const pendingDeadlinesCount = tasks.filter(t => t.category === 'Focus' && !t.isDone && t.deadline && (t.deadline - now <= settings.deadlineThreshold * 86400000)).length;
 
+    const loadPercentage = Math.round(Math.min((focusTasksCount / settings.criticalThreshold) * 100, 100));
+
     return {
       active: activeTasks.length,
       doneToday: doneTodayCount,
@@ -345,9 +347,9 @@ export default function App() {
       warningThreshold,
       sectionMetrics,
       morningRoutineReady: urgentCount >= settings.urgentLimit,
-      loadPercentage: Math.min((focusTasksCount / settings.criticalThreshold) * 100, 100)
+      loadPercentage
     };
-  }, [tasks, settings]);
+  }, [tasks, settings, activeSection]);
 
   const filteredTasks = useMemo(() => {
     return tasks
@@ -760,18 +762,20 @@ export default function App() {
         return;
       }
 
-      const headers = rows[0].map(h => h.trim());
+      const headers = rows[0].map(h => h.replace(/^"|"$/g, '').trim());
       const batch = writeBatch(db);
       let count = 0;
 
-      // Start from i=1 to skip header
+      // Start from rowIndex=1 to skip header
       for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
         const values = rows[rowIndex];
         if (values.length < 2) continue; // Skip empty rows
 
         const getVal = (headerName: string) => {
-          const idx = headers.indexOf(headerName);
-          return (idx !== -1 && values[idx]) ? values[idx].trim() : '';
+          const idx = headers.findIndex(h => h.toLowerCase() === headerName.toLowerCase());
+          const val = (idx !== -1 && values[idx]) ? values[idx].trim() : '';
+          // Strip quotes if they were added during export
+          return val.replace(/^"|"$/g, '').replace(/""/g, '"');
         };
 
         const newTaskRef = doc(collection(db, 'tasks'));
@@ -1470,6 +1474,7 @@ export default function App() {
                   <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">System State</p>
                   <p className={cn("text-[10px] font-bold uppercase leading-none", stats.textColor.split(' ')[0])}>
                     {stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}
+                    <span className="ml-1 opacity-60">({stats.loadPercentage}%)</span>
                   </p>
                 </div>
                 <div className="text-right flex flex-col items-end gap-1">
