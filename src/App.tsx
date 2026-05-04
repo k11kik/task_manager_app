@@ -709,83 +709,73 @@ export default function App() {
     if (!file || !user) return;
 
     Papa.parse(file, {
+      header: true,
       skipEmptyLines: 'greedy',
+      transformHeader: (header) => header.replace(/^["']|["']$/g, '').trim().toLowerCase(),
       complete: async (results) => {
-        const rows = results.data as string[][];
-        if (rows.length < 2) {
-          setMessage({ text: "Invalid CSV: File must have at least a header and one data row.", type: 'error' });
-          return;
-        }
-
-        const headers = rows[0].map(h => h.replace(/^["']|["']$/g, '').trim().toLowerCase());
-        const getIdx = (name: string) => headers.indexOf(name.toLowerCase());
-        
-        const titleIdx = getIdx('title');
-        if (titleIdx === -1) {
-          setMessage({ text: "Invalid CSV: 'Title' column not found.", type: 'error' });
-          return;
-        }
-
-        const batch = writeBatch(db);
-        let count = 0;
-
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          if (row.length < headers.length * 0.5) continue; // Skip likely empty/malformed rows
-
-          const getValAt = (idx: number) => {
-            if (idx === -1 || idx >= row.length) return '';
-            const val = row[idx]?.toString() || '';
-            return val.replace(/^["']|["']$/g, '').replace(/""/g, '"').trim();
-          };
-
-          const title = getValAt(titleIdx);
-          if (!title) continue;
-
-          const newTaskRef = doc(collection(db, 'tasks'));
-          batch.set(newTaskRef, {
-            userId: user.uid,
-            category: (getValAt(getIdx('category')) as Category) || 'Focus',
-            section: getValAt(getIdx('section')) || 'General',
-            project: getValAt(getIdx('project')) || 'Imported',
-            title,
-            notes: getValAt(getIdx('notes')),
-            urls: getValAt(getIdx('urls')) ? getValAt(getIdx('urls')).split(';').map(u => u.trim()).filter(Boolean) : [],
-            isDone: getValAt(getIdx('isdone')).toLowerCase() === 'yes',
-            isStarred: getValAt(getIdx('isstarred')).toLowerCase() === 'yes',
-            deadline: (() => {
-              const d = getValAt(getIdx('deadline'));
-              if (!d) return undefined;
-              const t = new Date(d).getTime();
-              return isNaN(t) ? undefined : t;
-            })(),
-            createdAt: (() => {
-              const val = getValAt(getIdx('createdat'));
-              const t = val ? new Date(val).getTime() : Date.now();
-              return isNaN(t) ? Date.now() : t;
-            })(),
-            updatedAt: (() => {
-              const val = getValAt(getIdx('updatedat'));
-              const t = val ? new Date(val).getTime() : Date.now();
-              return isNaN(t) ? Date.now() : t;
-            })(),
-          });
-          count++;
-
-          if (count >= 499) break;
-        }
-
-        if (count === 0) {
-          setMessage({ text: "No valid tasks were processed from the CSV.", type: 'error' });
-          return;
-        }
-
         try {
+          if (results.errors.length > 0) {
+            console.error('PapaParse Errors:', results.errors);
+          }
+
+          const batch = writeBatch(db);
+          let count = 0;
+
+          for (const row of results.data as any[]) {
+            // Helper to get value by case-insensitive key
+            const getVal = (key: string) => {
+              const val = row[key.toLowerCase()];
+              if (val === undefined || val === null) return '';
+              return val.toString().replace(/^["']|["']$/g, '').replace(/""/g, '"').trim();
+            };
+
+            const title = getVal('title');
+            if (!title) continue;
+
+            const newTaskRef = doc(collection(db, 'tasks'));
+            batch.set(newTaskRef, {
+              userId: user.uid,
+              category: (getVal('category') as Category) || 'Focus',
+              section: getVal('section') || 'General',
+              project: getVal('project') || 'Imported',
+              title,
+              notes: getVal('notes'),
+              urls: getVal('urls') ? getVal('urls').split(';').map(u => u.trim()).filter(Boolean) : [],
+              isDone: getVal('isdone').toLowerCase() === 'yes',
+              isStarred: getVal('isstarred').toLowerCase() === 'yes',
+              deadline: (() => {
+                const d = getVal('deadline');
+                if (!d) return undefined;
+                const t = new Date(d).getTime();
+                return isNaN(t) ? undefined : t;
+              })(),
+              createdAt: (() => {
+                const val = getVal('createdat');
+                const t = val ? new Date(val).getTime() : Date.now();
+                return isNaN(t) ? Date.now() : t;
+              })(),
+              updatedAt: (() => {
+                const val = getVal('updatedat');
+                const t = val ? new Date(val).getTime() : Date.now();
+                return isNaN(t) ? Date.now() : t;
+              })(),
+            });
+            count++;
+
+            if (count >= 499) break;
+          }
+
+          if (count === 0) {
+            setMessage({ text: "No valid tasks were found in the CSV. Please check the column headers.", type: 'error' });
+            return;
+          }
+
           await batch.commit();
           setMessage({ text: `Successfully imported ${count} tasks.`, type: 'info' });
           e.target.value = '';
         } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, 'tasks/batch');
+          console.error('Import processing error:', err);
+          setMessage({ text: `Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`, type: 'error' });
         }
       },
       error: (err) => {
