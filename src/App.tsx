@@ -732,8 +732,7 @@ export default function App() {
             const title = getVal('title');
             if (!title) continue;
 
-            const newTaskRef = doc(collection(db, 'tasks'));
-            batch.set(newTaskRef, {
+            const taskData: any = {
               userId: user.uid,
               category: (getVal('category') as Category) || 'Focus',
               section: getVal('section') || 'General',
@@ -743,12 +742,6 @@ export default function App() {
               urls: getVal('urls') ? getVal('urls').split(';').map(u => u.trim()).filter(Boolean) : [],
               isDone: getVal('isdone').toLowerCase() === 'yes',
               isStarred: getVal('isstarred').toLowerCase() === 'yes',
-              deadline: (() => {
-                const d = getVal('deadline');
-                if (!d) return undefined;
-                const t = new Date(d).getTime();
-                return isNaN(t) ? undefined : t;
-              })(),
               createdAt: (() => {
                 const val = getVal('createdat');
                 const t = val ? new Date(val).getTime() : Date.now();
@@ -759,7 +752,18 @@ export default function App() {
                 const t = val ? new Date(val).getTime() : Date.now();
                 return isNaN(t) ? Date.now() : t;
               })(),
-            });
+            };
+
+            const d = getVal('deadline');
+            if (d) {
+              const t = new Date(d).getTime();
+              if (!isNaN(t)) {
+                taskData.deadline = t;
+              }
+            }
+
+            const newTaskRef = doc(collection(db, 'tasks'));
+            batch.set(newTaskRef, taskData);
             count++;
 
             if (count >= 499) break;
