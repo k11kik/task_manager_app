@@ -273,9 +273,10 @@ export default function App() {
   const isListMode = settings.displayMode === 'list';
 
   const projects = useMemo(() => {
-    const p = Array.from(new Set(tasks.map(t => t.project)));
+    const sectionTasks = tasks.filter(t => t.section === activeSection || (!t.section && activeSection === 'General'));
+    const p = Array.from(new Set(sectionTasks.map(t => t.project)));
     return ['All', ...p];
-  }, [tasks]);
+  }, [tasks, activeSection]);
 
   const stats = useMemo(() => {
     const activeTasks = tasks.filter(t => t.category !== 'Archive' && !t.isDone);
@@ -512,12 +513,23 @@ export default function App() {
 
   const deleteSection = async (name: string) => {
     if (!user || name === 'General') return;
-    if (!window.confirm(`Delete section "${name}"? Tasks will stay but section tag will be removed.`)) return;
+    if (!window.confirm(`Delete section "${name}" and ALL tasks within it? This cannot be undone.`)) return;
 
     const next = settings.sections.filter(s => s !== name);
     try {
+      // 1. Update settings
       await updateDoc(doc(db, 'settings', user.uid), { sections: next });
+      
+      // 2. Delete all tasks in this section
+      const batch = writeBatch(db);
+      const affectedTasks = tasks.filter(t => t.section === name);
+      affectedTasks.forEach(t => {
+        batch.delete(doc(db, 'tasks', t.id));
+      });
+      await batch.commit();
+
       if (activeSection === name) setActiveSection('General');
+      setMessage({ text: `Section "${name}" and ${affectedTasks.length} tasks deleted.`, type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
     }
@@ -1040,7 +1052,7 @@ export default function App() {
         {/* Sidebar / Input Section */}
         <aside className={cn(
           "col-span-12 lg:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pb-20 lg:pb-0",
-          mobileView !== 'summary' && viewMode === 'dashboard' && "hidden lg:flex"
+          (viewMode !== 'dashboard' || mobileView !== 'summary') && "hidden lg:flex"
         )}>
           {!user ? (
             <div className="bg-indigo-600 rounded-2xl p-8 text-white flex flex-col items-center text-center gap-6 shadow-xl shadow-indigo-100">
@@ -1140,8 +1152,11 @@ export default function App() {
             </div>
           )}
 
-          <div className="bg-slate-800 text-slate-300 rounded-xl p-5 shrink-0 hidden md:block">
-            <h2 className="text-sm font-bold uppercase tracking-wider mb-4">Workflow Health</h2>
+          <div className="bg-slate-800 text-slate-300 rounded-xl p-5 shrink-0">
+            <h2 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center justify-between">
+              Workflow Health
+              <Activity size={14} className="text-indigo-400" />
+            </h2>
             <div className="space-y-3">
               <div className="flex justify-between text-xs">
                 <span>Focus Backlog</span>
@@ -1196,7 +1211,7 @@ export default function App() {
               {/* Urgent Column */}
               <section className={cn(
                 "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/50 border-red-100 transition-all",
-                mobileView === 'urgent' ? "flex fixed inset-0 z-[50] bg-red-50 p-4 md:p-6 pt-16 md:pt-20" : (mobileView !== 'summary' ? "hidden lg:flex" : "flex")
+                mobileView === 'urgent' ? "flex fixed inset-0 z-[50] bg-red-50 p-4 md:p-6 pt-16 md:pt-20" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="font-bold flex items-center gap-2 text-red-700">
@@ -1238,7 +1253,7 @@ export default function App() {
               {/* Focus Column (Spans 2) */}
               <section className={cn(
                 "col-span-1 md:col-span-2 flex flex-col rounded-2xl border p-4 min-h-0 bg-indigo-50/50 border-indigo-100 transition-all",
-                mobileView === 'focus' ? "flex fixed inset-0 z-[50] bg-indigo-50 p-4 md:p-6 pt-16 md:pt-20" : (mobileView !== 'summary' ? "hidden lg:flex" : "flex")
+                mobileView === 'focus' ? "flex fixed inset-0 z-[50] bg-indigo-50 p-4 md:p-6 pt-16 md:pt-20" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="font-bold flex items-center gap-2 text-indigo-700">
