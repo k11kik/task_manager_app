@@ -13,6 +13,7 @@ export interface Task {
   urls?: string[];
   isStarred?: boolean;
   section?: string;
+  deadline?: number; // timestamp
 }
 
 export interface TaskHistory {

@@ -87,6 +87,7 @@ export default function App() {
   const [newTaskProject, setNewTaskProject] = useState('');
   const [newTaskNotes, setNewTaskNotes] = useState('');
   const [newTaskUrls, setNewTaskUrls] = useState<string[]>(['']);
+  const [newTaskDeadline, setNewTaskDeadline] = useState<string>('');
   const [newTaskUrl, setNewTaskUrl] = useState(''); // Compatibility check if still used in layout
   const [isPickingDaily, setIsPickingDaily] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash'>('dashboard');
@@ -105,6 +106,7 @@ export default function App() {
 
   const [settings, setSettings] = useState({
     urgentLimit: 3,
+    deadlineThreshold: 3,
     archiveThresholdDays: 30,
     criticalThreshold: 30,
     isLocalBackupEnabled: false,
@@ -330,25 +332,49 @@ export default function App() {
         return matchesSearch && matchesProject && matchesSection;
       })
       .sort((a, b) => {
-        // Priority 1: Starred
+        const now = Date.now();
+        const threshold = (settings.deadlineThreshold || 3) * 24 * 60 * 60 * 1000;
+        
+        // Priority 1: Near Deadline (Focused items only)
+        if (a.category === 'Focus' && b.category === 'Focus') {
+          const aNear = a.deadline && (a.deadline - now) <= threshold && !a.isDone;
+          const bNear = b.deadline && (b.deadline - now) <= threshold && !b.isDone;
+          if (aNear && !bNear) return -1;
+          if (!aNear && bNear) return 1;
+          if (aNear && bNear) return (a.deadline || 0) - (b.deadline || 0);
+        }
+
+        // Priority 2: Starred
         const starA = !!a.isStarred;
         const starB = !!b.isStarred;
         if (starA !== starB) return starA ? -1 : 1;
         
-        // Priority 2: Recency (Updated at descending)
+        // Priority 3: Deadlines in general
+        if (a.deadline && b.deadline) return a.deadline - b.deadline;
+        if (a.deadline) return -1;
+        if (b.deadline) return 1;
+
+        // Priority 4: Recency (Updated at descending)
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
-  }, [tasks, searchTerm, selectedProject, activeSection]);
+  }, [tasks, searchTerm, selectedProject, activeSection, settings.deadlineThreshold]);
 
   const groupedFocusTasks = useMemo(() => {
     const focusTasks = filteredTasks.filter(t => t.category === 'Focus');
+    const threshold = (settings.deadlineThreshold || 3) * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    // Separate near deadline tasks
+    const nearDeadline = focusTasks.filter(t => t.deadline && (t.deadline - now) <= threshold && !t.isDone);
+    const others = focusTasks.filter(t => !t.deadline || (t.deadline - now) > threshold || t.isDone);
+
     const grouped: Record<string, Task[]> = {};
-    focusTasks.forEach(t => {
+    others.forEach(t => {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
-    return grouped;
-  }, [filteredTasks]);
+    return { nearDeadline, grouped };
+  }, [filteredTasks, settings.deadlineThreshold]);
 
   const groupedArchiveTasks = useMemo(() => {
     const archiveTasks = filteredTasks.filter(t => t.category === 'Archive');
@@ -382,6 +408,7 @@ export default function App() {
       urls: newTaskUrls.filter(u => u.trim() !== ''),
       section: activeSection,
       category: 'Focus' as Category,
+      deadline: newTaskDeadline ? new Date(newTaskDeadline).getTime() : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isDone: false,
@@ -394,6 +421,7 @@ export default function App() {
       setNewTaskProject('');
       setNewTaskNotes('');
       setNewTaskUrls(['']);
+      setNewTaskDeadline('');
       setMessage({ text: "Task added to Focus list.", type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'tasks');
@@ -610,7 +638,7 @@ export default function App() {
   };
 
   const getCSVData = () => {
-    const headers = ['ID', 'Category', 'Section', 'Project', 'Title', 'Notes', 'URLs', 'IsDone', 'IsStarred', 'CreatedAt', 'UpdatedAt', 'UserID'];
+    const headers = ['ID', 'Category', 'Section', 'Project', 'Title', 'Notes', 'URLs', 'IsDone', 'IsStarred', 'Deadline', 'CreatedAt', 'UpdatedAt', 'UserID'];
     const rows = tasks.map(t => [
       t.id,
       t.category,
@@ -621,6 +649,7 @@ export default function App() {
       `"${(t.urls || []).join('; ').replace(/"/g, '""')}"`,
       t.isDone ? 'Yes' : 'No',
       t.isStarred ? 'Yes' : 'No',
+      t.deadline ? new Date(t.deadline).toISOString() : '',
       new Date(t.createdAt).toISOString(),
       new Date(t.updatedAt).toISOString(),
       t.userId || 'N/A'
@@ -716,6 +745,7 @@ export default function App() {
           urls: getVal('URLs') ? getVal('URLs').split(';').map(u => u.trim()).filter(Boolean) : [],
           isDone: getVal('IsDone') === 'Yes',
           isStarred: getVal('IsStarred') === 'Yes',
+          deadline: getVal('Deadline') ? new Date(getVal('Deadline')).getTime() : undefined,
           createdAt: getVal('CreatedAt') ? new Date(getVal('CreatedAt')).getTime() : Date.now(),
           updatedAt: getVal('UpdatedAt') ? new Date(getVal('UpdatedAt')).getTime() : Date.now(),
         });
@@ -1320,6 +1350,18 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                    <Calendar size={12} className="text-slate-400" />
+                    Deadline (Optional)
+                  </label>
+                  <input 
+                    type="date"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={newTaskDeadline}
+                    onChange={(e) => setNewTaskDeadline(e.target.value)}
+                  />
+                </div>
                 <button 
                   type="submit"
                   disabled={!newTaskTitle.trim() || !newTaskProject.trim()}
@@ -1417,6 +1459,7 @@ export default function App() {
                           onStar={() => toggleStar(task.id)}
                           variant="Urgent"
                           displayMode={settings.displayMode}
+                          deadlineThreshold={settings.deadlineThreshold}
                         />
                       ))}
                   </AnimatePresence>
@@ -1448,8 +1491,38 @@ export default function App() {
                 </div>
                 
                 <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
-                  {Object.keys(groupedFocusTasks).length > 0 ? (
-                    (Object.entries(groupedFocusTasks) as [string, Task[]][]).map(([project, tasks]) => {
+                  {groupedFocusTasks.nearDeadline.length > 0 && (
+                    <div className="space-y-2 mb-8">
+                       <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50/50 px-2 py-1.5 rounded-lg border border-red-100 flex items-center gap-2">
+                        <AlertTriangle size={12} strokeWidth={3} />
+                        Approach Deadlines (Global)
+                      </h4>
+                      <div className={cn(
+                        "grid grid-cols-1 gap-2.5",
+                        !isListMode && "md:grid-cols-2"
+                      )}>
+                        <AnimatePresence mode="popLayout">
+                          {groupedFocusTasks.nearDeadline.map(task => (
+                            <TaskCard 
+                              key={task.id} 
+                              task={task} 
+                              onToggle={() => toggleDone(task.id)}
+                              onMove={(newCat) => moveTask(task.id, newCat)}
+                              onDelete={() => deleteTask(task.id)}
+                              onEdit={() => setEditingTask(task)}
+                              onStar={() => toggleStar(task.id)}
+                              variant="Focus"
+                              displayMode={settings.displayMode}
+                              deadlineThreshold={settings.deadlineThreshold}
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  )}
+
+                  {Object.keys(groupedFocusTasks.grouped).length > 0 ? (
+                    (Object.entries(groupedFocusTasks.grouped) as [string, Task[]][]).map(([project, tasks]) => {
                       const isCollapsed = collapsedProjects.has(project);
                       return (
                         <div key={project} className="space-y-2">
@@ -1484,6 +1557,7 @@ export default function App() {
                                     onStar={() => toggleStar(task.id)}
                                     variant="Focus"
                                     displayMode={settings.displayMode}
+                                    deadlineThreshold={settings.deadlineThreshold}
                                   />
                                 ))}
                               </AnimatePresence>
@@ -1493,10 +1567,12 @@ export default function App() {
                       );
                     })
                   ) : (
-                    <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
-                      <Target size={48} strokeWidth={1} />
-                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">No Focus Tasks</span>
-                    </div>
+                    groupedFocusTasks.nearDeadline.length === 0 && (
+                      <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
+                        <Target size={48} strokeWidth={1} />
+                        <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">No Focus Tasks</span>
+                      </div>
+                    )
                   )}
                 </div>
               </section>
@@ -1580,8 +1656,10 @@ export default function App() {
                               onMove={(newCat) => moveTask(task.id, newCat)}
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
+                              onStar={() => toggleStar(task.id)}
                               variant="Archive"
                               displayMode={settings.displayMode}
+                              deadlineThreshold={settings.deadlineThreshold}
                             />
                           ))}
                         </AnimatePresence>
@@ -1642,8 +1720,10 @@ export default function App() {
                               onMove={(newCat) => moveTask(task.id, newCat)}
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
+                              onStar={() => toggleStar(task.id)}
                               variant="Trash"
                               displayMode={settings.displayMode}
+                              deadlineThreshold={settings.deadlineThreshold}
                             />
                           ))}
                         </AnimatePresence>
@@ -1817,6 +1897,34 @@ export default function App() {
                         <div className="bg-white p-3 rounded-xl border border-slate-100 flex flex-col items-center">
                           <span className="text-[9px] font-black uppercase text-red-500 tracking-tighter mb-1">Critical (100%)</span>
                           <span className="text-lg font-mono font-bold text-red-600">{settings.criticalThreshold}</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-slate-200/60">
+                        <div className="flex justify-between items-center mb-4">
+                          <div>
+                            <p className="font-bold text-slate-900">Deadline Threshold</p>
+                            <p className="text-xs text-slate-500">Days before deadline to prioritize task in Focus list.</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <input 
+                              type="number"
+                              className="w-16 bg-white border border-slate-200 rounded px-2 py-1 text-sm font-mono font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-center"
+                              value={settings.deadlineThreshold}
+                              onChange={(e) => saveSettings({ ...settings, deadlineThreshold: Math.max(1, parseInt(e.target.value) || 1) })}
+                            />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Days</span>
+                          </div>
+                        </div>
+                        <input 
+                          type="range" min="1" max="14" step="1"
+                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                          value={settings.deadlineThreshold}
+                          onChange={(e) => saveSettings({ ...settings, deadlineThreshold: parseInt(e.target.value) })}
+                        />
+                        <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                          <span>1 day</span>
+                          <span>14 days</span>
                         </div>
                       </div>
                     </div>
@@ -2041,12 +2149,14 @@ interface TaskCardProps {
   onStar: () => void;
   variant?: 'Urgent' | 'Focus' | 'Archive' | 'Trash';
   displayMode?: 'card' | 'list';
+  deadlineThreshold?: number;
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ 
   task, onToggle, onMove, onDelete, onEdit, onStar, 
   variant = 'Focus',
-  displayMode = 'card'
+  displayMode = 'card',
+  deadlineThreshold = 3
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [openUpwards, setOpenUpwards] = useState(false);
@@ -2094,6 +2204,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
             <span className="text-[9px] font-mono font-bold text-slate-400">
                ({formatDate(task.createdAt)})
             </span>
+            {task.deadline && (
+              <span className={cn(
+                "text-[9px] font-bold px-1.5 py-0.5 rounded leading-none flex items-center gap-1",
+                (task.deadline - Date.now() <= deadlineThreshold * 86400000) 
+                  ? "bg-red-50 text-red-600 border border-red-100" 
+                  : "bg-slate-100 text-slate-500"
+              )}>
+                <Clock size={10} />
+                {format(task.deadline, 'MM/dd')}
+              </span>
+            )}
             <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded leading-none shrink-0 truncate max-w-[80px]">
               [{task.project}]
             </span>
@@ -2182,6 +2303,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
         <div className="flex items-center gap-2 pointer-events-none">
           {task.isStarred && (
             <Star size={10} className="text-amber-500 fill-amber-500" />
+          )}
+          {task.deadline && (
+            <div className={cn(
+              "flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border shadow-sm",
+              (task.deadline - Date.now() <= deadlineThreshold * 86400000)
+                ? "bg-red-50 text-red-600 border-red-100"
+                : "bg-slate-50 text-slate-500 border-slate-100"
+            )}>
+              <Clock size={10} />
+              {format(task.deadline, 'MM/dd')}
+            </div>
           )}
           <p className="text-[9px] font-bold text-slate-400 leading-none tracking-wider uppercase font-mono">
             ({formatDate(task.createdAt)}) <span className="text-indigo-600 opacity-60">[{task.project}]</span>
@@ -2403,6 +2535,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
   const [notes, setNotes] = useState(task.notes || '');
   const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
   const [isStarred, setIsStarred] = useState(task.isStarred || false);
+  const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, 'yyyy-MM-dd') : '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2410,7 +2543,8 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
       title, 
       notes, 
       urls: urls.filter(u => u.trim() !== ''),
-      isStarred 
+      isStarred,
+      deadline: deadline ? new Date(deadline).getTime() : null as any // Using null to clear
     });
   };
 
@@ -2490,6 +2624,19 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
               />
             </div>
             
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5">
+                <Calendar size={12} />
+                Task Deadline
+              </label>
+              <input 
+                type="date"
+                className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+              />
+            </div>
+
             <div className="space-y-3">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
                 <span className="flex items-center gap-1.5"><LinkIcon size={10} /> Links / URLs</span>
