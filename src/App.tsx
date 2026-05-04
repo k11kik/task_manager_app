@@ -22,7 +22,9 @@ import {
   LogOut,
   User as UserIcon,
   LogIn,
-  AlertTriangle
+  AlertTriangle,
+  Link as LinkIcon,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays } from 'date-fns';
@@ -74,10 +76,12 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState<string>('All');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskProject, setNewTaskProject] = useState('');
+  const [newTaskUrl, setNewTaskUrl] = useState('');
   const [isPickingDaily, setIsPickingDaily] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash'>('dashboard');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string, type: 'error' | 'info' } | null>(null);
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -103,8 +107,22 @@ export default function App() {
       path
     };
     console.error('Firestore Error: ', JSON.stringify(errInfo));
-    setError(`Database Error: ${errInfo.error}`);
+    setMessage({ text: `Database Error: ${errInfo.error}`, type: 'error' });
   };
+
+  // Browser Exit Confirmation
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Modern browsers require setting returnValue and might ignore the custom message
+      const msg = "Please ensure you have backed up or allowed the cloud sync to complete before leaving.";
+      e.preventDefault();
+      e.returnValue = msg;
+      return msg;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   // Auth State
   useEffect(() => {
@@ -208,7 +226,7 @@ export default function App() {
           // Clear local storage after migration
           localStorage.removeItem('focusflow_tasks');
           localStorage.removeItem('focusflow_settings');
-          setError("Local data has been migrated to the cloud.");
+          setMessage({ text: "Local data has been migrated to the cloud.", type: 'info' });
         }
       }
     };
@@ -313,9 +331,10 @@ export default function App() {
     
     const newTask = {
       userId: user.uid,
-      title: newTaskTitle,
-      project: newTaskProject,
-      category: 'Focus',
+      title: newTaskTitle.trim(),
+      project: newTaskProject.trim(),
+      url: newTaskUrl.trim() || '',
+      category: 'Focus' as Category,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isDone: false,
@@ -326,7 +345,8 @@ export default function App() {
       await addDoc(collection(db, 'tasks'), newTask);
       setNewTaskTitle('');
       setNewTaskProject('');
-      setViewMode('dashboard');
+      setNewTaskUrl('');
+      setMessage({ text: "Task added to Focus list.", type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'tasks');
     }
@@ -339,7 +359,10 @@ export default function App() {
       if (!isAlreadyUrgent) {
         const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
         if (urgentCount >= settings.urgentLimit) {
-          setError(`Urgent Capacity Full: You have reached the ${settings.urgentLimit} task limit. Complete or archive an existing task first.`);
+          setMessage({ 
+            text: `Urgent Capacity Full: You have reached the ${settings.urgentLimit} task limit. Complete or archive an existing task first.`,
+            type: 'error'
+          });
           return;
         }
       }
@@ -428,7 +451,7 @@ export default function App() {
         batch.delete(doc(db, 'tasks', t.id));
       });
       await batch.commit();
-      setError(`${trashTasks.length} items permanently deleted.`);
+      setMessage({ text: `${trashTasks.length} items permanently deleted.`, type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'batch/empty-trash');
     }
@@ -438,7 +461,10 @@ export default function App() {
     if (!user) return;
     const currentUrgentCount = tasks.filter(t => t.category === 'Urgent').length;
     if (currentUrgentCount + selectedIds.length > settings.urgentLimit) {
-      setError(`Daily Pick Violation: This batch would exceed the ${settings.urgentLimit} slot limit.`);
+      setMessage({ 
+        text: `Daily Pick Violation: This batch would exceed the ${settings.urgentLimit} slot limit.`,
+        type: 'error'
+      });
       return;
     }
 
@@ -462,18 +488,19 @@ export default function App() {
     try {
       await signIn();
     } catch (err) {
-      setError("Sign in failed.");
+      setMessage({ text: "Sign in failed.", type: 'error' });
     }
   };
 
   const getCSVData = () => {
-    const headers = ['ID', 'Category', 'Project', 'Title', 'Notes', 'IsDone', 'CreatedAt', 'UpdatedAt', 'UserID'];
+    const headers = ['ID', 'Category', 'Project', 'Title', 'Notes', 'URL', 'IsDone', 'CreatedAt', 'UpdatedAt', 'UserID'];
     const rows = tasks.map(t => [
       t.id,
       t.category,
       t.project,
       `"${t.title.replace(/"/g, '""')}"`,
       `"${(t.notes || '').replace(/"/g, '""')}"`,
+      `"${(t.url || '').replace(/"/g, '""')}"`,
       t.isDone ? 'Yes' : 'No',
       new Date(t.createdAt).toISOString(),
       new Date(t.updatedAt).toISOString(),
@@ -489,7 +516,10 @@ export default function App() {
   const selectBackupFolder = async () => {
     try {
       if (!window.showDirectoryPicker) {
-        setError("Your browser does not support the File System Access API. Please use a Chromium-based browser (Chrome, Edge) on Desktop.");
+        setMessage({ 
+          text: "Your browser does not support the File System Access API. Please use a Chromium-based browser (Chrome, Edge) on Desktop.",
+          type: 'error'
+        });
         return;
       }
       const handle = await window.showDirectoryPicker({
@@ -503,9 +533,12 @@ export default function App() {
       });
     } catch (err: any) {
       if (err.name === 'SecurityError' || err.message?.includes('Cross origin sub frames')) {
-        setError("Security Restriction: Local folder access is blocked in the preview window. Please click 'Open in New Tab' to use this feature.");
+        setMessage({ 
+          text: "Security Restriction: Local folder access is blocked in the preview window. Please click 'Open in New Tab' to use this feature.",
+          type: 'error'
+        });
       } else if (err.name !== 'AbortError') {
-        setError(`Folder selection failed: ${err.message}`);
+        setMessage({ text: `Folder selection failed: ${err.message}`, type: 'error' });
       }
     }
   };
@@ -524,10 +557,13 @@ export default function App() {
       await writable.close();
       
       setLastSyncTime(Date.now());
-      if (manual) setError("Log saved to selected folder.");
+      if (manual) setMessage({ text: "Log saved to selected folder.", type: 'info' });
     } catch (err: any) {
       console.error("Local backup failed", err);
-      setError(`Local Backup Error: ${err.message}. You may need to grant permission again.`);
+      setMessage({ 
+        text: `Local Backup Error: ${err.message}. You may need to grant permission again.`,
+        type: 'error'
+      });
     } finally {
       setIsSyncing(false);
     }
@@ -583,7 +619,7 @@ export default function App() {
       });
 
       if (archiveTasks.length === 0) {
-        setError("No tasks match the cleanup criteria.");
+        setMessage({ text: "No tasks match the cleanup criteria.", type: 'info' });
         return;
       }
 
@@ -597,7 +633,7 @@ export default function App() {
         });
       });
       await batch.commit();
-      setError(`Archive Updated: Moved ${archiveTasks.length} entries to Trash.`);
+      setMessage({ text: `Archive Updated: Moved ${archiveTasks.length} entries to Trash.`, type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'batch/cleanup-archive');
     }
@@ -608,7 +644,7 @@ export default function App() {
     if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will try to delete EVERY task in the 'tasks' collection for your ID. Proceed?")) return;
 
     try {
-      setError("Purge started. Clearing cloud data...");
+      setMessage({ text: "Purge started. Clearing cloud data...", type: 'info' });
       
       // Fetch all docs directly from the collection to ensure we see what's on the server
       const snap = await getDocs(query(collection(db, 'tasks'), where('userId', '==', user.uid)));
@@ -631,7 +667,7 @@ export default function App() {
       localStorage.clear();
       sessionStorage.clear();
       
-      setError(`Purge ended: ${successCount} deleted, ${failCount} failed. Resetting local cache...`);
+      setMessage({ text: `Purge ended: ${successCount} deleted, ${failCount} failed. Resetting local cache...`, type: 'info' });
       
       // Wait a moment for the toast to be seen
       setTimeout(async () => {
@@ -642,7 +678,7 @@ export default function App() {
       
     } catch (err: any) {
       console.error("Purge Error:", err);
-      setError(`Purge Error: ${err.message}`);
+      setMessage({ text: `Purge Error: ${err.message}`, type: 'error' });
     }
   };
 
@@ -661,28 +697,42 @@ export default function App() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError('Export Failed: An error occurred while generating the CSV.');
+      setMessage({ text: 'Export Failed: An error occurred while generating the CSV.', type: 'error' });
     }
+  };
+
+  const toggleProjectCollapse = (project: string) => {
+    setCollapsedProjects(prev => {
+      const next = new Set(prev);
+      if (next.has(project)) next.delete(project);
+      else next.add(project);
+      return next;
+    });
   };
 
   return (
     <div className="h-screen w-full bg-[#f8fafc] text-slate-800 flex flex-col font-sans overflow-hidden">
-      {/* Error Toast */}
+      {/* Toast Messages */}
       <AnimatePresence>
-        {error && (
+        {message && (
           <motion.div 
             initial={{ opacity: 0, y: 50, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 20, x: '-50%' }}
-            className="fixed bottom-12 left-1/2 z-[100] bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 min-w-[320px] max-w-md"
+            className={cn(
+              "fixed bottom-12 left-1/2 z-[100] text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 min-w-[320px] max-w-md transition-colors",
+              message.type === 'error' ? "bg-red-600" : "bg-indigo-600 shadow-indigo-200/50"
+            )}
           >
             <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
-              <Zap size={20} className="text-white fill-white" />
+              {message.type === 'error' ? <Zap size={20} className="text-white fill-white" /> : <CheckCircle2 size={20} className="text-white" />}
             </div>
             <div className="flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-0.5">System Exception</p>
-              <p className="text-sm font-bold leading-tight">{error}</p>
-              {error.toLowerCase().includes("open in new tab") && (
+              <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-0.5">
+                {message.type === 'error' ? 'System Exception' : 'Notification'}
+              </p>
+              <p className="text-sm font-bold leading-tight">{message.text}</p>
+              {message.text.toLowerCase().includes("open in new tab") && (
                 <button 
                   onClick={() => window.open(window.location.href, '_blank')}
                   className="mt-2 px-3 py-1 bg-white text-indigo-600 text-[10px] font-black uppercase rounded shadow-sm hover:bg-slate-50 transition-all font-mono"
@@ -691,7 +741,7 @@ export default function App() {
                 </button>
               )}
             </div>
-            <button onClick={() => setError(null)} className="p-1 hover:bg-white/10 rounded">
+            <button onClick={() => setMessage(null)} className="p-1 hover:bg-white/10 rounded">
               <X size={16} />
             </button>
           </motion.div>
@@ -835,12 +885,27 @@ export default function App() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-600">Task Detail</label>
                   <textarea 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-24 resize-none" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none" 
                     placeholder="What needs to be done? (Cmd/Ctrl+Enter to save)"
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                     onKeyDown={(e) => {
                       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                    <LinkIcon size={12} /> URL / Link (Optional)
+                  </label>
+                  <input 
+                    type="url"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="https://..."
+                    value={newTaskUrl}
+                    onChange={(e) => setNewTaskUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddTask(e);
                     }}
                   />
                 </div>
@@ -960,31 +1025,44 @@ export default function App() {
                 
                 <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
                   {Object.keys(groupedFocusTasks).length > 0 ? (
-                    (Object.entries(groupedFocusTasks) as [string, Task[]][]).map(([project, tasks]) => (
-                      <div key={project} className="space-y-3">
-                        <div className="flex items-center gap-4 px-2">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 bg-white/50 px-2 py-0.5 rounded border border-slate-100">
-                            {project}
-                          </h4>
-                          <div className="h-px flex-1 bg-slate-200"></div>
+                    (Object.entries(groupedFocusTasks) as [string, Task[]][]).map(([project, tasks]) => {
+                      const isCollapsed = collapsedProjects.has(project);
+                      return (
+                        <div key={project} className="space-y-3">
+                          <button 
+                            onClick={() => toggleProjectCollapse(project)}
+                            className="w-full flex items-center gap-4 px-2 hover:opacity-70 transition-opacity"
+                          >
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 bg-white/50 px-2 py-0.5 rounded border border-slate-100 flex items-center gap-1.5">
+                              {isCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                              {project}
+                            </h4>
+                            <div className="h-px flex-1 bg-slate-200"></div>
+                            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
+                              {tasks.length} items
+                            </span>
+                          </button>
+                          
+                          {!isCollapsed && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <AnimatePresence mode="popLayout">
+                                {tasks.map(task => (
+                                  <TaskCard 
+                                    key={task.id} 
+                                    task={task} 
+                                    onToggle={() => toggleDone(task.id)}
+                                    onMove={(newCat) => moveTask(task.id, newCat)}
+                                    onDelete={() => deleteTask(task.id)}
+                                    onEdit={() => setEditingTask(task)}
+                                    variant="Focus"
+                                  />
+                                ))}
+                              </AnimatePresence>
+                            </div>
+                          )}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <AnimatePresence mode="popLayout">
-                            {tasks.map(task => (
-                              <TaskCard 
-                                key={task.id} 
-                                task={task} 
-                                onToggle={() => toggleDone(task.id)}
-                                onMove={(newCat) => moveTask(task.id, newCat)}
-                                onDelete={() => deleteTask(task.id)}
-                                onEdit={() => setEditingTask(task)}
-                                variant="Focus"
-                              />
-                            ))}
-                          </AnimatePresence>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                       <Target size={48} strokeWidth={1} />
@@ -1439,8 +1517,8 @@ export default function App() {
             <span className="text-slate-600 font-medium font-mono lowercase tracking-tighter">SWEEP LOG ACTIVE</span>
           </div>
         </div>
-        <div className="text-[10px] font-mono text-slate-400 font-extrabold ml-4">
-          FOCUSFLOW SYSTEM STACK V2.1
+        <div className="text-[10px] font-mono text-slate-400 font-extrabold ml-4 uppercase">
+          Systematic Task Manager V2.2
         </div>
       </footer>
 
@@ -1528,6 +1606,20 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
       <p className={cn("text-sm font-semibold text-slate-800 leading-tight mb-2 break-words", task.isDone && "line-through text-slate-400")}>
         {task.title}
       </p>
+
+      {task.url && (
+        <a 
+          href={task.url} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 mb-2 transition-colors group/link w-fit"
+        >
+          <LinkIcon size={12} className="group-hover/link:rotate-12 transition-transform" />
+          <span className="truncate max-w-[200px]">{task.url.replace(/^https?:\/\//, '')}</span>
+          <ArrowUpRight size={10} className="opacity-0 group-hover/link:opacity-100 transition-opacity" />
+        </a>
+      )}
       
       {task.notes && (
         <p className="text-[10px] text-slate-400 line-clamp-2 mb-3 leading-relaxed italic">
@@ -1698,10 +1790,11 @@ function DailyPickModal({ tasks, onClose, onPick, currentUrgentCount, limit }: {
 function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task; onClose: () => void; onSave: (updates: Partial<Task>) => void; onMove: (cat: Category) => void; onDelete: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes || '');
+  const [url, setUrl] = useState(task.url || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ title, notes });
+    onSave({ title, notes, url });
   };
 
   return (
@@ -1743,12 +1836,27 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Memos / Context</label>
               <textarea 
-                placeholder="Add details, links, or sub-tasks..."
-                className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all resize-none h-48"
+                placeholder="Add details, or sub-tasks..."
+                className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all resize-none h-32"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 onKeyDown={(e) => {
                   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit(e);
+                }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5">
+                <LinkIcon size={10} /> Link / URL
+              </label>
+              <input 
+                type="url"
+                placeholder="https://example.com"
+                className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSubmit(e);
                 }}
               />
             </div>

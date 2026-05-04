@@ -12,7 +12,8 @@
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" },
         "isDone": { "type": "boolean" },
-        "notes": { "type": "string" }
+        "notes": { "type": "string" },
+        "url": { "type": "string", "format": "uri" }
       },
       "required": ["userId", "title", "project", "category", "createdAt", "updatedAt", "isDone"]
     },
