@@ -1812,14 +1812,14 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-white p-4 rounded-2xl border border-slate-100">
                         <p className="text-xs font-bold text-slate-800 mb-1">Export Data</p>
-                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Backup to systematic CSV</p>
+                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Backup to TriFocus CSV</p>
                         <button 
                           onClick={() => {
                             const blob = new Blob([getCSVData()], { type: 'text/csv' });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = `stm-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+                            a.download = `trifocus-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
                             a.click();
                           }}
                           className="w-full py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
