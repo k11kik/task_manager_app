@@ -122,7 +122,7 @@ export default function App() {
     isLocalBackupEnabled: false,
     localBackupPath: '',
     displayMode: 'card' as 'card' | 'list',
-    sections: ['General', 'Lab', 'Private']
+    sections: ['General']
   });
 
   const handleFirestoreError = (err: unknown, operationType: OperationType, path: string | null) => {
@@ -181,7 +181,7 @@ export default function App() {
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
           displayMode: data.displayMode || 'card',
-          sections: data.sections || ['General', 'Lab', 'Private']
+          sections: data.sections || ['General']
         });
       } else {
         // Init default settings for new user
@@ -194,7 +194,7 @@ export default function App() {
           isLocalBackupEnabled: false,
           localBackupPath: '',
           displayMode: 'card',
-          sections: ['General', 'Lab', 'Private']
+          sections: ['General']
         }).catch(err => handleFirestoreError(err, OperationType.WRITE, `settings/${user.uid}`));
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `settings/${user.uid}`));
@@ -292,8 +292,6 @@ export default function App() {
       return next;
     });
   };
-
-  const SECTIONS = ['General', 'Lab', 'Private', 'Side Project'];
 
   const isListMode = settings.displayMode === 'list';
 
