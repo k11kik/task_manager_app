@@ -822,7 +822,7 @@ export default function App() {
     setIsSyncing(true);
     try {
       const csvContent = getCSVData();
-      const fileName = `TaskManager_Log_${user?.email?.split('@')[0] || 'local'}.csv`;
+      const fileName = `TriFocus_Log_${user?.email?.split('@')[0] || 'local'}.csv`;
       
       const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
       const writable = await fileHandle.createWritable();
