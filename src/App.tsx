@@ -747,6 +747,7 @@ export default function App() {
 
           const batch = writeBatch(db);
           let count = 0;
+          const foundWorkspaces = new Set<string>();
 
           for (const row of results.data as any[]) {
             // Helper to get value by case-insensitive key
@@ -759,10 +760,13 @@ export default function App() {
             const title = getVal('title');
             if (!title) continue;
 
+            const sectionName = getVal('workspace') || getVal('section') || settings.sections[0] || 'General';
+            foundWorkspaces.add(sectionName);
+
             const taskData: any = {
               userId: user.uid,
               category: (getVal('category') as Category) || 'Focus',
-      section: getVal('workspace') || getVal('section') || settings.sections[0] || 'General',
+              section: sectionName,
               project: getVal('project') || 'Imported',
               title,
               notes: getVal('notes'),
@@ -799,6 +803,13 @@ export default function App() {
           if (count === 0) {
             setMessage({ text: "No valid tasks were found in the CSV. Please check the column headers.", type: 'error' });
             return;
+          }
+
+          // Update settings with new workspaces if any
+          const missingWorkspaces = Array.from(foundWorkspaces).filter(s => s && !settings.sections.includes(s));
+          if (missingWorkspaces.length > 0) {
+            const updatedSections = [...settings.sections, ...missingWorkspaces];
+            await updateDoc(doc(db, 'settings', user.uid), { sections: updatedSections });
           }
 
           await batch.commit();
