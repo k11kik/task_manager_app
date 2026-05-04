@@ -132,12 +132,28 @@ export default function App() {
         userId: auth.currentUser?.uid,
         email: auth.currentUser?.email,
         emailVerified: auth.currentUser?.emailVerified,
+        isAnonymous: auth.currentUser?.isAnonymous,
+        tenantId: auth.currentUser?.tenantId,
+        providerInfo: auth.currentUser?.providerData?.map(provider => ({
+          providerId: provider.providerId,
+          email: provider.email,
+        })) || []
       },
       operationType,
       path
     };
     console.error('Firestore Error: ', JSON.stringify(errInfo));
-    setMessage({ text: `Database Error: ${errInfo.error}`, type: 'error' });
+    
+    if (errInfo.error.includes('permissions') || errInfo.error.includes('permission')) {
+      setMessage({ 
+        text: `Permission Denied: Ensure you are logged in and rules are deployed. Details: ${errInfo.error}`, 
+        type: 'error' 
+      });
+    } else {
+      setMessage({ text: `Database Error: ${errInfo.error}`, type: 'error' });
+    }
+    
+    throw new Error(JSON.stringify(errInfo));
   };
 
   // Browser Exit Confirmation
@@ -173,7 +189,7 @@ export default function App() {
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const loadedSections = data.sections || ['General'];
+        const loadedSections = (data.sections && data.sections.length > 0) ? data.sections : ['General'];
         setSettings({
           urgentLimit: data.urgentLimit || 3,
           deadlineThreshold: data.deadlineThreshold || 3,
@@ -746,7 +762,7 @@ export default function App() {
             const taskData: any = {
               userId: user.uid,
               category: (getVal('category') as Category) || 'Focus',
-              section: getVal('workspace') || getVal('section') || settings.sections[0] || 'General',
+      section: getVal('workspace') || getVal('section') || settings.sections[0] || 'General',
               project: getVal('project') || 'Imported',
               title,
               notes: getVal('notes'),
@@ -1316,7 +1332,7 @@ export default function App() {
               </div>
               <div>
                 <h3 className="text-xl font-bold mb-2">Sync to Cloud</h3>
-                <p className="text-sm opacity-80 leading-relaxed">Sign in to securely access your Task Manager system across all devices with real-time sync.</p>
+                <p className="text-sm opacity-80 leading-relaxed">Sign in to securely access your TriFocus system across all devices with real-time sync.</p>
               </div>
               <button 
                 onClick={() => handleSignIn()}

@@ -57,10 +57,11 @@ service cloud.firestore {
           && data.urgentLimit is number
           && data.deadlineThreshold is number
           && data.archiveThresholdDays is number
-          && data.warningThreshold is number
           && data.criticalThreshold is number
           && data.isLocalBackupEnabled is bool
-          && data.localBackupPath is string && data.localBackupPath.size() <= 200;
+          && data.localBackupPath is string
+          && (data.get('displayMode', 'card') in ['card', 'list'])
+          && (data.get('sections', ['General']) is list);
       }
 
       allow get: if isOwner(userId);
