@@ -19,6 +19,8 @@ import {
   Settings as SettingsIcon,
   Activity,
   Download,
+  Upload,
+  FileText,
   LogOut,
   User as UserIcon,
   LogIn,
@@ -97,6 +99,7 @@ export default function App() {
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [showCleanupMenu, setShowCleanupMenu] = useState(false);
 
   const [settings, setSettings] = useState({
     urgentLimit: 3,
@@ -619,6 +622,72 @@ export default function App() {
       headers.join(','),
       ...rows.map(r => r.join(','))
     ].join('\n');
+  };
+
+  const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user || !e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      const content = event.target?.result as string;
+      const lines = content.split('\n');
+      if (lines.length < 2) return;
+
+      const headers = lines[0].split(',').map(h => h.trim());
+      const batch = writeBatch(db);
+      let count = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        
+        const values: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        for (let j = 0; j < lines[i].length; j++) {
+          const char = lines[i][j];
+          if (char === '"') inQuotes = !inQuotes;
+          else if (char === ',' && !inQuotes) {
+            values.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        values.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+
+        const getVal = (header: string) => {
+          const idx = headers.indexOf(header);
+          return idx !== -1 ? values[idx] : '';
+        };
+
+        const newTaskRef = doc(collection(db, 'tasks'));
+        batch.set(newTaskRef, {
+          userId: user.uid,
+          category: (getVal('Category') as Category) || 'Focus',
+          section: getVal('Section') || 'General',
+          project: getVal('Project') || 'Imported',
+          title: getVal('Title') || 'Untitled Task',
+          notes: getVal('Notes') || '',
+          urls: getVal('URLs') ? getVal('URLs').split(';').map(u => u.trim()) : [],
+          isDone: getVal('IsDone') === 'Yes',
+          isStarred: getVal('IsStarred') === 'Yes',
+          createdAt: getVal('CreatedAt') ? new Date(getVal('CreatedAt')).getTime() : Date.now(),
+          updatedAt: getVal('UpdatedAt') ? new Date(getVal('UpdatedAt')).getTime() : Date.now(),
+        });
+        count++;
+      }
+
+      try {
+        await batch.commit();
+        setMessage({ text: `Successfully imported ${count} tasks.`, type: 'info' });
+        e.target.value = '';
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, 'tasks/batch');
+      }
+    };
+
+    reader.readAsText(file);
   };
 
   const selectBackupFolder = async () => {
@@ -1324,7 +1393,7 @@ export default function App() {
             </div>
           ) : viewMode === 'archive' ? (
             /* Archive Mode */
-            <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-slate-50/50 border-slate-200 h-full">
+            <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-slate-50/50 border-slate-200 h-full overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-2 gap-4">
                 <div>
                   <h3 className="font-bold flex items-center gap-2 text-slate-700 text-lg">
@@ -1337,40 +1406,48 @@ export default function App() {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <div className="relative group">
-                    <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:border-red-200 hover:text-red-500 transition-all shadow-sm">
+                  <div className="relative">
+                    <button 
+                      onClick={() => setShowCleanupMenu(!showCleanupMenu)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:border-red-200 hover:text-red-500 transition-all shadow-sm"
+                    >
                       <Trash2 size={12} />
                       Cleanup Options
                     </button>
-                    <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[180px] z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
-                      <button 
-                        onClick={() => cleanupArchive(30)}
-                        className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
-                      >
-                        <span>Older than 1 Month</span>
-                        <span className="text-[9px] opacity-50 font-normal normal-case">Items inactive for 30+ days</span>
-                      </button>
-                      <button 
-                        onClick={() => cleanupArchive(7)}
-                        className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
-                      >
-                        <span>Older than 1 Week</span>
-                        <span className="text-[9px] opacity-50 font-normal normal-case">Items inactive for 7+ days</span>
-                      </button>
-                      <div className="h-px bg-slate-100 my-1 mx-2"></div>
-                      <button 
-                        onClick={() => cleanupArchive()}
-                        className="w-full text-left px-4 py-2 text-[10px] font-black text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
-                      >
-                        <Zap size={10} strokeWidth={3} />
-                        Purge All Archive
-                      </button>
-                    </div>
+                    {showCleanupMenu && (
+                      <>
+                        <div className="fixed inset-0 z-[70]" onClick={() => setShowCleanupMenu(false)} />
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[180px] z-[80] transition-all">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); cleanupArchive(30); setShowCleanupMenu(false); }}
+                            className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
+                          >
+                            <span>Older than 1 Month</span>
+                            <span className="text-[9px] opacity-50 font-normal normal-case">Items inactive for 30+ days</span>
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); cleanupArchive(7); setShowCleanupMenu(false); }}
+                            className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
+                          >
+                            <span>Older than 1 Week</span>
+                            <span className="text-[9px] opacity-50 font-normal normal-case">Items inactive for 7+ days</span>
+                          </button>
+                          <div className="h-px bg-slate-100 my-1 mx-2"></div>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); cleanupArchive(); setShowCleanupMenu(false); }}
+                            className="w-full text-left px-4 py-2 text-[10px] font-black text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                          >
+                            <Zap size={10} strokeWidth={3} />
+                            Purge All Archive
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
+              <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-32">
                 {Object.keys(groupedArchiveTasks).length > 0 ? (
                   (Object.entries(groupedArchiveTasks) as [string, Task[]][]).map(([project, tasks]) => (
                     <div key={project} className="space-y-3">
@@ -1473,26 +1550,63 @@ export default function App() {
             </section>
           ) : (
             /* Settings Mode */
-            <section className="flex flex-col rounded-2xl border p-8 min-h-0 bg-white border-slate-200 h-full overflow-y-auto custom-scrollbar">
-              <div className="max-w-2xl mx-auto w-full">
+            <section className="flex flex-col rounded-2xl border p-4 md:p-8 min-h-0 bg-white border-slate-200 h-full overflow-hidden">
+              <div className="max-w-2xl mx-auto w-full flex-1 overflow-y-auto custom-scrollbar pb-32">
                 <div className="flex items-center gap-3 mb-10">
                   <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
                     <SettingsIcon size={28} />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight">System Preferences</h2>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-800">System Preferences</h2>
                     <p className="text-sm text-slate-500">Tune your focus algorithms and capacity thresholds.</p>
                   </div>
                 </div>
 
-                <div className="space-y-12">
+                <div className="space-y-8 md:space-y-12">
+                   {/* Data Synchronization & Import */}
+                  <div className="bg-slate-50 rounded-3xl p-6 md:p-8 border border-slate-100 shadow-sm space-y-6">
+                    <div className="flex items-center gap-2 text-indigo-600">
+                      <Download size={20} />
+                      <h3 className="font-bold text-sm uppercase tracking-wider">Data Lifecycle</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-white p-4 rounded-2xl border border-slate-100">
+                        <p className="text-xs font-bold text-slate-800 mb-1">Export Data</p>
+                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Backup to systematic CSV</p>
+                        <button 
+                          onClick={() => {
+                            const blob = new Blob([getCSVData()], { type: 'text/csv' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `stm-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+                            a.click();
+                          }}
+                          className="w-full py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Download size={14} /> Download CSV
+                        </button>
+                      </div>
+
+                      <div className="bg-white p-4 rounded-2xl border border-slate-100">
+                        <p className="text-xs font-bold text-slate-800 mb-1">Import Data</p>
+                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Restore from STM CSV</p>
+                        <label className="flex items-center justify-center gap-2 w-full py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all cursor-pointer">
+                          <Upload size={14} /> Import CSV
+                          <input type="file" accept=".csv" className="hidden" onChange={handleCSVImport} />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Account Information */}
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-4 text-slate-600">
                       <UserIcon size={18} />
                       <h3 className="font-bold text-sm uppercase tracking-wider">Account Information</h3>
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm bg-indigo-50 flex items-center justify-center text-indigo-400">
                           {user?.photoURL ? (
@@ -1502,13 +1616,13 @@ export default function App() {
                           )}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900">{user?.displayName || 'Personal Account'}</p>
-                          <p className="text-xs text-slate-500">{user?.email || 'Not signed in'}</p>
+                          <p className="font-bold text-slate-900 truncate max-w-[200px]">{user?.displayName || 'Personal Account'}</p>
+                          <p className="text-[10px] text-slate-500 truncate max-w-[200px]">{user?.email || 'Not signed in'}</p>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
+                      <div className="flex flex-col md:items-end gap-1">
                         <span className={cn(
-                          "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border",
+                          "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border self-start md:self-auto",
                           user ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-slate-100 text-slate-400 border-slate-200"
                         )}>
                           {user ? 'Cloud Synced' : 'Local Only'}
