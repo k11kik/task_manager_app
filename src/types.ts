@@ -10,7 +10,9 @@ export interface Task {
   updatedAt: number; // timestamp
   isDone: boolean;
   notes?: string;
-  url?: string;
+  urls?: string[];
+  isStarred?: boolean;
+  section?: string;
 }
 
 export interface TaskHistory {

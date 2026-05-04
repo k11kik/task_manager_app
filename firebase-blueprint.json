@@ -13,7 +13,9 @@
         "updatedAt": { "type": "number" },
         "isDone": { "type": "boolean" },
         "notes": { "type": "string" },
-        "url": { "type": "string", "format": "uri" }
+        "urls": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "isStarred": { "type": "boolean" },
+        "section": { "type": "string" }
       },
       "required": ["userId", "title", "project", "category", "createdAt", "updatedAt", "isDone"]
     },

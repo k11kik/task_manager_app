@@ -24,7 +24,14 @@ import {
   LogIn,
   AlertTriangle,
   Link as LinkIcon,
-  ChevronDown
+  ChevronDown,
+  ChevronRight as ChevronRightIcon,
+  Star,
+  StarOff,
+  Globe,
+  PanelTop,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays } from 'date-fns';
@@ -76,12 +83,16 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState<string>('All');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskProject, setNewTaskProject] = useState('');
-  const [newTaskUrl, setNewTaskUrl] = useState('');
+  const [newTaskNotes, setNewTaskNotes] = useState('');
+  const [newTaskUrls, setNewTaskUrls] = useState<string[]>(['']);
+  const [newTaskUrl, setNewTaskUrl] = useState(''); // Compatibility check if still used in layout
   const [isPickingDaily, setIsPickingDaily] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash'>('dashboard');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'error' | 'info' } | null>(null);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [activeSection, setActiveSection] = useState<string>('General');
+  const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'settings'>('summary');
 
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -113,16 +124,18 @@ export default function App() {
   // Browser Exit Confirmation
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Modern browsers require setting returnValue and might ignore the custom message
-      const msg = "Please ensure you have backed up or allowed the cloud sync to complete before leaving.";
-      e.preventDefault();
-      e.returnValue = msg;
-      return msg;
+      // Only show confirmation if no backup path is set
+      if (!dirHandle) {
+        const msg = "Local backup folder is not configured. Please set a backup path in Settings to ensure your logs are saved locally.";
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+      }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  }, [dirHandle]);
 
   // Auth State
   useEffect(() => {
@@ -249,6 +262,8 @@ export default function App() {
     });
   };
 
+  const SECTIONS = ['General', 'Lab', 'Private', 'Side Project'];
+
   const projects = useMemo(() => {
     const p = Array.from(new Set(tasks.map(t => t.project)));
     return ['All', ...p];
@@ -288,12 +303,19 @@ export default function App() {
     return tasks
       .filter(t => {
         const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                             t.project.toLowerCase().includes(searchTerm.toLowerCase());
+                             t.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             (t.notes || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesProject = selectedProject === 'All' || t.project === selectedProject;
-        return matchesSearch && matchesProject;
+        const matchesSection = t.section === activeSection || (!t.section && activeSection === 'General');
+        return matchesSearch && matchesProject && matchesSection;
       })
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [tasks, searchTerm, selectedProject]);
+      .sort((a, b) => {
+        // Priority 1: Starred
+        if (a.isStarred !== b.isStarred) return a.isStarred ? -1 : 1;
+        // Priority 2: Recency
+        return b.updatedAt - a.updatedAt;
+      });
+  }, [tasks, searchTerm, selectedProject, activeSection]);
 
   const groupedFocusTasks = useMemo(() => {
     const focusTasks = filteredTasks.filter(t => t.category === 'Focus');
@@ -333,19 +355,22 @@ export default function App() {
       userId: user.uid,
       title: newTaskTitle.trim(),
       project: newTaskProject.trim(),
-      url: newTaskUrl.trim() || '',
+      notes: newTaskNotes.trim(),
+      urls: newTaskUrls.filter(u => u.trim() !== ''),
+      section: activeSection,
       category: 'Focus' as Category,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isDone: false,
-      notes: '',
+      isStarred: false
     };
 
     try {
       await addDoc(collection(db, 'tasks'), newTask);
       setNewTaskTitle('');
       setNewTaskProject('');
-      setNewTaskUrl('');
+      setNewTaskNotes('');
+      setNewTaskUrls(['']);
       setMessage({ text: "Task added to Focus list.", type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'tasks');
@@ -426,6 +451,20 @@ export default function App() {
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
       }
+    }
+  };
+
+  const toggleStar = async (id: string) => {
+    if (!user) return;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    try {
+      await updateDoc(doc(db, 'tasks', id), { 
+        isStarred: !task.isStarred, 
+        updatedAt: Date.now() 
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
     }
   };
 
@@ -749,71 +788,95 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header Navigation */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-8">
-          <button 
-            onClick={() => setViewMode('dashboard')}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
-          >
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
-              <Layout size={18} />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-800">
-              <span className="text-indigo-600">S</span>ystematic <span className="text-indigo-600">T</span>ask <span className="text-indigo-600">M</span>anager
-            </h1>
-          </button>
-          <nav className="hidden md:flex gap-6 text-sm font-medium text-slate-500">
+      <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex justify-between items-center shrink-0">
+        <div className="flex items-center gap-4 md:gap-8">
+          <div className="relative group">
             <button 
-              onClick={() => setViewMode('dashboard')}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
+            >
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white group-hover:rotate-12 transition-transform shadow-lg shadow-indigo-100">
+                <PanelTop size={18} />
+              </div>
+              <div className="flex flex-col items-start leading-none">
+                <h1 className="text-sm font-black tracking-tighter text-slate-800 uppercase">
+                  STM <span className="text-indigo-600">v2.2</span>
+                </h1>
+                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-0.5">
+                  <span className="truncate max-w-[80px]">{activeSection}</span> <ChevronDown size={10} />
+                </p>
+              </div>
+            </button>
+            <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 py-2">
+              <p className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Switch Section</p>
+              {SECTIONS.map(s => (
+                <button 
+                  key={s}
+                  onClick={() => setActiveSection(s)}
+                  className={cn(
+                    "w-full text-left px-4 py-2.5 text-xs font-bold transition-all flex items-center justify-between",
+                    activeSection === s ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                  )}
+                >
+                  {s}
+                  {activeSection === s && <CheckCircle2 size={12} />}
+                </button>
+              ))}
+            </div>
+          </div>
+          <nav className="hidden lg:flex gap-6 text-sm font-medium text-slate-500">
+            <button 
+              onClick={() => { setViewMode('dashboard'); setMobileView('summary'); }}
               className={cn("pb-4 -mb-4 transition-colors", viewMode === 'dashboard' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
             >
               Dashboard
             </button>
             <button 
-              onClick={() => setViewMode('archive')}
+              onClick={() => { setViewMode('archive'); setMobileView('archive'); }}
               className={cn("pb-4 -mb-4 transition-colors", viewMode === 'archive' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
             >
               Archive
             </button>
             <button 
-              onClick={() => setViewMode('trash')}
-              className={cn("pb-4 -mb-4 transition-colors", viewMode === 'trash' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
+              onClick={() => { setViewMode('trash'); setMobileView('archive'); }}
+              className={cn("pb-4 -mb-4 transition-colors uppercase text-[10px] font-black tracking-widest", viewMode === 'trash' ? "text-red-600 border-b-2 border-red-600" : "hover:text-slate-800")}
             >
               Trash
             </button>
             <button 
-              onClick={() => setViewMode('settings')}
+              onClick={() => { setViewMode('settings'); setMobileView('settings'); }}
               className={cn("pb-4 -mb-4 transition-colors", viewMode === 'settings' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
             >
               Settings
             </button>
-            <div className="relative group">
-              <Search className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
-              <input 
-                type="text" 
-                placeholder="Search..." 
-                className="pl-5 bg-transparent border-none focus:ring-0 text-sm w-32 outline-none"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
           </nav>
         </div>
-        <div className="flex items-center gap-4 text-sm">
+
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2 mr-2">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-100 bg-slate-50/50">
+              <Globe size={12} className={cn(isSyncing ? "text-indigo-500 animate-spin" : (dirHandle ? "text-emerald-500" : "text-slate-300"))} />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                {isSyncing ? 'Syncing' : (dirHandle ? 'Synced' : 'Off')}
+              </span>
+            </div>
+          </div>
+          
           {user ? (
-            <div className="flex items-center gap-3">
-              {isSyncing && (
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100 animate-pulse">
-                  <RefreshCcw size={10} className="animate-spin" /> Saving Log
-                </div>
-              )}
-              <div className="flex flex-col items-end hidden sm:flex">
-                <span className="text-[10px] font-black tracking-widest uppercase opacity-40">authenticated</span>
-                <span className="font-bold text-slate-700">{user.displayName || user.email}</span>
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="text-right flex flex-col items-end leading-none hidden sm:flex">
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500/50 mb-0.5">Authenticated</span>
+                <span className="text-xs font-bold text-slate-700">{user.displayName || user.email?.split('@')[0]}</span>
+              </div>
+              <div className="w-9 h-9 rounded-xl overflow-hidden border-2 border-white shadow-xl shadow-indigo-100/50 bg-indigo-50 flex items-center justify-center text-indigo-400 shrink-0">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <UserIcon size={18} />
+                )}
               </div>
               <button 
                 onClick={logOut}
-                className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group"
+                className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group shrink-0"
                 title="Log Out"
               >
                 <LogOut size={16} />
@@ -825,24 +888,58 @@ export default function App() {
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
             >
               <LogIn size={16} />
-              Sign In
+              <span className="hidden sm:inline">Sign In</span>
             </button>
           )}
-          <div className="hidden lg:block text-slate-300">|</div>
-          <div className={cn(
-            "hidden lg:flex px-3 py-1 rounded-full border font-medium transition-colors",
-            stats.morningRoutineReady ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-amber-50 text-amber-700 border-amber-200"
-          )}>
-            Morning Routine: {stats.urgentCount}/{settings.urgentLimit} Slots
-          </div>
         </div>
       </header>
 
       {/* Main Content Grid */}
-      <main className="flex-1 p-6 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
-        
+      <main className="flex-1 p-4 md:p-6 grid grid-cols-12 gap-6 min-h-0 overflow-hidden relative">
+        {/* Mobile Navigation (Bottom) */}
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-[40] flex items-center justify-around px-2 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+          <button 
+            onClick={() => { setViewMode('dashboard'); setMobileView('summary'); }}
+            className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'dashboard' && mobileView === 'summary' ? "text-indigo-600" : "text-slate-400")}
+          >
+            <Layout size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Dash</span>
+          </button>
+          <button 
+            onClick={() => { setViewMode('dashboard'); setMobileView('urgent'); }}
+            className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'dashboard' && mobileView === 'urgent' ? "text-red-500" : "text-slate-400")}
+          >
+            <Zap size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Urgent</span>
+          </button>
+          <button 
+            onClick={() => { setViewMode('dashboard'); setMobileView('focus'); }}
+            className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'dashboard' && mobileView === 'focus' ? "text-indigo-600" : "text-slate-400")}
+          >
+            <Target size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Focus</span>
+          </button>
+          <button 
+            onClick={() => { setViewMode('archive'); setMobileView('archive'); }}
+            className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'archive' ? "text-indigo-600" : "text-slate-400")}
+          >
+            <ArchiveIcon size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Archive</span>
+          </button>
+          <button 
+            onClick={() => { setViewMode('settings'); setMobileView('settings'); }}
+            className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'settings' ? "text-indigo-600" : "text-slate-400")}
+          >
+            <SettingsIcon size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Set</span>
+          </button>
+        </div>
+
         {/* Sidebar / Input Section */}
-        <aside className="col-span-12 lg:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+        <aside className={cn(
+          "col-span-12 lg:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pb-20 lg:pb-0",
+          mobileView !== 'summary' && viewMode === 'dashboard' && "hidden lg:flex"
+        )}>
           {!user ? (
             <div className="bg-indigo-600 rounded-2xl p-8 text-white flex flex-col items-center text-center gap-6 shadow-xl shadow-indigo-100">
               <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center">
@@ -886,7 +983,7 @@ export default function App() {
                   <label className="text-xs font-semibold text-slate-600">Task Detail</label>
                   <textarea 
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none" 
-                    placeholder="What needs to be done? (Cmd/Ctrl+Enter to save)"
+                    placeholder="Details... (Cmd/Ctrl+Enter to save)"
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                     onKeyDown={(e) => {
@@ -895,19 +992,34 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                    <LinkIcon size={12} /> URL / Link (Optional)
-                  </label>
-                  <input 
-                    type="url"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="https://..."
-                    value={newTaskUrl}
-                    onChange={(e) => setNewTaskUrl(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddTask(e);
-                    }}
+                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-widest text-[9px] opacity-60">Memos (Optional)</label>
+                  <textarea 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-16 resize-none" 
+                    placeholder="Context, sub-tasks..."
+                    value={newTaskNotes}
+                    onChange={(e) => setNewTaskNotes(e.target.value)}
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-600 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60"><LinkIcon size={12} /> URLs</span>
+                    <button type="button" onClick={() => setNewTaskUrls([...newTaskUrls, ''])} className="text-[9px] text-indigo-600 hover:underline">+ Add</button>
+                  </label>
+                  {newTaskUrls.map((u, i) => (
+                    <div key={i} className="flex gap-1">
+                      <input 
+                        type="url"
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] focus:ring-2 focus:ring-indigo-500 outline-none"
+                        placeholder="https://..."
+                        value={u}
+                        onChange={(e) => {
+                          const next = [...newTaskUrls];
+                          next[i] = e.target.value;
+                          setNewTaskUrls(next);
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
                 <button 
                   type="submit"
@@ -1552,10 +1664,11 @@ interface TaskCardProps {
   onMove: (cat: Category) => void;
   onDelete: () => void;
   onEdit: () => void;
+  onStar: () => void;
   variant?: 'Urgent' | 'Focus' | 'Archive' | 'Trash';
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, onEdit, variant = 'Focus' }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, onEdit, onStar, variant = 'Focus' }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [openUpwards, setOpenUpwards] = useState(false);
   const buttonRef = React.useRef<HTMLDivElement>(null);
@@ -1589,36 +1702,58 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
         showMenu && "relative z-30 shadow-xl border-indigo-200"
       )}
     >
-      <div className="flex items-center justify-between mb-1.5 pointer-events-none">
-        <p className="text-[9px] font-bold text-slate-400 leading-none tracking-wider uppercase font-mono">
-          ({formatDate(task.createdAt)}) <span className="text-indigo-600 opacity-60">[{task.project}]</span>
-        </p>
-        {(variant === 'Archive' || variant === 'Trash') && (
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2 pointer-events-none">
+          {task.isStarred && (
+            <Star size={10} className="text-amber-500 fill-amber-500" />
+          )}
+          <p className="text-[9px] font-bold text-slate-400 leading-none tracking-wider uppercase font-mono">
+            ({formatDate(task.createdAt)}) <span className="text-indigo-600 opacity-60">[{task.project}]</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <button 
-            onClick={(e) => { e.stopPropagation(); onMove('Focus'); }}
-            className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-0.5 pointer-events-auto"
-            title="Restore to Focus"
+            onClick={(e) => { e.stopPropagation(); onStar(); }}
+            className={cn(
+              "p-1 rounded transition-colors group/star",
+              task.isStarred ? "text-amber-500" : "text-slate-300 hover:text-amber-400"
+            )}
+            title={task.isStarred ? "Unstar task" : "Star task"}
           >
-            <RefreshCcw size={8} /> RESTORE
+            {task.isStarred ? <Star size={12} className="fill-amber-500" /> : <Star size={12} />}
           </button>
-        )}
+          {(variant === 'Archive' || variant === 'Trash') && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onMove('Focus'); }}
+              className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-0.5"
+              title="Restore to Focus"
+            >
+              <RefreshCcw size={8} /> RESTORE
+            </button>
+          )}
+        </div>
       </div>
       <p className={cn("text-sm font-semibold text-slate-800 leading-tight mb-2 break-words", task.isDone && "line-through text-slate-400")}>
         {task.title}
       </p>
 
-      {task.url && (
-        <a 
-          href={task.url} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 mb-2 transition-colors group/link w-fit"
-        >
-          <LinkIcon size={12} className="group-hover/link:rotate-12 transition-transform" />
-          <span className="truncate max-w-[200px]">{task.url.replace(/^https?:\/\//, '')}</span>
-          <ArrowUpRight size={10} className="opacity-0 group-hover/link:opacity-100 transition-opacity" />
-        </a>
+      {task.urls && task.urls.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {task.urls.map((url, idx) => (
+            <a 
+              key={idx}
+              href={url.startsWith('http') ? url : `https://${url}`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors group/link bg-indigo-50/50 px-2 py-0.5 rounded border border-indigo-100/50 max-w-full"
+            >
+              <LinkIcon size={10} className="shrink-0 group-hover/link:rotate-12 transition-transform" />
+              <span className="truncate max-w-[120px]">{url.replace(/^https?:\/\//, '')}</span>
+              <ArrowUpRight size={10} className="shrink-0 opacity-0 group-hover/link:opacity-100 transition-opacity" />
+            </a>
+          ))}
+        </div>
       )}
       
       {task.notes && (
@@ -1790,11 +1925,27 @@ function DailyPickModal({ tasks, onClose, onPick, currentUrgentCount, limit }: {
 function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task; onClose: () => void; onSave: (updates: Partial<Task>) => void; onMove: (cat: Category) => void; onDelete: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes || '');
-  const [url, setUrl] = useState(task.url || '');
+  const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
+  const [isStarred, setIsStarred] = useState(task.isStarred || false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ title, notes, url });
+    onSave({ 
+      title, 
+      notes, 
+      urls: urls.filter(u => u.trim() !== ''),
+      isStarred 
+    });
+  };
+
+  const addUrlField = () => setUrls([...urls, '']);
+  const updateUrlField = (index: number, val: string) => {
+    const next = [...urls];
+    next[index] = val;
+    setUrls(next);
+  };
+  const removeUrlField = (index: number) => {
+    setUrls(urls.filter((_, i) => i !== index));
   };
 
   return (
@@ -1821,18 +1972,34 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Task Description</label>
-              <textarea 
-                autoFocus
-                className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-lg font-medium outline-none transition-all resize-none h-32"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit(e);
-                }}
-              />
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1 space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Task Description</label>
+                <textarea 
+                  autoFocus
+                  className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-lg font-medium outline-none transition-all resize-none h-24"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit(e);
+                  }}
+                />
+              </div>
+              <div className="shrink-0 flex flex-col items-center gap-2">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Star</label>
+                <button 
+                  type="button"
+                  onClick={() => setIsStarred(!isStarred)}
+                  className={cn(
+                    "w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all",
+                    isStarred ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-slate-50 border-transparent text-slate-300 hover:border-slate-200"
+                  )}
+                >
+                  <Star size={24} className={isStarred ? "fill-amber-500" : ""} />
+                </button>
+              </div>
             </div>
+
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Memos / Context</label>
               <textarea 
@@ -1845,22 +2012,43 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 }}
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5">
-                <LinkIcon size={10} /> Link / URL
+            
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5"><LinkIcon size={10} /> Links / URLs</span>
+                <button 
+                  type="button" 
+                  onClick={addUrlField}
+                  className="text-indigo-600 hover:underline px-2"
+                >
+                  + Add Link
+                </button>
               </label>
-              <input 
-                type="url"
-                placeholder="https://example.com"
-                className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSubmit(e);
-                }}
-              />
+              <div className="space-y-2">
+                {urls.map((u, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <input 
+                      type="url"
+                      placeholder="https://..."
+                      className="flex-1 px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-xl text-sm font-medium outline-none transition-all"
+                      value={u}
+                      onChange={(e) => updateUrlField(idx, e.target.value)}
+                    />
+                    {urls.length > 1 && (
+                      <button 
+                        type="button"
+                        onClick={() => removeUrlField(idx)}
+                        className="p-3 bg-red-50 text-red-400 hover:text-red-500 rounded-xl"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-3">
+
+            <div className="flex gap-3 pt-4">
               <button 
                 type="button"
                 onClick={onClose}
