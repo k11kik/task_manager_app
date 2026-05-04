@@ -639,34 +639,70 @@ export default function App() {
 
     reader.onload = async (event) => {
       const content = event.target?.result as string;
-      const lines = content.split('\n');
-      if (lines.length < 2) return;
+      
+      // Robust RFC 4180 parsing for multi-line fields
+      const rows: string[][] = [];
+      let currentRow: string[] = [];
+      let currentField = '';
+      let i = 0;
+      let inQuotes = false;
 
-      const headers = lines[0].split(',').map(h => h.trim());
+      while (i < content.length) {
+        const char = content[i];
+        const nextChar = content[i+1];
+
+        if (inQuotes) {
+          if (char === '"' && nextChar === '"') {
+            currentField += '"';
+            i += 2;
+            continue;
+          } else if (char === '"') {
+            inQuotes = false;
+          } else {
+            currentField += char;
+          }
+        } else {
+          if (char === '"') {
+            inQuotes = true;
+          } else if (char === ',') {
+            currentRow.push(currentField);
+            currentField = '';
+          } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
+            currentRow.push(currentField);
+            rows.push(currentRow);
+            currentRow = [];
+            currentField = '';
+            if (char === '\r') i++;
+          } else if (char !== '\r') {
+            currentField += char;
+          }
+        }
+        i++;
+      }
+      
+      // Handle last field if file doesn't end in newline
+      if (currentField !== '' || currentRow.length > 0) {
+        currentRow.push(currentField);
+        rows.push(currentRow);
+      }
+
+      if (rows.length < 2) {
+        setMessage({ text: "Invalid CSV format or empty file.", type: 'error' });
+        return;
+      }
+
+      const headers = rows[0].map(h => h.trim());
       const batch = writeBatch(db);
       let count = 0;
 
-      for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
-        
-        const values: string[] = [];
-        let current = '';
-        let inQuotes = false;
-        for (let j = 0; j < lines[i].length; j++) {
-          const char = lines[i][j];
-          if (char === '"') inQuotes = !inQuotes;
-          else if (char === ',' && !inQuotes) {
-            values.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-            current = '';
-          } else {
-            current += char;
-          }
-        }
-        values.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+      // Start from i=1 to skip header
+      for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
+        const values = rows[rowIndex];
+        if (values.length < 2) continue; // Skip empty rows
 
-        const getVal = (header: string) => {
-          const idx = headers.indexOf(header);
-          return idx !== -1 ? values[idx] : '';
+        const getVal = (headerName: string) => {
+          const idx = headers.indexOf(headerName);
+          return (idx !== -1 && values[idx]) ? values[idx].trim() : '';
         };
 
         const newTaskRef = doc(collection(db, 'tasks'));
@@ -677,13 +713,16 @@ export default function App() {
           project: getVal('Project') || 'Imported',
           title: getVal('Title') || 'Untitled Task',
           notes: getVal('Notes') || '',
-          urls: getVal('URLs') ? getVal('URLs').split(';').map(u => u.trim()) : [],
+          urls: getVal('URLs') ? getVal('URLs').split(';').map(u => u.trim()).filter(Boolean) : [],
           isDone: getVal('IsDone') === 'Yes',
           isStarred: getVal('IsStarred') === 'Yes',
           createdAt: getVal('CreatedAt') ? new Date(getVal('CreatedAt')).getTime() : Date.now(),
           updatedAt: getVal('UpdatedAt') ? new Date(getVal('UpdatedAt')).getTime() : Date.now(),
         });
         count++;
+
+        // Firestore batch limit is 500
+        if (count >= 499) break; 
       }
 
       try {
@@ -1054,8 +1093,12 @@ export default function App() {
             <div className="relative">
               <button 
                 onClick={() => {
-                  if (!dirHandle) selectBackupFolder();
-                  else setShowSyncDetails(!showSyncDetails);
+                  if (!dirHandle) {
+                    selectBackupFolder();
+                  } else {
+                    syncToLocalSystem(true);
+                    setShowSyncDetails(!showSyncDetails);
+                  }
                 }}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all",
@@ -1064,7 +1107,7 @@ export default function App() {
               >
                 <Globe size={12} className={cn(isSyncing ? "text-indigo-500 animate-spin" : (dirHandle ? "text-emerald-500" : "text-slate-300"))} />
                 <span className={cn("text-[10px] font-bold uppercase tracking-tighter", dirHandle ? "text-emerald-600" : "text-slate-500")}>
-                  {isSyncing ? 'Syncing' : (dirHandle ? 'Sync On' : 'Sync Off')}
+                  {isSyncing ? 'Syncing...' : (dirHandle ? 'Sync Active' : 'Sync Off')}
                 </span>
               </button>
               
@@ -1072,9 +1115,19 @@ export default function App() {
                 <>
                   <div className="fixed inset-0 z-[55]" onClick={() => setShowSyncDetails(false)} />
                   <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] p-4">
-                    <div className="flex items-center gap-2 text-slate-800 mb-3 pb-2 border-b border-slate-50">
-                      <Activity size={12} className="text-indigo-500" />
-                      <p className="text-[10px] font-black uppercase tracking-widest">Automated Sync Status</p>
+                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-50">
+                      <div className="flex items-center gap-2 text-slate-800">
+                        <Activity size={12} className="text-indigo-500" />
+                        <p className="text-[10px] font-black uppercase tracking-widest">Automated Sync Status</p>
+                      </div>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); syncToLocalSystem(true); }}
+                        className="p-1 hover:bg-slate-100 rounded-lg transition-colors text-indigo-600"
+                        title="Force Backup Now"
+                        disabled={isSyncing}
+                      >
+                        <RefreshCcw size={12} className={cn(isSyncing && "animate-spin")} />
+                      </button>
                     </div>
                     <div className="space-y-3">
                        <div className="bg-slate-50 rounded-lg p-2.5">
@@ -1084,7 +1137,7 @@ export default function App() {
                         </p>
                       </div>
                       <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
-                        <span>Last Save:</span>
+                        <span>Last Successful Log:</span>
                         <span className="text-slate-900 border-b border-indigo-100">
                           {lastSyncTime ? format(lastSyncTime, 'HH:mm:ss') : 'Waiting...'}
                         </span>
@@ -1474,7 +1527,7 @@ export default function App() {
                     {showCleanupMenu && (
                       <>
                         <div className="fixed inset-0 z-[75]" onClick={() => setShowCleanupMenu(false)} />
-                        <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 min-w-[200px] z-[80] transition-all">
+                        <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 min-w-[200px] z-[80] transition-all">
                           <button 
                             onClick={(e) => { e.stopPropagation(); cleanupArchive(30); setShowCleanupMenu(false); }}
                             className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
