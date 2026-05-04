@@ -41,6 +41,7 @@ import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
 import { auth, db, signIn, logOut } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import Papa from 'papaparse';
 import { 
   collection, 
   doc, 
@@ -708,45 +709,63 @@ export default function App() {
     if (!file || !user) return;
 
     Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
+      skipEmptyLines: 'greedy',
       complete: async (results) => {
+        const rows = results.data as string[][];
+        if (rows.length < 2) {
+          setMessage({ text: "Invalid CSV: File must have at least a header and one data row.", type: 'error' });
+          return;
+        }
+
+        const headers = rows[0].map(h => h.replace(/^["']|["']$/g, '').trim().toLowerCase());
+        const getIdx = (name: string) => headers.indexOf(name.toLowerCase());
+        
+        const titleIdx = getIdx('title');
+        if (titleIdx === -1) {
+          setMessage({ text: "Invalid CSV: 'Title' column not found.", type: 'error' });
+          return;
+        }
+
         const batch = writeBatch(db);
         let count = 0;
 
-        for (const row of results.data as any[]) {
-          const getVal = (key: string) => {
-            const foundKey = Object.keys(row).find(k => k.replace(/^"|"$/g, '').trim().toLowerCase() === key.toLowerCase());
-            const val = foundKey ? row[foundKey]?.toString().trim() : '';
-            return val.replace(/^"|"$/g, '').replace(/""/g, '"');
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length < headers.length * 0.5) continue; // Skip likely empty/malformed rows
+
+          const getValAt = (idx: number) => {
+            if (idx === -1 || idx >= row.length) return '';
+            const val = row[idx]?.toString() || '';
+            return val.replace(/^["']|["']$/g, '').replace(/""/g, '"').trim();
           };
 
-          if (!getVal('Title')) continue;
+          const title = getValAt(titleIdx);
+          if (!title) continue;
 
           const newTaskRef = doc(collection(db, 'tasks'));
           batch.set(newTaskRef, {
             userId: user.uid,
-            category: (getVal('Category') as Category) || 'Focus',
-            section: getVal('Section') || 'General',
-            project: getVal('Project') || 'Imported',
-            title: getVal('Title') || 'Untitled Task',
-            notes: getVal('Notes') || '',
-            urls: getVal('URLs') ? getVal('URLs').split(';').map((u: string) => u.trim()).filter(Boolean) : [],
-            isDone: getVal('IsDone').toLowerCase() === 'yes',
-            isStarred: getVal('IsStarred').toLowerCase() === 'yes',
+            category: (getValAt(getIdx('category')) as Category) || 'Focus',
+            section: getValAt(getIdx('section')) || 'General',
+            project: getValAt(getIdx('project')) || 'Imported',
+            title,
+            notes: getValAt(getIdx('notes')),
+            urls: getValAt(getIdx('urls')) ? getValAt(getIdx('urls')).split(';').map(u => u.trim()).filter(Boolean) : [],
+            isDone: getValAt(getIdx('isdone')).toLowerCase() === 'yes',
+            isStarred: getValAt(getIdx('isstarred')).toLowerCase() === 'yes',
             deadline: (() => {
-              const d = getVal('Deadline');
+              const d = getValAt(getIdx('deadline'));
               if (!d) return undefined;
               const t = new Date(d).getTime();
               return isNaN(t) ? undefined : t;
             })(),
             createdAt: (() => {
-              const val = getVal('CreatedAt');
+              const val = getValAt(getIdx('createdat'));
               const t = val ? new Date(val).getTime() : Date.now();
               return isNaN(t) ? Date.now() : t;
             })(),
             updatedAt: (() => {
-              const val = getVal('UpdatedAt');
+              const val = getValAt(getIdx('updatedat'));
               const t = val ? new Date(val).getTime() : Date.now();
               return isNaN(t) ? Date.now() : t;
             })(),
@@ -754,6 +773,11 @@ export default function App() {
           count++;
 
           if (count >= 499) break;
+        }
+
+        if (count === 0) {
+          setMessage({ text: "No valid tasks were processed from the CSV.", type: 'error' });
+          return;
         }
 
         try {
@@ -1418,9 +1442,9 @@ export default function App() {
               <div className="pt-2 border-t border-slate-700/50 flex justify-between items-start pt-3">
                 <div className="space-y-1">
                   <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">System State</p>
-                  <p className={cn("text-[10px] font-bold uppercase leading-none", stats.textColor)}>
-                    {stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}
-                    <span className="ml-1 opacity-80">({stats.loadPercentage}%)</span>
+                  <p className={cn("text-[10px] font-bold uppercase leading-none flex items-baseline gap-1", stats.textColor)}>
+                    <span>{stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}</span>
+                    <span className="text-[9px] opacity-70">({stats.loadPercentage}%)</span>
                   </p>
                 </div>
                 <div className="text-right flex flex-col items-end gap-1">
