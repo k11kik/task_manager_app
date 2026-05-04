@@ -15,7 +15,8 @@
         "notes": { "type": "string" },
         "urls": { "type": "array", "items": { "type": "string", "format": "uri" } },
         "isStarred": { "type": "boolean" },
-        "section": { "type": "string" }
+        "section": { "type": "string" },
+        "deadline": { "type": "number", "description": "Deadline timestamp (optional)" }
       },
       "required": ["userId", "title", "project", "category", "createdAt", "updatedAt", "isDone"]
     },
@@ -26,6 +27,7 @@
       "properties": {
         "userId": { "type": "string" },
         "urgentLimit": { "type": "number" },
+        "deadlineThreshold": { "type": "number" },
         "archiveThresholdDays": { "type": "number" },
         "warningThreshold": { "type": "number" },
         "criticalThreshold": { "type": "number" },

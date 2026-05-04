@@ -28,7 +28,11 @@ service cloud.firestore {
           && data.createdAt is number
           && data.updatedAt is number
           && data.isDone is bool
-          && (!('notes' in data) || (data.notes is string && data.notes.size() <= 5000));
+          && (!('notes' in data) || (data.notes is string && data.notes.size() <= 5000))
+          && (!('deadline' in data) || (data.deadline is number || data.deadline == null))
+          && (!('section' in data) || (data.section is string))
+          && (!('urls' in data) || (data.urls is list))
+          && (!('isStarred' in data) || (data.isStarred is bool));
       }
 
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
@@ -51,6 +55,7 @@ service cloud.firestore {
       function isValidSettings(data) {
         return data.userId == request.auth.uid
           && data.urgentLimit is number
+          && data.deadlineThreshold is number
           && data.archiveThresholdDays is number
           && data.warningThreshold is number
           && data.criticalThreshold is number

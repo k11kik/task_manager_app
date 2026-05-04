@@ -104,6 +104,15 @@ export default function App() {
   const [showSectionMenu, setShowSectionMenu] = useState(false);
   const [showSyncDetails, setShowSyncDetails] = useState(false);
 
+  useEffect(() => {
+    if (message && message.type !== 'error') {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
   const [settings, setSettings] = useState({
     urgentLimit: 3,
     deadlineThreshold: 3,
@@ -400,7 +409,7 @@ export default function App() {
     e.preventDefault();
     if (!newTaskTitle.trim() || !newTaskProject.trim() || !user) return;
     
-    const newTask = {
+    const newTask: any = {
       userId: user.uid,
       title: newTaskTitle.trim(),
       project: newTaskProject.trim(),
@@ -408,12 +417,18 @@ export default function App() {
       urls: newTaskUrls.filter(u => u.trim() !== ''),
       section: activeSection,
       category: 'Focus' as Category,
-      deadline: newTaskDeadline ? new Date(newTaskDeadline).getTime() : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isDone: false,
       isStarred: false
     };
+
+    if (newTaskDeadline) {
+      const deadlineTimestamp = new Date(newTaskDeadline).getTime();
+      if (!isNaN(deadlineTimestamp)) {
+        newTask.deadline = deadlineTimestamp;
+      }
+    }
 
     try {
       await addDoc(collection(db, 'tasks'), newTask);
