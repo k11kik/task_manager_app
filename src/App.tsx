@@ -328,9 +328,16 @@ export default function App() {
       textColor = 'text-orange-400 font-black';
     }
 
+    const now = Date.now();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const doneTodayCount = tasks.filter(t => t.isDone && t.updatedAt >= todayStart.getTime()).length;
+    const pendingDeadlinesCount = tasks.filter(t => t.category === 'Focus' && !t.isDone && t.deadline && (t.deadline - now <= settings.deadlineThreshold * 86400000)).length;
+
     return {
       active: activeTasks.length,
-      archived: tasks.filter(t => t.category === 'Archive').length,
+      doneToday: doneTodayCount,
+      pendingDeadlines: pendingDeadlinesCount,
       urgentCount,
       focusTasksCount,
       gaugeColor,
@@ -673,11 +680,11 @@ export default function App() {
     const rows = tasks.map(t => [
       t.id,
       t.category,
-      `"${(t.section || 'General').replace(/"/g, '""')}"`,
-      `"${t.project.replace(/"/g, '""')}"`,
-      `"${t.title.replace(/"/g, '""')}"`,
-      `"${(t.notes || '').replace(/"/g, '""')}"`,
-      `"${(t.urls || []).join('; ').replace(/"/g, '""')}"`,
+      t.section || 'General',
+      t.project,
+      t.title,
+      t.notes || '',
+      (t.urls || []).join('; '),
       t.isDone ? 'Yes' : 'No',
       t.isStarred ? 'Yes' : 'No',
       t.deadline ? new Date(t.deadline).toISOString() : '',
@@ -686,9 +693,11 @@ export default function App() {
       t.userId || 'N/A'
     ]);
 
+    const quote = (val: string) => `"${val.toString().replace(/"/g, '""')}"`;
+
     return [
-      headers.join(','),
-      ...rows.map(r => r.join(','))
+      headers.map(quote).join(','),
+      ...rows.map(r => r.map(quote).join(','))
     ].join('\n');
   };
 
@@ -776,9 +785,22 @@ export default function App() {
           urls: getVal('URLs') ? getVal('URLs').split(';').map(u => u.trim()).filter(Boolean) : [],
           isDone: getVal('IsDone') === 'Yes',
           isStarred: getVal('IsStarred') === 'Yes',
-          deadline: getVal('Deadline') ? new Date(getVal('Deadline')).getTime() : undefined,
-          createdAt: getVal('CreatedAt') ? new Date(getVal('CreatedAt')).getTime() : Date.now(),
-          updatedAt: getVal('UpdatedAt') ? new Date(getVal('UpdatedAt')).getTime() : Date.now(),
+          deadline: (() => {
+            const d = getVal('Deadline');
+            if (!d) return undefined;
+            const t = new Date(d).getTime();
+            return isNaN(t) ? undefined : t;
+          })(),
+          createdAt: (() => {
+            const val = getVal('CreatedAt');
+            const t = val ? new Date(val).getTime() : Date.now();
+            return isNaN(t) ? Date.now() : t;
+          })(),
+          updatedAt: (() => {
+            const val = getVal('UpdatedAt');
+            const t = val ? new Date(val).getTime() : Date.now();
+            return isNaN(t) ? Date.now() : t;
+          })(),
         });
         count++;
 
@@ -1450,9 +1472,17 @@ export default function App() {
                     {stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">Archived</p>
-                  <p className="text-[10px] font-bold text-white font-mono">{stats.archived}</p>
+                <div className="text-right flex flex-col items-end gap-1">
+                  <div className="flex flex-col items-end">
+                    <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">Done Today</p>
+                    <p className="text-[10px] font-bold text-emerald-400 font-mono">{stats.doneToday}</p>
+                  </div>
+                  {stats.pendingDeadlines > 0 && (
+                    <div className="flex flex-col items-end">
+                      <p className="text-[9px] font-black uppercase tracking-tighter text-red-500">Approaching</p>
+                      <p className="text-[10px] font-bold text-red-500 font-mono">{stats.pendingDeadlines}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
