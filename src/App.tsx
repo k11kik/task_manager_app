@@ -373,9 +373,13 @@ export default function App() {
     const threshold = (settings.deadlineThreshold || 3) * 24 * 60 * 60 * 1000;
     const now = Date.now();
 
-    // Separate near deadline tasks
-    const nearDeadline = focusTasks.filter(t => t.deadline && (t.deadline - now) <= threshold && !t.isDone);
-    const others = focusTasks.filter(t => !t.deadline || (t.deadline - now) > threshold || t.isDone);
+    // Separate near deadline tasks (excluding expired ones) and sort by date
+    const nearDeadline = focusTasks
+      .filter(t => t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0 && !t.isDone)
+      .sort((a, b) => (a.deadline || 0) - (b.deadline || 0));
+      
+    // Others includes those without deadlines, far deadlines, or expired deadlines
+    const others = focusTasks.filter(t => !t.deadline || (t.deadline - now) > threshold || (t.deadline - now) < 0 || t.isDone);
 
     const grouped: Record<string, Task[]> = {};
     others.forEach(t => {
@@ -1366,7 +1370,7 @@ export default function App() {
                   ))}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 uppercase tracking-widest text-[9px] opacity-60">
                     <Calendar size={12} className="text-slate-400" />
                     Deadline (Optional)
                   </label>
@@ -2098,14 +2102,8 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center sm:flex-row flex-col gap-4">
+                <div className="mt-8 border-t border-slate-100 flex items-center py-4">
                   <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest italic">System state synced successfully</p>
-                  <button 
-                    onClick={() => setViewMode('dashboard')}
-                    className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all"
-                  >
-                    Apply & Exit
-                  </button>
                 </div>
               </div>
             </section>
@@ -2726,6 +2724,15 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
               >
                 <Zap size={16} className="text-red-400" />
                 Move to Urgent
+              </button>
+            )}
+            {task.category === 'Archive' && (
+              <button 
+                onClick={() => { onMove('Focus'); onClose(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-bold text-emerald-600 hover:bg-emerald-100 transition-all group"
+              >
+                <RefreshCcw size={16} className="text-emerald-400" />
+                Restore to Focus
               </button>
             )}
             {task.category !== 'Archive' && task.category !== 'Trash' && (
