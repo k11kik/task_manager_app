@@ -117,7 +117,7 @@ export default function App() {
     urgentLimit: 3,
     deadlineThreshold: 3,
     archiveThresholdDays: 30,
-    criticalThreshold: 30,
+    criticalThreshold: 100,
     isLocalBackupEnabled: false,
     localBackupPath: '',
     displayMode: 'card' as 'card' | 'list',
@@ -174,8 +174,9 @@ export default function App() {
         const data = docSnap.data();
         setSettings({
           urgentLimit: data.urgentLimit || 3,
+          deadlineThreshold: data.deadlineThreshold || 3,
           archiveThresholdDays: data.archiveThresholdDays || 30,
-          criticalThreshold: data.criticalThreshold || 30,
+          criticalThreshold: data.criticalThreshold || 100,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
           displayMode: data.displayMode || 'card',
@@ -186,8 +187,9 @@ export default function App() {
         setDoc(settingsRef, {
           userId: user.uid,
           urgentLimit: 3,
+          deadlineThreshold: 3,
           archiveThresholdDays: 30,
-          criticalThreshold: 30,
+          criticalThreshold: 100,
           isLocalBackupEnabled: false,
           localBackupPath: '',
           displayMode: 'card',
@@ -305,6 +307,15 @@ export default function App() {
     const focusTasksCount = tasks.filter(t => t.category === 'Focus' && !t.isDone).length;
     const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
     
+    // Per-section metrics
+    const sectionMetrics = settings.sections.reduce((acc, sec) => {
+      acc[sec] = {
+        focus: tasks.filter(t => t.section === sec && t.category === 'Focus' && !t.isDone).length,
+        total: tasks.filter(t => t.section === sec && !t.isDone).length
+      };
+      return acc;
+    }, {} as Record<string, { focus: number, total: number }>);
+    
     const warningThreshold = Math.floor(settings.criticalThreshold * 0.7);
     let gaugeColor = 'bg-indigo-400';
     let textColor = 'text-white';
@@ -325,6 +336,7 @@ export default function App() {
       gaugeColor,
       textColor,
       warningThreshold,
+      sectionMetrics,
       morningRoutineReady: urgentCount >= settings.urgentLimit,
       loadPercentage: Math.min((focusTasksCount / settings.criticalThreshold) * 100, 100)
     };
@@ -1376,7 +1388,7 @@ export default function App() {
                   </label>
                   <input 
                     type="date"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-400 font-medium [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                     value={newTaskDeadline}
                     onChange={(e) => setNewTaskDeadline(e.target.value)}
                   />
@@ -1397,30 +1409,51 @@ export default function App() {
               Workflow Health
               <Activity size={14} className="text-indigo-400" />
             </h2>
-            <div className="space-y-3">
-              <div className="flex justify-between text-xs">
-                <span>Focus Backlog</span>
-                <span className={cn("font-mono transition-colors", stats.textColor)}>{stats.focusTasksCount} / {settings.criticalThreshold}</span>
+            <div className="space-y-4">
+              <div className="space-y-2 pb-4 border-b border-slate-700/50">
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest opacity-40">
+                  <span>Global Load</span>
+                  <span>{stats.focusTasksCount} / {settings.criticalThreshold}</span>
+                </div>
+                <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
+                  <div 
+                    className={cn("h-full transition-all duration-1000", stats.gaugeColor)} 
+                    style={{ width: `${stats.loadPercentage}%` }}
+                  ></div>
+                </div>
               </div>
-              <div className="flex justify-between text-xs">
-                <span>System Archive</span>
-                <span className="text-white font-mono">{stats.archived}</span>
+
+              <div className="space-y-2.5">
+                {settings.sections.map(sec => (
+                  <div key={sec} className="flex flex-col gap-1">
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className={cn(
+                        "font-bold uppercase tracking-tight",
+                        activeSection === sec ? "text-indigo-400" : "text-slate-500"
+                      )}>
+                        {sec}
+                      </span>
+                      <div className="flex gap-2 font-mono">
+                        <span className="text-white">{stats.sectionMetrics[sec]?.focus || 0}</span>
+                        <span className="opacity-30">/</span>
+                        <span className="opacity-40">{stats.sectionMetrics[sec]?.total || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex justify-between text-xs">
-                <span>Trash Bin</span>
-                <span className="text-white font-mono italic">{tasks.filter(t => t.category === 'Trash').length}</span>
-              </div>
-              <div className="h-1.5 bg-slate-700 rounded-full mt-4 overflow-hidden">
-                <div 
-                  className={cn("h-full transition-all duration-1000", stats.gaugeColor)} 
-                  style={{ width: `${stats.loadPercentage}%` }}
-                ></div>
-              </div>
-              <div className="flex justify-between items-center mt-2">
-                <p className="text-[10px] opacity-60">
-                  {stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}
-                </p>
-                <p className="text-[10px] font-mono opacity-40">{Math.round(stats.loadPercentage)}%</p>
+
+              <div className="pt-2 border-t border-slate-700/50 flex justify-between items-start pt-3">
+                <div className="space-y-1">
+                  <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">System State</p>
+                  <p className={cn("text-[10px] font-bold uppercase leading-none", stats.textColor.split(' ')[0])}>
+                    {stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">Archived</p>
+                  <p className="text-[10px] font-bold text-white font-mono">{stats.archived}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -2638,13 +2671,13 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
             </div>
             
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5 opacity-60">
                 <Calendar size={12} />
                 Task Deadline
               </label>
               <input 
                 type="date"
-                className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all"
+                className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all text-slate-400 [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
               />
