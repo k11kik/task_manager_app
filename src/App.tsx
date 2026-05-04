@@ -96,7 +96,7 @@ export default function App() {
   const [message, setMessage] = useState<{ text: string, type: 'error' | 'info' } | null>(null);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<string>('General');
-  const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'settings'>('summary');
+  const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings'>('summary');
 
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1177,7 +1177,7 @@ export default function App() {
               Archive
             </button>
             <button 
-              onClick={() => { setViewMode('trash'); setMobileView('archive'); }}
+              onClick={() => { setViewMode('trash'); setMobileView('trash'); }}
               className={cn("pb-4 -mb-4 transition-colors uppercase text-[10px] font-black tracking-widest", viewMode === 'trash' ? "text-red-600 border-b-2 border-red-600" : "hover:text-slate-800")}
             >
               Trash
@@ -1321,6 +1321,13 @@ export default function App() {
           >
             <ArchiveIcon size={20} />
             <span className="text-[9px] font-bold uppercase tracking-tighter">Arch</span>
+          </button>
+          <button 
+            onClick={() => { setViewMode('trash'); setMobileView('trash'); }}
+            className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'trash' ? "text-red-500" : "text-slate-400")}
+          >
+            <Trash2 size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Trash</span>
           </button>
           <button 
             onClick={() => { setViewMode('settings'); setMobileView('settings'); }}
@@ -1779,7 +1786,10 @@ export default function App() {
             </section>
           ) : viewMode === 'trash' ? (
             /* Trash Mode */
-            <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/30 border-red-100 h-full">
+            <section className={cn(
+              "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/30 border-red-100 h-full",
+              mobileView === 'trash' ? "flex fixed inset-0 z-[50] bg-red-50 p-4 md:p-6 pt-16 md:pt-20" : "hidden lg:flex"
+            )}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-2 gap-4">
                 <div>
                   <h3 className="font-bold flex items-center gap-2 text-red-700 text-lg">
