@@ -104,6 +104,7 @@ export default function App() {
     criticalThreshold: 30,
     isLocalBackupEnabled: false,
     localBackupPath: '',
+    displayMode: 'card' as 'card' | 'list',
     sections: ['General', 'Lab', 'Private']
   });
 
@@ -161,6 +162,7 @@ export default function App() {
           criticalThreshold: data.criticalThreshold || 30,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
+          displayMode: data.displayMode || 'card',
           sections: data.sections || ['General', 'Lab', 'Private']
         });
       } else {
@@ -172,6 +174,7 @@ export default function App() {
           criticalThreshold: 30,
           isLocalBackupEnabled: false,
           localBackupPath: '',
+          displayMode: 'card',
           sections: ['General', 'Lab', 'Private']
         }).catch(err => handleFirestoreError(err, OperationType.WRITE, `settings/${user.uid}`));
       }
@@ -266,6 +269,8 @@ export default function App() {
   };
 
   const SECTIONS = ['General', 'Lab', 'Private', 'Side Project'];
+
+  const isListMode = settings.displayMode === 'list';
 
   const projects = useMemo(() => {
     const p = Array.from(new Set(tasks.map(t => t.project)));
@@ -582,15 +587,17 @@ export default function App() {
   };
 
   const getCSVData = () => {
-    const headers = ['ID', 'Category', 'Project', 'Title', 'Notes', 'URL', 'IsDone', 'CreatedAt', 'UpdatedAt', 'UserID'];
+    const headers = ['ID', 'Category', 'Section', 'Project', 'Title', 'Notes', 'URLs', 'IsDone', 'IsStarred', 'CreatedAt', 'UpdatedAt', 'UserID'];
     const rows = tasks.map(t => [
       t.id,
       t.category,
-      t.project,
+      `"${(t.section || 'General').replace(/"/g, '""')}"`,
+      `"${t.project.replace(/"/g, '""')}"`,
       `"${t.title.replace(/"/g, '""')}"`,
       `"${(t.notes || '').replace(/"/g, '""')}"`,
-      `"${(t.url || '').replace(/"/g, '""')}"`,
+      `"${(t.urls || []).join('; ').replace(/"/g, '""')}"`,
       t.isDone ? 'Yes' : 'No',
+      t.isStarred ? 'Yes' : 'No',
       new Date(t.createdAt).toISOString(),
       new Date(t.updatedAt).toISOString(),
       t.userId || 'N/A'
@@ -992,13 +999,13 @@ export default function App() {
       {/* Main Content Grid */}
       <main className="flex-1 p-4 md:p-6 grid grid-cols-12 gap-6 min-h-0 overflow-hidden relative">
         {/* Mobile Navigation (Bottom) */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-[40] flex items-center justify-around px-2 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-[70] flex items-center justify-around px-2 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
           <button 
             onClick={() => { setViewMode('dashboard'); setMobileView('summary'); }}
             className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'dashboard' && mobileView === 'summary' ? "text-indigo-600" : "text-slate-400")}
           >
-            <Layout size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Dash</span>
+            <Plus size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Entry</span>
           </button>
           <button 
             onClick={() => { setViewMode('dashboard'); setMobileView('urgent'); }}
@@ -1019,7 +1026,7 @@ export default function App() {
             className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'archive' ? "text-indigo-600" : "text-slate-400")}
           >
             <ArchiveIcon size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Archive</span>
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Arch</span>
           </button>
           <button 
             onClick={() => { setViewMode('settings'); setMobileView('settings'); }}
@@ -1189,17 +1196,19 @@ export default function App() {
               {/* Urgent Column */}
               <section className={cn(
                 "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/50 border-red-100 transition-all",
-                mobileView === 'urgent' ? "flex fixed inset-0 z-[45] bg-red-50 p-6 pt-20" : (mobileView !== 'summary' ? "hidden lg:flex" : "flex")
+                mobileView === 'urgent' ? "flex fixed inset-0 z-[50] bg-red-50 p-4 md:p-6 pt-16 md:pt-20" : (mobileView !== 'summary' ? "hidden lg:flex" : "flex")
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="font-bold flex items-center gap-2 text-red-700">
                     <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-red-500"></span>
                     Urgent
                   </h3>
-                  <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded border uppercase text-red-400 border-red-100">{settings.urgentLimit} Slots</span>
+                  <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded border uppercase text-red-400 border-red-100">
+                    <span className="md:inline hidden">Slots: </span> {settings.urgentLimit}
+                  </span>
                 </div>
                 
-                <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar pb-40">
+                <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
                   <AnimatePresence mode="popLayout">
                     {filteredTasks
                       .filter(t => t.category === 'Urgent')
@@ -1213,6 +1222,7 @@ export default function App() {
                           onEdit={() => setEditingTask(task)}
                           onStar={() => toggleStar(task.id)}
                           variant="Urgent"
+                          displayMode={settings.displayMode}
                         />
                       ))}
                   </AnimatePresence>
@@ -1228,27 +1238,27 @@ export default function App() {
               {/* Focus Column (Spans 2) */}
               <section className={cn(
                 "col-span-1 md:col-span-2 flex flex-col rounded-2xl border p-4 min-h-0 bg-indigo-50/50 border-indigo-100 transition-all",
-                mobileView === 'focus' ? "flex fixed inset-0 z-[45] bg-indigo-50 p-6 pt-20" : (mobileView !== 'summary' ? "hidden lg:flex" : "flex")
+                mobileView === 'focus' ? "flex fixed inset-0 z-[50] bg-indigo-50 p-4 md:p-6 pt-16 md:pt-20" : (mobileView !== 'summary' ? "hidden lg:flex" : "flex")
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="font-bold flex items-center gap-2 text-indigo-700">
                     <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-indigo-500"></span>
-                    Focus (Grouped by Project)
+                    Focus (Projected)
                   </h3>
                   <button 
                     onClick={() => setIsPickingDaily(true)}
                     className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight hover:underline transition-all"
                   >
-                    Extract to Urgent &rarr;
+                    Extract &rarr;
                   </button>
                 </div>
                 
-                <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
+                <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
                   {Object.keys(groupedFocusTasks).length > 0 ? (
                     (Object.entries(groupedFocusTasks) as [string, Task[]][]).map(([project, tasks]) => {
                       const isCollapsed = collapsedProjects.has(project);
                       return (
-                        <div key={project} className="space-y-3">
+                        <div key={project} className="space-y-2">
                           <button 
                             onClick={() => toggleProjectCollapse(project)}
                             className="w-full flex items-center gap-4 px-2 hover:opacity-70 transition-opacity"
@@ -1259,12 +1269,15 @@ export default function App() {
                             </h4>
                             <div className="h-px flex-1 bg-slate-200"></div>
                             <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
-                              {tasks.length} items
+                              {tasks.length} item{tasks.length > 1 ? 's' : ''}
                             </span>
                           </button>
                           
                           {!isCollapsed && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className={cn(
+                              "grid grid-cols-1 gap-2.5",
+                              !isListMode && "md:grid-cols-2"
+                            )}>
                               <AnimatePresence mode="popLayout">
                                 {tasks.map(task => (
                                   <TaskCard 
@@ -1276,6 +1289,7 @@ export default function App() {
                                     onEdit={() => setEditingTask(task)}
                                     onStar={() => toggleStar(task.id)}
                                     variant="Focus"
+                                    displayMode={settings.displayMode}
                                   />
                                 ))}
                               </AnimatePresence>
@@ -1351,7 +1365,10 @@ export default function App() {
                         </h4>
                         <div className="h-px flex-1 bg-slate-200"></div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                      <div className={cn(
+                        "grid grid-cols-1 gap-2.5",
+                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                      )}>
                         <AnimatePresence mode="popLayout">
                           {tasks.map(task => (
                             <TaskCard 
@@ -1362,6 +1379,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               variant="Archive"
+                              displayMode={settings.displayMode}
                             />
                           ))}
                         </AnimatePresence>
@@ -1409,7 +1427,10 @@ export default function App() {
                         </h4>
                         <div className="h-px flex-1 bg-red-100"></div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                      <div className={cn(
+                        "grid grid-cols-1 gap-2.5",
+                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                      )}>
                         <AnimatePresence mode="popLayout">
                           {tasks.map(task => (
                             <TaskCard 
@@ -1420,6 +1441,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               variant="Trash"
+                              displayMode={settings.displayMode}
                             />
                           ))}
                         </AnimatePresence>
@@ -1557,6 +1579,40 @@ export default function App() {
                           <span className="text-[9px] font-black uppercase text-red-500 tracking-tighter mb-1">Critical (100%)</span>
                           <span className="text-lg font-mono font-bold text-red-600">{settings.criticalThreshold}</span>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Maintenance */}
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    <div className="flex items-center gap-2 mb-4 text-slate-600">
+                      <Layout size={18} />
+                      <h3 className="font-bold text-sm uppercase tracking-wider">Display Options</h3>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900">Task Layout</p>
+                        <p className="text-xs text-slate-500">Choose between detailed icons or compact list view.</p>
+                      </div>
+                      <div className="flex p-1 bg-white border border-slate-200 rounded-xl gap-1">
+                        <button 
+                          onClick={() => saveSettings({ displayMode: 'card' })}
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5",
+                            settings.displayMode === 'card' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-400 hover:text-slate-600"
+                          )}
+                        >
+                          <Layout size={12} /> Cards
+                        </button>
+                        <button 
+                          onClick={() => saveSettings({ displayMode: 'list' })}
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5",
+                            settings.displayMode === 'list' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-400 hover:text-slate-600"
+                          )}
+                        >
+                          <CheckCircle2 size={12} /> List
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1775,9 +1831,14 @@ interface TaskCardProps {
   onEdit: () => void;
   onStar: () => void;
   variant?: 'Urgent' | 'Focus' | 'Archive' | 'Trash';
+  displayMode?: 'card' | 'list';
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, onEdit, onStar, variant = 'Focus' }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ 
+  task, onToggle, onMove, onDelete, onEdit, onStar, 
+  variant = 'Focus',
+  displayMode = 'card'
+}) => {
   const [showMenu, setShowMenu] = useState(false);
   const [openUpwards, setOpenUpwards] = useState(false);
   const buttonRef = React.useRef<HTMLDivElement>(null);
@@ -1787,10 +1848,107 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onMove, onDelete, o
     if (!showMenu && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      setOpenUpwards(spaceBelow < 180); // 180px is approx the menu height
+      setOpenUpwards(spaceBelow < 180); 
     }
     setShowMenu(!showMenu);
   };
+
+  if (displayMode === 'list') {
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 5 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          onEdit();
+        }}
+        className={cn(
+          "bg-white rounded-lg p-2.5 shadow-sm border border-slate-100 group hover:border-indigo-300 transition-all flex items-center gap-3 cursor-pointer",
+          variant === 'Urgent' && "border-l-4 border-l-red-500",
+          task.isDone && "grayscale opacity-50 shadow-none"
+        )}
+      >
+        <button 
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          className={cn(
+            "w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0",
+            task.isDone ? "bg-blue-500 border-blue-500" : "border-slate-300 hover:border-blue-400"
+          )}
+        >
+          {task.isDone && <CheckCircle2 size={12} className="text-white" />}
+        </button>
+
+        <div className="flex-1 min-w-0 pr-2">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-[9px] font-mono font-bold text-slate-400">
+               ({formatDate(task.createdAt)})
+            </span>
+            <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded leading-none shrink-0 truncate max-w-[80px]">
+              [{task.project}]
+            </span>
+          </div>
+          <p className={cn(
+            "text-xs font-semibold text-slate-800 truncate",
+            task.isDone && "line-through text-slate-400"
+          )}>
+            {task.title}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="hidden md:inline text-[9px] font-black text-slate-300 tabular-nums">
+            {format(task.updatedAt, 'MM/dd HH:mm')}
+          </span>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onStar(); }}
+            className={cn(
+              "p-1 rounded transition-colors",
+              task.isStarred ? "text-amber-500" : "text-slate-200 hover:text-amber-400"
+            )}
+          >
+            <Star size={14} className={task.isStarred ? "fill-amber-500" : ""} />
+          </button>
+          
+          <div className="relative" ref={buttonRef}>
+            <button onClick={toggleMenu} className="p-1 hover:bg-slate-100 text-slate-400 rounded">
+              <MoreVertical size={14} />
+            </button>
+            {showMenu && (
+              <>
+                <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
+                <div className={cn(
+                  "absolute right-0 w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                  openUpwards ? "bottom-full mb-1" : "top-full mt-1"
+                )}>
+                  {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
+                      <Zap size={12} className="text-red-400" /> Mark Urgent
+                    </button>
+                  )}
+                  {variant !== 'Archive' && variant !== 'Trash' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Archive'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-600 border-b border-slate-50 flex items-center gap-2">
+                      <ArchiveIcon size={12} className="text-slate-400" /> Move to Archive
+                    </button>
+                  )}
+                  {variant !== 'Trash' ? (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Trash'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                       <Trash2 size={12} className="text-red-400" /> Move to Trash
+                    </button>
+                  ) : (
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                      <Trash2 size={12} className="text-red-400" /> Delete Permanently
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -2070,9 +2228,9 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row"
+        className="relative w-full max-w-2xl max-h-[90vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row"
       >
-        <div className="p-8 flex-1">
+        <div className="p-4 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold tracking-tight">Modify Task</h2>
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 md:hidden">
@@ -2181,7 +2339,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
         </div>
 
         {/* Sidebar Actions */}
-        <div className="bg-slate-50 p-8 w-full md:w-64 border-l border-slate-100 flex flex-col">
+        <div className="bg-slate-50 p-6 md:p-8 w-full md:w-64 border-l border-slate-100 flex flex-col overflow-y-auto custom-scrollbar pb-24 md:pb-8">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">System Actions</h3>
             <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hidden md:flex">
