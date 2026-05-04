@@ -1541,8 +1541,8 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full pb-20 lg:pb-0">
               {/* Urgent Column */}
               <section className={cn(
-                "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/50 border-red-100 transition-all",
-                mobileView === 'urgent' ? "flex fixed inset-0 z-[50] bg-red-50 p-4 md:p-6 pt-16 md:pt-20" : "hidden lg:flex"
+                "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/50 border-red-100 transition-all h-full",
+                mobileView === 'urgent' ? "flex" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="font-bold flex items-center gap-2 text-red-700">
@@ -1584,8 +1584,8 @@ export default function App() {
 
               {/* Focus Column (Spans 2) */}
               <section className={cn(
-                "col-span-1 md:col-span-2 flex flex-col rounded-2xl border p-4 min-h-0 bg-indigo-50/50 border-indigo-100 transition-all",
-                mobileView === 'focus' ? "flex fixed inset-0 z-[50] bg-indigo-50 p-4 md:p-6 pt-16 md:pt-20" : "hidden lg:flex"
+                "col-span-1 md:col-span-2 flex flex-col rounded-2xl border p-4 min-h-0 bg-indigo-50/50 border-indigo-100 transition-all h-full",
+                mobileView === 'focus' ? "flex" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="font-bold flex items-center gap-2 text-indigo-700">
@@ -1786,10 +1786,7 @@ export default function App() {
             </section>
           ) : viewMode === 'trash' ? (
             /* Trash Mode */
-            <section className={cn(
-              "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/30 border-red-100 h-full",
-              mobileView === 'trash' ? "flex fixed inset-0 z-[50] bg-red-50 p-4 md:p-6 pt-16 md:pt-20" : "hidden lg:flex"
-            )}>
+            <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/30 border-red-100 h-full overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-2 gap-4">
                 <div>
                   <h3 className="font-bold flex items-center gap-2 text-red-700 text-lg">
