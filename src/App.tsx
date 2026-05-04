@@ -122,7 +122,7 @@ export default function App() {
     isLocalBackupEnabled: false,
     localBackupPath: '',
     displayMode: 'card' as 'card' | 'list',
-    sections: ['General']
+    sections: []
   });
 
   const handleFirestoreError = (err: unknown, operationType: OperationType, path: string | null) => {
@@ -173,6 +173,7 @@ export default function App() {
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        const loadedSections = data.sections || ['General'];
         setSettings({
           urgentLimit: data.urgentLimit || 3,
           deadlineThreshold: data.deadlineThreshold || 3,
@@ -181,7 +182,15 @@ export default function App() {
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
           displayMode: data.displayMode || 'card',
-          sections: data.sections || ['General']
+          sections: loadedSections
+        });
+        
+        // Ensure activeSection is valid
+        setActiveSection(prev => {
+          if (!prev || !loadedSections.includes(prev)) {
+            return loadedSections[0];
+          }
+          return prev;
         });
       } else {
         // Init default settings for new user
@@ -296,10 +305,10 @@ export default function App() {
   const isListMode = settings.displayMode === 'list';
 
   const projects = useMemo(() => {
-    const sectionTasks = tasks.filter(t => t.section === activeSection || (!t.section && activeSection === 'General'));
+    const sectionTasks = tasks.filter(t => t.section === activeSection || (!t.section && activeSection === settings.sections[0]));
     const p = Array.from(new Set(sectionTasks.map(t => t.project)));
     return ['All', ...p];
-  }, [tasks, activeSection]);
+  }, [tasks, activeSection, settings.sections]);
 
   const stats = useMemo(() => {
     const activeTasks = tasks.filter(t => t.category !== 'Archive' && !t.isDone);
@@ -307,10 +316,10 @@ export default function App() {
     const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
     
     // Per-section metrics
-    const sectionMetrics = settings.sections.reduce((acc, sec) => {
+    const sectionMetrics = settings.sections.reduce((acc, sec, idx) => {
       acc[sec] = {
-        focus: tasks.filter(t => t.section === sec && t.category === 'Focus' && !t.isDone).length,
-        total: tasks.filter(t => t.section === sec && !t.isDone).length
+        focus: tasks.filter(t => (t.section === sec || (!t.section && idx === 0)) && t.category === 'Focus' && !t.isDone).length,
+        total: tasks.filter(t => (t.section === sec || (!t.section && idx === 0)) && !t.isDone).length
       };
       return acc;
     }, {} as Record<string, { focus: number, total: number }>);
@@ -357,7 +366,7 @@ export default function App() {
                              t.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
                              (t.notes || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesProject = selectedProject === 'All' || t.project === selectedProject;
-        const matchesSection = t.section === activeSection || (!t.section && activeSection === 'General');
+        const matchesSection = t.section === activeSection || (!t.section && activeSection === settings.sections[0]);
         return matchesSearch && matchesProject && matchesSection;
       })
       .sort((a, b) => {
@@ -590,8 +599,12 @@ export default function App() {
   };
 
   const deleteSection = async (name: string) => {
-    if (!user || name === 'General') return;
-    if (!window.confirm(`Delete section "${name}" and ALL tasks within it? This cannot be undone.`)) return;
+    if (!user) return;
+    if (settings.sections.length <= 1) {
+      setMessage({ text: "Cannot delete the last workspace. Please add another one first.", type: 'error' });
+      return;
+    }
+    if (!window.confirm(`Delete workspace "${name}" and ALL tasks within it? This cannot be undone.`)) return;
 
     const next = settings.sections.filter(s => s !== name);
     try {
@@ -606,8 +619,8 @@ export default function App() {
       });
       await batch.commit();
 
-      if (activeSection === name) setActiveSection('General');
-      setMessage({ text: `Section "${name}" and ${affectedTasks.length} tasks deleted.`, type: 'info' });
+      if (activeSection === name) setActiveSection(next[0]);
+      setMessage({ text: `Workspace "${name}" and ${affectedTasks.length} tasks deleted.`, type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
     }
@@ -677,11 +690,11 @@ export default function App() {
   };
 
   const getCSVData = () => {
-    const headers = ['ID', 'Category', 'Section', 'Project', 'Title', 'Notes', 'URLs', 'IsDone', 'IsStarred', 'Deadline', 'CreatedAt', 'UpdatedAt', 'UserID'];
+    const headers = ['ID', 'Category', 'Workspace', 'Project', 'Title', 'Notes', 'URLs', 'IsDone', 'IsStarred', 'Deadline', 'CreatedAt', 'UpdatedAt', 'UserID'];
     const rows = tasks.map(t => [
       t.id,
       t.category,
-      t.section || 'General',
+      t.section || settings.sections[0] || 'General',
       t.project,
       t.title,
       t.notes || '',
@@ -733,7 +746,7 @@ export default function App() {
             const taskData: any = {
               userId: user.uid,
               category: (getVal('category') as Category) || 'Focus',
-              section: getVal('section') || 'General',
+              section: getVal('workspace') || getVal('section') || settings.sections[0] || 'General',
               project: getVal('project') || 'Imported',
               title,
               notes: getVal('notes'),
@@ -919,9 +932,7 @@ export default function App() {
     try {
       setMessage({ text: "Purge started. Clearing cloud data...", type: 'info' });
       
-      // Fetch all docs directly from the collection to ensure we see what's on the server
       const snap = await getDocs(query(collection(db, 'tasks'), where('userId', '==', user.uid)));
-      console.log(`Found ${snap.size} tasks to delete.`);
       
       let successCount = 0;
       let failCount = 0;
@@ -936,13 +947,11 @@ export default function App() {
         }
       }
 
-      // Final step: Clear local storage and Firestore persistence cache
       localStorage.clear();
       sessionStorage.clear();
       
       setMessage({ text: `Purge ended: ${successCount} deleted, ${failCount} failed. Resetting local cache...`, type: 'info' });
       
-      // Wait a moment for the toast to be seen
       setTimeout(async () => {
         const { clearFirestoreCache } = await import('./lib/firebase');
         await clearFirestoreCache();
@@ -952,6 +961,26 @@ export default function App() {
     } catch (err: any) {
       console.error("Purge Error:", err);
       setMessage({ text: `Purge Error: ${err.message}`, type: 'error' });
+    }
+  };
+
+  const forceResetSettings = async () => {
+    if (!user) return;
+    if (!window.confirm("CRITICAL: SETTINGS RESET. This will delete your custom workspaces and system preferences, returning the app to factory defaults. Your tasks will NOT be deleted. Proceed?")) return;
+
+    try {
+      setMessage({ text: "Resetting settings document...", type: 'info' });
+      await deleteDoc(doc(db, 'settings', user.uid));
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      setTimeout(async () => {
+        const { clearFirestoreCache } = await import('./lib/firebase');
+        await clearFirestoreCache();
+        window.location.reload();
+      }, 2000);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `settings/${user.uid}`);
     }
   };
 
@@ -1046,11 +1075,11 @@ export default function App() {
                 <div className="fixed inset-0 z-[55]" onClick={() => setShowSectionMenu(false)} />
                 <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
                   <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Workspace Sections</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Workspaces</p>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        const name = window.prompt("New Section Name?");
+                        const name = window.prompt("New Workspace Name?");
                         if (name) addSection(name);
                         setShowSectionMenu(false);
                       }}
@@ -1078,30 +1107,28 @@ export default function App() {
                           </span>
                           {activeSection === s && <CheckCircle2 size={12} />}
                         </button>
-                        {s !== 'General' && (
-                          <div className="flex px-2 md:opacity-0 group-hover/item:opacity-100 transition-opacity gap-1">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const name = window.prompt("Rename Section?", s);
-                                if (name) renameSection(s, name);
-                              }}
-                              className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 text-slate-300 rounded"
-                            >
-                              <SettingsIcon size={12} />
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteSection(s);
-                                if (activeSection === s) setShowSectionMenu(false);
-                              }}
-                              className="p-1.5 hover:bg-red-50 hover:text-red-600 text-slate-300 rounded"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex px-2 md:opacity-0 group-hover/item:opacity-100 transition-opacity gap-1">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const name = window.prompt("Rename Workspace?", s);
+                              if (name) renameSection(s, name);
+                            }}
+                            className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 text-slate-300 rounded"
+                          >
+                            <SettingsIcon size={12} />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteSection(s);
+                              if (activeSection === s) setShowSectionMenu(false);
+                            }}
+                            className="p-1.5 hover:bg-red-50 hover:text-red-600 text-slate-300 rounded"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2117,7 +2144,19 @@ export default function App() {
                         
                         <div className="bg-red-50 border border-red-100 rounded-xl p-4">
                           <p className="text-[11px] text-red-800 font-bold mb-3 leading-relaxed">
-                            If you have legacy tasks from another account or corrupted test data that cannot be removed normally, use this to force reset your database.
+                            Reset your custom workspaces and system preferences to factory defaults.
+                          </p>
+                          <button 
+                            onClick={forceResetSettings}
+                            className="w-full py-2.5 mb-3 bg-red-100 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-200 transition-all flex items-center justify-center gap-2 border border-red-200"
+                          >
+                            <RefreshCcw size={14} /> Force Reset Settings to Defaults
+                          </button>
+                          
+                          <div className="h-px bg-red-200/50 my-4" />
+                          
+                          <p className="text-[11px] text-red-800 font-bold mb-3 leading-relaxed">
+                            CRITICAL: Delete ALL tasks in the cloud. This cannot be undone. Use only for full data clearing.
                           </p>
                           <button 
                             onClick={purgeAllData}
