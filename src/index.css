@@ -23,6 +23,11 @@
   input[type="date"]::-webkit-datetime-edit-month-field,
   input[type="date"]::-webkit-datetime-edit-day-field,
   input[type="date"]::-webkit-datetime-edit-year-field {
-    color: #94a3b8; /* slate-400 */
+    color: #94a3b8 !important; /* slate-400 */
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.5) opacity(0.5);
+    cursor: pointer;
   }
 }

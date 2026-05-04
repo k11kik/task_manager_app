@@ -704,124 +704,70 @@ export default function App() {
   };
 
   const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!user || !e.target.files?.[0]) return;
-    const file = e.target.files[0];
-    const reader = new FileReader();
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
 
-    reader.onload = async (event) => {
-      const content = event.target?.result as string;
-      
-      // Robust RFC 4180 parsing for multi-line fields
-      const rows: string[][] = [];
-      let currentRow: string[] = [];
-      let currentField = '';
-      let i = 0;
-      let inQuotes = false;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const batch = writeBatch(db);
+        let count = 0;
 
-      while (i < content.length) {
-        const char = content[i];
-        const nextChar = content[i+1];
+        for (const row of results.data as any[]) {
+          const getVal = (key: string) => {
+            const foundKey = Object.keys(row).find(k => k.replace(/^"|"$/g, '').trim().toLowerCase() === key.toLowerCase());
+            const val = foundKey ? row[foundKey]?.toString().trim() : '';
+            return val.replace(/^"|"$/g, '').replace(/""/g, '"');
+          };
 
-        if (inQuotes) {
-          if (char === '"' && nextChar === '"') {
-            currentField += '"';
-            i += 2;
-            continue;
-          } else if (char === '"') {
-            inQuotes = false;
-          } else {
-            currentField += char;
-          }
-        } else {
-          if (char === '"') {
-            inQuotes = true;
-          } else if (char === ',') {
-            currentRow.push(currentField);
-            currentField = '';
-          } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
-            currentRow.push(currentField);
-            rows.push(currentRow);
-            currentRow = [];
-            currentField = '';
-            if (char === '\r') i++;
-          } else if (char !== '\r') {
-            currentField += char;
-          }
+          if (!getVal('Title')) continue;
+
+          const newTaskRef = doc(collection(db, 'tasks'));
+          batch.set(newTaskRef, {
+            userId: user.uid,
+            category: (getVal('Category') as Category) || 'Focus',
+            section: getVal('Section') || 'General',
+            project: getVal('Project') || 'Imported',
+            title: getVal('Title') || 'Untitled Task',
+            notes: getVal('Notes') || '',
+            urls: getVal('URLs') ? getVal('URLs').split(';').map((u: string) => u.trim()).filter(Boolean) : [],
+            isDone: getVal('IsDone').toLowerCase() === 'yes',
+            isStarred: getVal('IsStarred').toLowerCase() === 'yes',
+            deadline: (() => {
+              const d = getVal('Deadline');
+              if (!d) return undefined;
+              const t = new Date(d).getTime();
+              return isNaN(t) ? undefined : t;
+            })(),
+            createdAt: (() => {
+              const val = getVal('CreatedAt');
+              const t = val ? new Date(val).getTime() : Date.now();
+              return isNaN(t) ? Date.now() : t;
+            })(),
+            updatedAt: (() => {
+              const val = getVal('UpdatedAt');
+              const t = val ? new Date(val).getTime() : Date.now();
+              return isNaN(t) ? Date.now() : t;
+            })(),
+          });
+          count++;
+
+          if (count >= 499) break;
         }
-        i++;
+
+        try {
+          await batch.commit();
+          setMessage({ text: `Successfully imported ${count} tasks.`, type: 'info' });
+          e.target.value = '';
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, 'tasks/batch');
+        }
+      },
+      error: (err) => {
+        setMessage({ text: `CSV Parse Error: ${err.message}`, type: 'error' });
       }
-      
-      // Handle last field if file doesn't end in newline
-      if (currentField !== '' || currentRow.length > 0) {
-        currentRow.push(currentField);
-        rows.push(currentRow);
-      }
-
-      if (rows.length < 2) {
-        setMessage({ text: "Invalid CSV format or empty file.", type: 'error' });
-        return;
-      }
-
-      const headers = rows[0].map(h => h.replace(/^"|"$/g, '').trim());
-      const batch = writeBatch(db);
-      let count = 0;
-
-      // Start from rowIndex=1 to skip header
-      for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
-        const values = rows[rowIndex];
-        if (values.length < 2) continue; // Skip empty rows
-
-        const getVal = (headerName: string) => {
-          const idx = headers.findIndex(h => h.toLowerCase() === headerName.toLowerCase());
-          const val = (idx !== -1 && values[idx]) ? values[idx].trim() : '';
-          // Strip quotes if they were added during export
-          return val.replace(/^"|"$/g, '').replace(/""/g, '"');
-        };
-
-        const newTaskRef = doc(collection(db, 'tasks'));
-        batch.set(newTaskRef, {
-          userId: user.uid,
-          category: (getVal('Category') as Category) || 'Focus',
-          section: getVal('Section') || 'General',
-          project: getVal('Project') || 'Imported',
-          title: getVal('Title') || 'Untitled Task',
-          notes: getVal('Notes') || '',
-          urls: getVal('URLs') ? getVal('URLs').split(';').map(u => u.trim()).filter(Boolean) : [],
-          isDone: getVal('IsDone') === 'Yes',
-          isStarred: getVal('IsStarred') === 'Yes',
-          deadline: (() => {
-            const d = getVal('Deadline');
-            if (!d) return undefined;
-            const t = new Date(d).getTime();
-            return isNaN(t) ? undefined : t;
-          })(),
-          createdAt: (() => {
-            const val = getVal('CreatedAt');
-            const t = val ? new Date(val).getTime() : Date.now();
-            return isNaN(t) ? Date.now() : t;
-          })(),
-          updatedAt: (() => {
-            const val = getVal('UpdatedAt');
-            const t = val ? new Date(val).getTime() : Date.now();
-            return isNaN(t) ? Date.now() : t;
-          })(),
-        });
-        count++;
-
-        // Firestore batch limit is 500
-        if (count >= 499) break; 
-      }
-
-      try {
-        await batch.commit();
-        setMessage({ text: `Successfully imported ${count} tasks.`, type: 'info' });
-        e.target.value = '';
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, 'tasks/batch');
-      }
-    };
-
-    reader.readAsText(file);
+    });
   };
 
   const selectBackupFolder = async () => {
@@ -1472,9 +1418,9 @@ export default function App() {
               <div className="pt-2 border-t border-slate-700/50 flex justify-between items-start pt-3">
                 <div className="space-y-1">
                   <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">System State</p>
-                  <p className={cn("text-[10px] font-bold uppercase leading-none", stats.textColor.split(' ')[0])}>
+                  <p className={cn("text-[10px] font-bold uppercase leading-none", stats.textColor)}>
                     {stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}
-                    <span className="ml-1 opacity-60">({stats.loadPercentage}%)</span>
+                    <span className="ml-1 opacity-80">({stats.loadPercentage}%)</span>
                   </p>
                 </div>
                 <div className="text-right flex flex-col items-end gap-1">
