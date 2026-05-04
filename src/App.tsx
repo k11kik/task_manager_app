@@ -100,6 +100,8 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [showCleanupMenu, setShowCleanupMenu] = useState(false);
+  const [showSectionMenu, setShowSectionMenu] = useState(false);
+  const [showSyncDetails, setShowSyncDetails] = useState(false);
 
   const [settings, setSettings] = useState({
     urgentLimit: 3,
@@ -928,11 +930,12 @@ export default function App() {
       {/* Header Navigation */}
       <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-4 md:gap-8">
-          <div className="relative group">
+          <div className="relative">
             <button 
+              onClick={() => setShowSectionMenu(!showSectionMenu)}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
             >
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white group-hover:rotate-12 transition-transform shadow-lg shadow-indigo-100">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-transform shadow-lg shadow-indigo-100 group-active:scale-95">
                 <PanelTop size={18} />
               </div>
               <div className="flex flex-col items-start leading-none">
@@ -940,59 +943,77 @@ export default function App() {
                   STM <span className="text-indigo-600">v2.2</span>
                 </h1>
                 <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-0.5">
-                  <span className="truncate max-w-[80px]">{activeSection}</span> <ChevronDown size={10} />
+                  <span className="truncate max-w-[80px]">{activeSection}</span> <ChevronDown size={10} className={cn("transition-transform", showSectionMenu && "rotate-180")} />
                 </p>
               </div>
             </button>
-            <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[60] py-2">
-              <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sections</p>
-                <button 
-                  onClick={() => {
-                    const name = window.prompt("New Section Name?");
-                    if (name) addSection(name);
-                  }}
-                  className="text-indigo-600 hover:text-indigo-700 p-1"
-                >
-                  <Plus size={14} />
-                </button>
-              </div>
-              <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
-                {settings.sections.map(s => (
-                  <div key={s} className="group/item flex items-center">
+            {showSectionMenu && (
+              <>
+                <div className="fixed inset-0 z-[55]" onClick={() => setShowSectionMenu(false)} />
+                <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
+                  <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Workspace Sections</p>
                     <button 
-                      onClick={() => setActiveSection(s)}
-                      className={cn(
-                        "flex-1 text-left px-4 py-2.5 text-xs font-bold transition-all flex items-center justify-between",
-                        activeSection === s ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const name = window.prompt("New Section Name?");
+                        if (name) addSection(name);
+                        setShowSectionMenu(false);
+                      }}
+                      className="text-indigo-600 hover:text-indigo-700 p-1 bg-white rounded-lg border border-indigo-100 shadow-sm"
                     >
-                      {s}
-                      {activeSection === s && <CheckCircle2 size={12} />}
+                      <Plus size={14} />
                     </button>
-                    {s !== 'General' && (
-                      <div className="flex px-2 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                  </div>
+                  <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
+                    {settings.sections.map(s => (
+                      <div key={s} className="group/item flex items-center border-b border-slate-50 last:border-0">
                         <button 
                           onClick={() => {
-                            const name = window.prompt("Rename Section?", s);
-                            if (name) renameSection(s, name);
+                            setActiveSection(s);
+                            setShowSectionMenu(false);
                           }}
-                          className="p-1 hover:text-indigo-600 text-slate-300"
+                          className={cn(
+                            "flex-1 text-left px-4 py-3.5 text-xs font-bold transition-all flex items-center justify-between",
+                            activeSection === s ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                          )}
                         >
-                          <SettingsIcon size={12} />
+                          <span className="flex items-center gap-2">
+                             <div className={cn("w-1.5 h-1.5 rounded-full", activeSection === s ? "bg-indigo-500" : "bg-slate-200")} />
+                             {s}
+                          </span>
+                          {activeSection === s && <CheckCircle2 size={12} />}
                         </button>
-                        <button 
-                          onClick={() => deleteSection(s)}
-                          className="p-1 hover:text-red-600 text-slate-300"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        {s !== 'General' && (
+                          <div className="flex px-2 md:opacity-0 group-hover/item:opacity-100 transition-opacity gap-1">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const name = window.prompt("Rename Section?", s);
+                                if (name) renameSection(s, name);
+                              }}
+                              className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 text-slate-300 rounded"
+                            >
+                              <SettingsIcon size={12} />
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteSection(s);
+                                if (activeSection === s) setShowSectionMenu(false);
+                              }}
+                              className="p-1.5 hover:bg-red-50 hover:text-red-600 text-slate-300 rounded"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              </>
+            )}
           </div>
           <nav className="hidden lg:flex gap-6 text-sm font-medium text-slate-500">
             <button 
@@ -1024,24 +1045,54 @@ export default function App() {
 
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-2 mr-2">
-            <button 
-              onClick={() => {
-                if (!dirHandle) selectBackupFolder();
-              }}
-              title={dirHandle ? `Backing up to local folder` : "Select local backup folder"}
-              className="group/sync relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white transition-all"
-            >
-              <Globe size={12} className={cn(isSyncing ? "text-indigo-500 animate-spin" : (dirHandle ? "text-emerald-500" : "text-slate-300"))} />
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                {isSyncing ? 'Syncing' : (dirHandle ? 'Synced' : 'Off')}
-              </span>
+            <div className="relative">
+              <button 
+                onClick={() => {
+                  if (!dirHandle) selectBackupFolder();
+                  else setShowSyncDetails(!showSyncDetails);
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all",
+                  dirHandle ? "bg-emerald-50 border-emerald-100" : "bg-slate-50/50 border-slate-100 hover:bg-white"
+                )}
+              >
+                <Globe size={12} className={cn(isSyncing ? "text-indigo-500 animate-spin" : (dirHandle ? "text-emerald-500" : "text-slate-300"))} />
+                <span className={cn("text-[10px] font-bold uppercase tracking-tighter", dirHandle ? "text-emerald-600" : "text-slate-500")}>
+                  {isSyncing ? 'Syncing' : (dirHandle ? 'Sync On' : 'Sync Off')}
+                </span>
+              </button>
               
-              {dirHandle && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-slate-900 text-white p-2 rounded-lg text-[9px] font-mono opacity-0 invisible group-hover/sync:opacity-100 group-hover/sync:visible transition-all z-[70] shadow-xl">
-                  PATH: {settings.localBackupPath || 'Authorized Local Folder'}
-                </div>
+              {showSyncDetails && dirHandle && (
+                <>
+                  <div className="fixed inset-0 z-[55]" onClick={() => setShowSyncDetails(false)} />
+                  <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] p-4">
+                    <div className="flex items-center gap-2 text-slate-800 mb-3 pb-2 border-b border-slate-50">
+                      <Activity size={12} className="text-indigo-500" />
+                      <p className="text-[10px] font-black uppercase tracking-widest">Automated Sync Status</p>
+                    </div>
+                    <div className="space-y-3">
+                       <div className="bg-slate-50 rounded-lg p-2.5">
+                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Local Directory Path</label>
+                        <p className="text-[10px] font-mono break-all text-slate-600 leading-tight">
+                          {settings.localBackupPath || 'Authorized Local Folder'}
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                        <span>Last Save:</span>
+                        <span className="text-slate-900 border-b border-indigo-100">
+                          {lastSyncTime ? format(lastSyncTime, 'HH:mm:ss') : 'Waiting...'}
+                        </span>
+                      </div>
+                      {isSyncing && (
+                        <div className="flex items-center gap-1 text-[9px] text-indigo-600 font-bold animate-pulse">
+                          <RefreshCcw size={10} className="animate-spin" /> Committing changes to local disk...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
-            </button>
+            </div>
           </div>
           
           {user ? (
@@ -1417,7 +1468,7 @@ export default function App() {
                     {showCleanupMenu && (
                       <>
                         <div className="fixed inset-0 z-[70]" onClick={() => setShowCleanupMenu(false)} />
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[180px] z-[80] transition-all">
+                        <div className="absolute right-0 bottom-full mb-1 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[200px] z-[80] transition-all">
                           <button 
                             onClick={(e) => { e.stopPropagation(); cleanupArchive(30); setShowCleanupMenu(false); }}
                             className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
@@ -1861,36 +1912,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="pt-4 flex items-center justify-between">
-                        <div>
-                          <p className="font-bold text-slate-900">Manual Export</p>
-                          <p className="text-xs text-slate-500">Download immediate CSV snapshot.</p>
-                        </div>
-                        <button 
-                          onClick={exportTasks}
-                          className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-100"
-                        >
-                          <Download size={14} />
-                          Download CSV
-                        </button>
-                      </div>
-
-                      {settings.isLocalBackupEnabled && (
-                        <div className="bg-white rounded-xl p-4 border border-slate-200 flex items-center justify-between mt-4">
-                          <div className="flex items-center gap-3 text-slate-600">
-                            <Activity size={16} />
-                            <div className="text-xs">
-                              <p className="font-bold">Automated Sync Status</p>
-                              <p className="opacity-60">{lastSyncTime ? `Last saved: ${format(lastSyncTime, 'PPpp')}` : 'Waiting for changes...'}</p>
-                            </div>
-                          </div>
-                          {isSyncing && (
-                            <div className="flex items-center gap-1 text-[10px] text-indigo-600 font-bold">
-                              <RefreshCcw size={12} className="animate-spin" /> Syncing...
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
