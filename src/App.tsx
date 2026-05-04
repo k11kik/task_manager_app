@@ -264,6 +264,12 @@ export default function App() {
     
     setSettings(prev => {
       const next = { ...prev, ...updates };
+
+      // If sync is disabled, clear the directory handle and local path inside the update logic
+      if ('isLocalBackupEnabled' in updates && !updates.isLocalBackupEnabled) {
+        setDirHandle(null);
+      }
+
       // Trigger Firestore update with the most current state
       setDoc(doc(db, 'settings', user.uid), {
         userId: user.uid,
@@ -1467,8 +1473,8 @@ export default function App() {
                     </button>
                     {showCleanupMenu && (
                       <>
-                        <div className="fixed inset-0 z-[70]" onClick={() => setShowCleanupMenu(false)} />
-                        <div className="absolute right-0 bottom-full mb-1 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[200px] z-[80] transition-all">
+                        <div className="fixed inset-0 z-[75]" onClick={() => setShowCleanupMenu(false)} />
+                        <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 min-w-[200px] z-[80] transition-all">
                           <button 
                             onClick={(e) => { e.stopPropagation(); cleanupArchive(30); setShowCleanupMenu(false); }}
                             className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
