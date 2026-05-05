@@ -8,6 +8,7 @@ import {
   Target, 
   Clock, 
   ChevronRight,
+  Filter,
   MoreVertical,
   CheckCircle2,
   Circle,
@@ -104,6 +105,7 @@ export default function App() {
   const [showCleanupMenu, setShowCleanupMenu] = useState(false);
   const [showSectionMenu, setShowSectionMenu] = useState(false);
   const [showSyncDetails, setShowSyncDetails] = useState(false);
+  const [showProjectFilter, setShowProjectFilter] = useState(false);
 
   useEffect(() => {
     if (message && message.type !== 'error') {
@@ -360,6 +362,18 @@ export default function App() {
 
     const loadPercentage = Math.round(Math.min((focusTasksCount / settings.criticalThreshold) * 100, 100));
 
+    // Project distribution
+    const projectStats: Record<string, { urgent: number, focus: number, archive: number, trash: number }> = {};
+    tasks.forEach(t => {
+      if (!projectStats[t.project]) {
+        projectStats[t.project] = { urgent: 0, focus: 0, archive: 0, trash: 0 };
+      }
+      if (t.category === 'Urgent') projectStats[t.project].urgent++;
+      else if (t.category === 'Focus' && !t.isDone) projectStats[t.project].focus++;
+      else if (t.category === 'Archive') projectStats[t.project].archive++;
+      else if (t.category === 'Trash') projectStats[t.project].trash++;
+    });
+
     return {
       active: activeTasks.length,
       doneToday: doneTodayCount,
@@ -371,7 +385,8 @@ export default function App() {
       warningThreshold,
       sectionMetrics,
       morningRoutineReady: urgentCount >= settings.urgentLimit,
-      loadPercentage
+      loadPercentage,
+      projectStats
     };
   }, [tasks, settings, activeSection]);
 
@@ -1195,6 +1210,49 @@ export default function App() {
           <div className="hidden md:flex items-center gap-2 mr-2">
             <div className="relative">
               <button 
+                onClick={() => setShowProjectFilter(!showProjectFilter)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all",
+                  selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700 shadow-sm" : "bg-slate-50/50 border-slate-100 hover:bg-white text-slate-500"
+                )}
+              >
+                <Filter size={12} />
+                <span className="text-[10px] font-bold uppercase tracking-tighter">
+                  {selectedProject === 'All' ? 'Project Filter' : selectedProject}
+                </span>
+              </button>
+              {showProjectFilter && (
+                <>
+                  <div className="fixed inset-0 z-[55]" onClick={() => setShowProjectFilter(false)} />
+                  <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
+                    <div className="px-4 py-1.5 border-b border-slate-50 mb-1">
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Filter by Project</p>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                      {projects.map(p => (
+                        <button
+                          key={p}
+                          onClick={() => {
+                            setSelectedProject(p);
+                            setShowProjectFilter(false);
+                          }}
+                          className={cn(
+                            "w-full text-left px-4 py-2.5 text-[10px] font-bold transition-all flex items-center justify-between",
+                            selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                          )}
+                        >
+                          <span className="truncate">{p}</span>
+                          {selectedProject === p && <CheckCircle2 size={12} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="relative ml-1">
+              <button 
                 onClick={() => {
                   if (!dirHandle) {
                     selectBackupFolder();
@@ -1362,7 +1420,48 @@ export default function App() {
             </div>
           ) : (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 shrink-0">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">New Task Entry</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">New Task Entry</h2>
+                {/* Mobile Project Filter for Entry View */}
+                <div className="lg:hidden relative">
+                  <button 
+                    onClick={() => setShowProjectFilter(!showProjectFilter)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
+                      selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-600 shadow-sm" : "bg-slate-50/50 border-slate-100 text-slate-400"
+                    )}
+                  >
+                    <Filter size={10} />
+                    {selectedProject === 'All' ? 'Filter' : selectedProject}
+                  </button>
+                  {showProjectFilter && (
+                    <>
+                      <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
+                      <div className="absolute top-full right-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                        <div className="px-3 py-1 border-b border-slate-50 mb-1 opacity-40">
+                          <p className="text-[7px] font-black uppercase tracking-widest">Projects</p>
+                        </div>
+                        {projects.map(p => (
+                          <button
+                            key={p}
+                            onClick={() => {
+                              setSelectedProject(p);
+                              setShowProjectFilter(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                              selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                            )}
+                          >
+                            <span className="truncate">{p}</span>
+                            {selectedProject === p && <CheckCircle2 size={10} />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
               <form onSubmit={handleAddTask} className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-600">Project Code</label>
@@ -1409,10 +1508,12 @@ export default function App() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-600 flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60"><LinkIcon size={12} /> URLs</span>
-                    <button type="button" onClick={() => setNewTaskUrls([...newTaskUrls, ''])} className="text-[9px] text-indigo-600 hover:underline">+ Add</button>
+                    {newTaskUrls[newTaskUrls.length - 1]?.trim() && (
+                      <button type="button" onClick={() => setNewTaskUrls([...newTaskUrls, ''])} className="text-[9px] text-indigo-600 hover:underline">+ Add</button>
+                    )}
                   </label>
                   {newTaskUrls.map((u, i) => (
-                    <div key={i} className="flex gap-1">
+                    <div key={i} className="flex gap-1 group">
                       <input 
                         type="url"
                         className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -1427,6 +1528,18 @@ export default function App() {
                           if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
                         }}
                       />
+                      {(newTaskUrls.length > 1 || u.trim()) && (
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            const next = newTaskUrls.filter((_, idx) => idx !== i);
+                            setNewTaskUrls(next.length === 0 ? [''] : next);
+                          }}
+                          className="px-1 text-slate-300 hover:text-red-500 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1515,22 +1628,40 @@ export default function App() {
               </div>
             </div>
           </div>
-          
-          <div className="px-1">
-            <label className="text-[10px] font-bold uppercase tracking-tight text-slate-400 mb-2 block">Filter View</label>
-            <div className="flex flex-wrap gap-1">
-              {projects.map(p => (
-                <button
-                  key={p}
-                  onClick={() => setSelectedProject(p)}
-                  className={cn(
-                    "px-2 py-1 rounded text-[10px] font-bold transition-all",
-                    selectedProject === p ? "bg-indigo-100 text-indigo-700" : "bg-white border border-slate-100 text-slate-400 hover:text-slate-600"
-                  )}
-                >
-                  {p}
-                </button>
+
+          {/* Project Distribution Analysis */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 shrink-0 overflow-hidden">
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <Activity size={12} /> Project Volume Overview
+            </h2>
+            <div className="space-y-3">
+              {(Object.entries(stats.projectStats) as [string, { urgent: number, focus: number, archive: number, trash: number }][])
+                .filter(([proj]) => proj !== 'All' && proj.trim() !== '')
+                .sort((a, b) => (b[1].urgent + b[1].focus) - (a[1].urgent + a[1].focus))
+                .slice(0, 10)
+                .map(([proj, counts]) => (
+                <div key={proj} className="space-y-1 group">
+                  <div className="flex justify-between items-center text-[10px] font-bold">
+                    <span className="text-slate-700 truncate max-w-[120px] group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{proj}</span>
+                    <span className="text-slate-400 font-mono text-[9px]">{counts.urgent + counts.focus + counts.archive + counts.trash} total</span>
+                  </div>
+                  <div className="flex h-1 rounded-full overflow-hidden bg-slate-100 shadow-inner">
+                    <div className="bg-red-500 transition-all duration-500" style={{ width: `${(counts.urgent / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
+                    <div className="bg-indigo-500 transition-all duration-500" style={{ width: `${(counts.focus / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
+                    <div className="bg-slate-300 transition-all duration-500" style={{ width: `${(counts.archive / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
+                    <div className="bg-red-200 transition-all duration-500" style={{ width: `${(counts.trash / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
+                  </div>
+                  <div className="flex gap-2 text-[8px] font-black uppercase tracking-tighter opacity-60 group-hover:opacity-100 transition-opacity">
+                    {counts.urgent > 0 && <span className="text-red-600">U:{counts.urgent}</span>}
+                    {counts.focus > 0 && <span className="text-indigo-600">F:{counts.focus}</span>}
+                    {counts.archive > 0 && <span className="text-slate-400">A:{counts.archive}</span>}
+                    {counts.trash > 0 && <span className="text-red-300">T:{counts.trash}</span>}
+                  </div>
+                </div>
               ))}
+              {Object.keys(stats.projectStats).length <= 1 && (
+                <p className="text-[10px] text-slate-400 italic text-center py-2">No multiple projects tracked yet.</p>
+              )}
             </div>
           </div>
         </aside>
@@ -1545,10 +1676,48 @@ export default function App() {
                 mobileView === 'urgent' ? "flex" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
-                  <h3 className="font-bold flex items-center gap-2 text-red-700">
-                    <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-red-500"></span>
-                    Urgent
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold flex items-center gap-2 text-red-700">
+                      <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-red-500"></span>
+                      Urgent
+                    </h3>
+                    {/* Mobile Project Filter for Urgent View */}
+                    <div className="lg:hidden relative">
+                      <button 
+                        onClick={() => setShowProjectFilter(!showProjectFilter)}
+                        className={cn(
+                          "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border transition-all text-[8px] font-black uppercase tracking-tighter",
+                          selectedProject !== 'All' ? "bg-red-100 border-red-200 text-red-700" : "bg-white border-red-100 text-red-300"
+                        )}
+                      >
+                        <Filter size={8} />
+                        {selectedProject === 'All' ? 'Filter' : selectedProject}
+                      </button>
+                      {showProjectFilter && (
+                        <>
+                          <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
+                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                            {projects.map(p => (
+                              <button
+                                key={p}
+                                onClick={() => {
+                                  setSelectedProject(p);
+                                  setShowProjectFilter(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                  selectedProject === p ? "bg-red-50 text-red-600" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                              >
+                                <span className="truncate">{p}</span>
+                                {selectedProject === p && <CheckCircle2 size={10} />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded border uppercase text-red-400 border-red-100">
                     <span className="md:inline hidden">Slots: </span> {settings.urgentLimit}
                   </span>
@@ -1588,10 +1757,48 @@ export default function App() {
                 mobileView === 'focus' ? "flex" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
-                  <h3 className="font-bold flex items-center gap-2 text-indigo-700">
-                    <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-indigo-500"></span>
-                    Focus (Projected)
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold flex items-center gap-2 text-indigo-700">
+                      <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-indigo-500"></span>
+                      Focus (Projected)
+                    </h3>
+                    {/* Mobile Project Filter for Focus View */}
+                    <div className="lg:hidden relative">
+                      <button 
+                        onClick={() => setShowProjectFilter(!showProjectFilter)}
+                        className={cn(
+                          "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border transition-all text-[8px] font-black uppercase tracking-tighter",
+                          selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-white border-indigo-100 text-indigo-300"
+                        )}
+                      >
+                        <Filter size={8} />
+                        {selectedProject === 'All' ? 'Filter' : selectedProject}
+                      </button>
+                      {showProjectFilter && (
+                        <>
+                          <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
+                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                            {projects.map(p => (
+                              <button
+                                key={p}
+                                onClick={() => {
+                                  setSelectedProject(p);
+                                  setShowProjectFilter(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                  selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                              >
+                                <span className="truncate">{p}</span>
+                                {selectedProject === p && <CheckCircle2 size={10} />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <button 
                     onClick={() => setIsPickingDaily(true)}
                     className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight hover:underline transition-all"
@@ -1691,11 +1898,49 @@ export default function App() {
             /* Archive Mode */
             <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-slate-50/50 border-slate-200 h-full overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-2 gap-4">
-                <div>
+                <div className="flex items-center gap-3">
                   <h3 className="font-bold flex items-center gap-2 text-slate-700 text-lg">
                     <ArchiveIcon size={22} className="text-slate-400" />
                     System Archive
                   </h3>
+                  {/* Mobile Project Filter for Archive View */}
+                  <div className="lg:hidden relative">
+                    <button 
+                      onClick={() => setShowProjectFilter(!showProjectFilter)}
+                      className={cn(
+                        "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border transition-all text-[8px] font-black uppercase tracking-tighter",
+                        selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-white border-slate-200 text-slate-400"
+                      )}
+                    >
+                      <Filter size={8} />
+                      {selectedProject === 'All' ? 'Filter' : selectedProject}
+                    </button>
+                    {showProjectFilter && (
+                      <>
+                        <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
+                        <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                          {projects.map(p => (
+                            <button
+                              key={p}
+                              onClick={() => {
+                                setSelectedProject(p);
+                                setShowProjectFilter(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                              )}
+                            >
+                              <span className="truncate">{p}</span>
+                              {selectedProject === p && <CheckCircle2 size={10} />}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="hidden sm:block">
                   <p className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-1">
                     Reviewing items archived within {settings.archiveThresholdDays} days
                   </p>
@@ -1788,11 +2033,49 @@ export default function App() {
             /* Trash Mode */
             <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/30 border-red-100 h-full overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-2 gap-4">
-                <div>
+                <div className="flex items-center gap-3">
                   <h3 className="font-bold flex items-center gap-2 text-red-700 text-lg">
                     <Trash2 size={22} className="text-red-400" />
                     Trash Bin
                   </h3>
+                  {/* Mobile Project Filter for Trash View */}
+                  <div className="lg:hidden relative">
+                    <button 
+                      onClick={() => setShowProjectFilter(!showProjectFilter)}
+                      className={cn(
+                        "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border transition-all text-[8px] font-black uppercase tracking-tighter",
+                        selectedProject !== 'All' ? "bg-red-100 border-red-200 text-red-700" : "bg-white border-red-100 text-red-300"
+                      )}
+                    >
+                      <Filter size={8} />
+                      {selectedProject === 'All' ? 'Filter' : selectedProject}
+                    </button>
+                    {showProjectFilter && (
+                      <>
+                        <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
+                        <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                          {projects.map(p => (
+                            <button
+                              key={p}
+                              onClick={() => {
+                                setSelectedProject(p);
+                                setShowProjectFilter(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                selectedProject === p ? "bg-red-50 text-red-600" : "text-slate-600 hover:bg-slate-50"
+                              )}
+                            >
+                              <span className="truncate">{p}</span>
+                              {selectedProject === p && <CheckCircle2 size={10} />}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="hidden sm:block">
                   <p className="text-[10px] uppercase font-black tracking-widest text-red-400 mt-1">
                     Items will be permanently deleted after 30 days
                   </p>
