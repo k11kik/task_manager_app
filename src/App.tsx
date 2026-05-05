@@ -1177,23 +1177,24 @@ export default function App() {
   };
 
   const triggerEmergencyBackup = async () => {
+    const userPart = user?.email?.split('@')[0] || 'user';
+    const backupName = `TriFocus_Log_${userPart}_backup.csv`;
+    
     if (settings.isLocalBackupEnabled && dirHandle) {
-      const userPart = user?.email?.split('@')[0] || 'user';
-      const backupName = `TriFocus_Log_${userPart}_backup.csv`;
       await syncToLocalSystem(true, backupName);
     } else {
       // Fallback to browser download if sync not active
-      exportTasks();
+      exportTasks(backupName);
     }
   };
 
   const purgeAllData = async () => {
     if (!user) return;
-    if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will try to delete EVERY task in the 'tasks' collection for your ID. A backup will be attempted first. Proceed?")) return;
+    if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will delete EVERY task and reset your workspaces to default. A backup will be attempted first. Proceed?")) return;
 
     try {
       await triggerEmergencyBackup();
-      setMessage({ text: "Purge started. Clearing cloud data...", type: 'info' });
+      setMessage({ text: "Purge started. Clearing cloud data and resetting workspaces...", type: 'info' });
       
       const snap = await getDocs(query(collection(db, 'tasks'), where('userId', '==', user.uid)));
       
@@ -1210,10 +1211,15 @@ export default function App() {
         }
       }
 
+      // Reset workspaces/sections to General
+      await updateDoc(doc(db, 'settings', user.uid), {
+        sections: ['General']
+      });
+
       localStorage.clear();
       sessionStorage.clear();
       
-      setMessage({ text: `Purge ended: ${successCount} deleted, ${failCount} failed. Resetting local cache...`, type: 'info' });
+      setMessage({ text: `Purge ended: ${successCount} tasks deleted. Workspaces reset to General.`, type: 'info' });
       
       setTimeout(async () => {
         const { clearFirestoreCache } = await import('./lib/firebase');
@@ -1259,33 +1265,45 @@ export default function App() {
 
   const forceResetSettings = async () => {
     if (!user) return;
-    if (!window.confirm("CRITICAL: SETTINGS RESET. This will delete your custom workspaces and system preferences, returning the app to factory defaults. Your tasks will NOT be deleted. Proceed?")) return;
+    if (!window.confirm("RESET SETTINGS: This will reset all thresholds, limits, and cleanup preferences to factory defaults. Your workspaces and tasks will NOT be affected. Proceed?")) return;
 
     try {
-      setMessage({ text: "Resetting settings document...", type: 'info' });
-      await deleteDoc(doc(db, 'settings', user.uid));
-      localStorage.clear();
-      sessionStorage.clear();
+      setMessage({ text: "Resetting system settings...", type: 'info' });
       
-      setTimeout(async () => {
-        const { clearFirestoreCache } = await import('./lib/firebase');
-        await clearFirestoreCache();
+      const defaultThresholds = {
+        urgentLimit: 3,
+        deadlineThreshold: 3,
+        archiveThresholdDays: 30,
+        doneToTrashThresholdDays: 7,
+        criticalThreshold: 100
+      };
+
+      await updateDoc(doc(db, 'settings', user.uid), defaultThresholds);
+      
+      // Update local state too to avoid full reload if possible, but the current code reloads.
+      // Let's stick to reload for consistency with how it clear caches.
+      
+      localStorage.removeItem('trifocus_last_backup');
+      
+      setTimeout(() => {
         window.location.reload();
-      }, 2000);
+      }, 1500);
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `settings/${user.uid}`);
+      handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
     }
   };
 
-  const exportTasks = () => {
+  const exportTasks = (fileName?: string) => {
     try {
       const csvContent = getCSVData();
+      const userPart = user?.email?.split('@')[0] || 'user';
+      const defaultName = fileName || `TaskManager_Export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `TaskManager_Export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
+      link.setAttribute('download', defaultName);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
