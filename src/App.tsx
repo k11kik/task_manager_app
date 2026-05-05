@@ -101,6 +101,10 @@ export default function App() {
   const [activeSection, setActiveSection] = useState<string>('General');
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings'>('urgent');
   const [isNewTaskMemoExpanded, setIsNewTaskMemoExpanded] = useState(false);
+  const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
+  const [lastBackupTime, setLastBackupTime] = useState<number>(() => {
+    return Number(localStorage.getItem('trifocus_last_backup')) || 0;
+  });
   const [archiveFilter, setArchiveFilter] = useState<'all' | '1w' | '1m'>('all');
   const [trashFilter, setTrashFilter] = useState<'all' | '1w' | '2w'>('all');
 
@@ -942,12 +946,16 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     const userPart = user?.email?.split('@')[0] || 'local';
+    const now = Date.now();
     link.setAttribute('href', url);
     link.setAttribute('download', `TriFocus_Log_${userPart}_Manual.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    setLastBackupTime(now);
+    localStorage.setItem('trifocus_last_backup', now.toString());
     setMessage({ text: "Backup file downloaded successfully.", type: 'info' });
   };
 
@@ -1013,13 +1021,31 @@ export default function App() {
 
   // Auto-sync effect
   useEffect(() => {
-    if (settings.isLocalBackupEnabled && tasks.length > 0 && dirHandle) {
-      const timer = setTimeout(() => {
-        syncToLocalSystem();
-      }, 5000); // 5s debounce
-      return () => clearTimeout(timer);
+    if (settings.isLocalBackupEnabled && tasks.length > 0) {
+      if (dirHandle) {
+        const timer = setTimeout(() => {
+          syncToLocalSystem();
+        }, 5000); // 5s debounce
+        return () => clearTimeout(timer);
+      } else if (!window.showDirectoryPicker) {
+        // Safari fallback: If it's been more than 4 hours since last backup, 
+        // we can't auto-save but we can notify the user more strongly.
+        const fourHours = 4 * 60 * 60 * 1000;
+        if (Date.now() - lastBackupTime > fourHours) {
+          // Just a subtle hint in the state or message if they are active
+        }
+      }
     }
-  }, [tasks, settings.isLocalBackupEnabled, dirHandle]);
+  }, [tasks, settings.isLocalBackupEnabled, dirHandle, lastBackupTime]);
+
+  // Safari/PWA Persistence Request
+  useEffect(() => {
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().then(granted => {
+        if (granted) console.log("Storage persistence granted");
+      });
+    }
+  }, []);
 
   // Trash Auto-Cleanup Effect (30 days)
   useEffect(() => {
@@ -1417,7 +1443,11 @@ export default function App() {
               <button 
                 onClick={() => {
                   if (!dirHandle) {
-                    selectBackupFolder();
+                    if (!window.showDirectoryPicker) {
+                      downloadBackup();
+                    } else {
+                      selectBackupFolder();
+                    }
                   } else {
                     syncToLocalSystem(true);
                     setShowSyncDetails(!showSyncDetails);
@@ -1425,12 +1455,36 @@ export default function App() {
                 }}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all",
-                  dirHandle ? "bg-emerald-50 border-emerald-100" : "bg-slate-50/50 border-slate-100 hover:bg-white"
+                  dirHandle ? "bg-emerald-50 border-emerald-100" : (
+                    !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
+                    ? "bg-amber-50 border-amber-100 animate-pulse"
+                    : "bg-slate-50/50 border-slate-100 hover:bg-white"
+                  )
                 )}
               >
-                <Globe size={12} className={cn(isSyncing ? "text-indigo-500 animate-spin" : (dirHandle ? "text-emerald-500" : "text-slate-300"))} />
-                <span className={cn("text-[10px] font-bold uppercase tracking-tighter", dirHandle ? "text-emerald-600" : "text-slate-500")}>
-                  {isSyncing ? 'Syncing...' : (dirHandle ? 'Sync Active' : 'Sync Off')}
+                <Globe size={12} className={cn(
+                  isSyncing ? "text-indigo-500 animate-spin" : (
+                    dirHandle ? "text-emerald-500" : (
+                      !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
+                      ? "text-amber-500"
+                      : "text-slate-300"
+                    )
+                  )
+                )} />
+                <span className={cn("text-[10px] font-bold uppercase tracking-tighter", 
+                  dirHandle ? "text-emerald-600" : (
+                    !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
+                    ? "text-amber-600"
+                    : "text-slate-500"
+                  )
+                )}>
+                  {isSyncing ? 'Syncing...' : (
+                    dirHandle ? 'Sync Active' : (
+                      !window.showDirectoryPicker ? (
+                        !lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000 ? 'Backup Needed' : 'Backed Up'
+                      ) : 'Sync Off'
+                    )
+                  )}
                 </span>
               </button>
               
@@ -2756,12 +2810,25 @@ export default function App() {
                                   className={cn(
                                     "p-1.5 px-3 rounded text-[10px] font-bold transition-all w-full flex items-center justify-center gap-1",
                                     !window.showDirectoryPicker 
-                                      ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-100" 
+                                      ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200" 
                                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
                                   )}
                                 >
                                   <Download size={10} /> {window.showDirectoryPicker ? 'Manual Local Backup' : 'Save Backup to Local'}
                                 </button>
+                                {!window.showDirectoryPicker && (
+                                  <div className="mt-1 flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1 text-[8px] text-slate-400 font-bold uppercase tracking-widest">
+                                      <Clock size={8} />
+                                      Last saved: {lastBackupTime ? format(lastBackupTime, 'MM/dd HH:mm') : 'Never'}
+                                    </div>
+                                    {lastBackupTime && (Date.now() - lastBackupTime > 24 * 60 * 60 * 1000) && (
+                                      <div className="flex items-center gap-1 text-[8px] text-amber-500 font-bold uppercase tracking-widest animate-pulse">
+                                        <AlertTriangle size={8} /> Recommendation: Daily Update
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                               {window.self !== window.top && (
                                 <button 
