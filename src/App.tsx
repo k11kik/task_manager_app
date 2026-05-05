@@ -129,6 +129,7 @@ export default function App() {
     urgentLimit: 3,
     deadlineThreshold: 3,
     archiveThresholdDays: 30,
+    doneToTrashThresholdDays: 7,
     criticalThreshold: 100,
     isLocalBackupEnabled: false,
     localBackupPath: '',
@@ -205,6 +206,7 @@ export default function App() {
           urgentLimit: data.urgentLimit || 3,
           deadlineThreshold: data.deadlineThreshold || 3,
           archiveThresholdDays: data.archiveThresholdDays || 30,
+          doneToTrashThresholdDays: data.doneToTrashThresholdDays || 7,
           criticalThreshold: data.criticalThreshold || 100,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
@@ -226,6 +228,7 @@ export default function App() {
           urgentLimit: 3,
           deadlineThreshold: 3,
           archiveThresholdDays: 30,
+          doneToTrashThresholdDays: 7,
           criticalThreshold: 100,
           isLocalBackupEnabled: false,
           localBackupPath: '',
@@ -1071,6 +1074,42 @@ export default function App() {
     }
   }, []);
 
+  // Done to Trash Auto-Move Effect
+  useEffect(() => {
+    if (!user || settings.doneToTrashThresholdDays === 99999) return;
+
+    const cleanup = async () => {
+      const now = Date.now();
+      const thresholdMs = settings.doneToTrashThresholdDays * 24 * 60 * 60 * 1000;
+      
+      const tasksToTrash = tasks.filter(t => 
+        t.isDone && 
+        t.category !== 'Archive' && 
+        t.category !== 'Trash' && 
+        (t.updatedAt || t.createdAt) < (now - thresholdMs)
+      );
+
+      if (tasksToTrash.length > 0) {
+        console.log(`Auto-moving ${tasksToTrash.length} done tasks to trash`);
+        try {
+          const batch = writeBatch(db);
+          tasksToTrash.forEach(t => {
+            batch.update(doc(db, 'tasks', t.id), { 
+              category: 'Trash',
+              updatedAt: now 
+            });
+          });
+          await batch.commit();
+        } catch (err) {
+          console.error("Auto-trash error", err);
+        }
+      }
+    };
+
+    const timer = setTimeout(cleanup, 10000); // Wait 10s after load/change
+    return () => clearTimeout(timer);
+  }, [tasks, settings.doneToTrashThresholdDays, user]);
+
   // Trash Auto-Cleanup Effect (30 days)
   useEffect(() => {
     if (!user || tasks.length === 0) return;
@@ -1557,6 +1596,57 @@ export default function App() {
           
           {user ? (
             <div className="flex items-center gap-2 md:gap-3">
+              {/* Mobile Project Filter for All Tabs */}
+              <div className="md:hidden relative">
+                <button 
+                  onClick={() => setShowProjectFilter(!showProjectFilter)}
+                  className={cn(
+                    "w-9 h-9 rounded-xl flex items-center justify-center transition-all border",
+                    selectedProject !== 'All' 
+                      ? (viewMode === 'trash' ? "bg-red-100 border-red-200 text-red-700 shadow-lg shadow-red-100/50" : "bg-indigo-100 border-indigo-200 text-indigo-700 shadow-lg shadow-indigo-100/50")
+                      : "bg-white border-slate-200 text-slate-400 shadow-sm"
+                  )}
+                >
+                  <Filter size={16} />
+                </button>
+                {showProjectFilter && (
+                  <>
+                    <div className="fixed inset-0 z-[110]" onClick={() => setShowProjectFilter(false)} />
+                    <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.2)] z-[111] py-2 overflow-hidden">
+                      <div className="px-4 py-2 border-b border-slate-50 mb-1 flex items-center justify-between">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Filter Projects</p>
+                        {selectedProject !== 'All' && (
+                          <button 
+                            onClick={() => { setSelectedProject('All'); setShowProjectFilter(false); }}
+                            className="text-[8px] font-bold text-indigo-600 uppercase"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                        {projects.map(p => (
+                          <button
+                            key={p}
+                            onClick={() => {
+                              setSelectedProject(p);
+                              setShowProjectFilter(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-4 py-3 text-[10px] font-bold transition-all flex items-center justify-between",
+                              selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                            )}
+                          >
+                            <span className="truncate">{p}</span>
+                            {selectedProject === p && <CheckCircle2 size={12} />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              
               <div className="text-right flex flex-col items-end leading-none hidden sm:flex">
                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500/50 mb-0.5">Authenticated</span>
                 <span className="text-xs font-bold text-slate-700">{user.displayName || user.email?.split('@')[0]}</span>
@@ -1662,45 +1752,8 @@ export default function App() {
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">New Task Entry</h2>
-                {/* Mobile Project Filter for Entry View */}
-                <div className="lg:hidden relative">
-                  <button 
-                    onClick={() => setShowProjectFilter(!showProjectFilter)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
-                      selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-600 shadow-sm" : "bg-slate-50/50 border-slate-100 text-slate-400"
-                    )}
-                  >
-                    <Filter size={10} />
-                    {selectedProject === 'All' ? 'Filter' : selectedProject}
-                  </button>
-                  {showProjectFilter && (
-                    <>
-                      <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
-                      <div className="absolute top-full right-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
-                        <div className="px-3 py-1 border-b border-slate-50 mb-1 opacity-40">
-                          <p className="text-[7px] font-black uppercase tracking-widest">Projects</p>
-                        </div>
-                        {projects.map(p => (
-                          <button
-                            key={p}
-                            onClick={() => {
-                              setSelectedProject(p);
-                              setShowProjectFilter(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
-                              selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                            )}
-                          >
-                            <span className="truncate">{p}</span>
-                            {selectedProject === p && <CheckCircle2 size={10} />}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
+                {/* Desktop layout title helper */}
+                <div className="hidden lg:block h-3" />
               </div>
               <form onSubmit={handleAddTask} className="space-y-4">
                 <div className="space-y-1.5">
@@ -1941,42 +1994,6 @@ export default function App() {
                       <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-red-500"></span>
                       Urgent
                     </h3>
-                    {/* Mobile Project Filter for Urgent View */}
-                    <div className="lg:hidden relative">
-                      <button 
-                        onClick={() => setShowProjectFilter(!showProjectFilter)}
-                        className={cn(
-                          "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border transition-all text-[8px] font-black uppercase tracking-tighter",
-                          selectedProject !== 'All' ? "bg-red-100 border-red-200 text-red-700" : "bg-white border-red-100 text-red-300"
-                        )}
-                      >
-                        <Filter size={8} />
-                        {selectedProject === 'All' ? 'Filter' : selectedProject}
-                      </button>
-                      {showProjectFilter && (
-                        <>
-                          <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
-                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
-                            {projects.map(p => (
-                              <button
-                                key={p}
-                                onClick={() => {
-                                  setSelectedProject(p);
-                                  setShowProjectFilter(false);
-                                }}
-                                className={cn(
-                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
-                                  selectedProject === p ? "bg-red-50 text-red-600" : "text-slate-600 hover:bg-slate-50"
-                                )}
-                              >
-                                <span className="truncate">{p}</span>
-                                {selectedProject === p && <CheckCircle2 size={10} />}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
                   </div>
                   <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded border uppercase text-red-400 border-red-100">
                     <span className="md:inline hidden">Slots: </span> {settings.urgentLimit}
@@ -2040,42 +2057,6 @@ export default function App() {
                       <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-indigo-500"></span>
                       Focus (Projected)
                     </h3>
-                    {/* Mobile Project Filter for Focus View */}
-                    <div className="lg:hidden relative">
-                      <button 
-                        onClick={() => setShowProjectFilter(!showProjectFilter)}
-                        className={cn(
-                          "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border transition-all text-[8px] font-black uppercase tracking-tighter",
-                          selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-white border-indigo-100 text-indigo-300"
-                        )}
-                      >
-                        <Filter size={8} />
-                        {selectedProject === 'All' ? 'Filter' : selectedProject}
-                      </button>
-                      {showProjectFilter && (
-                        <>
-                          <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
-                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
-                            {projects.map(p => (
-                              <button
-                                key={p}
-                                onClick={() => {
-                                  setSelectedProject(p);
-                                  setShowProjectFilter(false);
-                                }}
-                                className={cn(
-                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
-                                  selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                                )}
-                              >
-                                <span className="truncate">{p}</span>
-                                {selectedProject === p && <CheckCircle2 size={10} />}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
                   </div>
                   <button 
                     onClick={() => setIsPickingDaily(true)}
@@ -2230,8 +2211,8 @@ export default function App() {
                           <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
                             {[
                               { id: 'all', label: 'All Items' },
-                              { id: '1w', label: 'Older than 1 week' },
-                              { id: '1m', label: 'Older than 1 month' }
+                              { id: '1w', label: 'Older 1w' },
+                              { id: '1m', label: 'Older 1m' }
                             ].map(f => (
                               <button
                                 key={f.id}
@@ -2393,8 +2374,8 @@ export default function App() {
                           <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
                             {[
                               { id: 'all', label: 'All Items' },
-                              { id: '1w', label: 'Older than 1 week' },
-                              { id: '2w', label: 'Older than 2 weeks' }
+                              { id: '1w', label: 'Older 1w' },
+                              { id: '2w', label: 'Older 2w' }
                             ].map(f => (
                               <button
                                 key={f.id}
@@ -2717,9 +2698,34 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Maintenance */}
+                  {/* Done Cleanup */}
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                    <div className="flex items-center gap-2 mb-4 text-slate-600">
+                    <div className="flex items-center gap-2 mb-4 text-emerald-600">
+                      <RefreshCcw size={18} />
+                      <h3 className="font-bold text-sm uppercase tracking-wider">Done Cleanup</h3>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900">Done to Trash</p>
+                        <p className="text-xs text-slate-500">How long to keep completed tasks in Focus before Trashing.</p>
+                      </div>
+                      <select 
+                        className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm"
+                        value={settings.doneToTrashThresholdDays}
+                        onChange={(e) => saveSettings({ doneToTrashThresholdDays: parseInt(e.target.value) })}
+                      >
+                        <option value={1}>1 Day (Clean)</option>
+                        <option value={3}>3 Days (Pragmatic)</option>
+                        <option value={7}>7 Days (Standard)</option>
+                        <option value={14}>14 Days (Relaxed)</option>
+                        <option value={99999}>Never (Manual only)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Display Options */}
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    <div className="flex items-center gap-2 mb-4 text-indigo-600">
                       <Layout size={18} />
                       <h3 className="font-bold text-sm uppercase tracking-wider">Display Options</h3>
                     </div>
