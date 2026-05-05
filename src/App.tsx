@@ -362,9 +362,9 @@ export default function App() {
 
     const loadPercentage = Math.round(Math.min((focusTasksCount / settings.criticalThreshold) * 100, 100));
 
-    // Project distribution
+    // Project distribution (filtered by active workspace)
     const projectStats: Record<string, { urgent: number, focus: number, archive: number, trash: number }> = {};
-    tasks.forEach(t => {
+    tasks.filter(t => t.section === activeSection || (!t.section && activeSection === settings.sections[0])).forEach(t => {
       if (!projectStats[t.project]) {
         projectStats[t.project] = { urgent: 0, focus: 0, archive: 0, trash: 0 };
       }
@@ -1632,7 +1632,7 @@ export default function App() {
           {/* Project Distribution Analysis */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 shrink-0 overflow-hidden">
             <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <Activity size={12} /> Project Volume Overview
+              <Activity size={12} /> {activeSection} Projects Overview
             </h2>
             <div className="space-y-3">
               {(Object.entries(stats.projectStats) as [string, { urgent: number, focus: number, archive: number, trash: number }][])
