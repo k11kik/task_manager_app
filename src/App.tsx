@@ -36,9 +36,12 @@ import {
   Globe,
   PanelTop,
   Plus,
-  Minus
+  Minus,
+  GripVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { DragDropContext, Droppable, Draggable as DraggableDnd } from '@hello-pangea/dnd';
+const Draggable = DraggableDnd as any;
 import { format, differenceInDays } from 'date-fns';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
@@ -130,6 +133,7 @@ export default function App() {
     deadlineThreshold: 3,
     archiveThresholdDays: 30,
     doneToTrashThresholdDays: 7,
+    trashCleanupThresholdDays: 30,
     criticalThreshold: 100,
     isLocalBackupEnabled: false,
     localBackupPath: '',
@@ -207,6 +211,7 @@ export default function App() {
           deadlineThreshold: data.deadlineThreshold || 3,
           archiveThresholdDays: data.archiveThresholdDays || 30,
           doneToTrashThresholdDays: data.doneToTrashThresholdDays || 7,
+          trashCleanupThresholdDays: data.trashCleanupThresholdDays || 30,
           criticalThreshold: data.criticalThreshold || 100,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
@@ -229,6 +234,7 @@ export default function App() {
           deadlineThreshold: 3,
           archiveThresholdDays: 30,
           doneToTrashThresholdDays: 7,
+          trashCleanupThresholdDays: 30,
           criticalThreshold: 100,
           isLocalBackupEnabled: false,
           localBackupPath: '',
@@ -503,12 +509,14 @@ export default function App() {
     // Special category for items nearing auto-purge (3 days)
     const nearingPurge = archiveTasks
       .filter(t => {
+        if (settings.archiveThresholdDays === 99999) return false;
         const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
         return settings.archiveThresholdDays - inactiveDays <= 3;
       })
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
     const others = archiveTasks.filter(t => {
+      if (settings.archiveThresholdDays === 99999) return true;
       const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
       return settings.archiveThresholdDays - inactiveDays > 3;
     });
@@ -537,14 +545,16 @@ export default function App() {
     // Special category for items nearing auto-purge (3 days)
     const nearingPurge = trashTasks
       .filter(t => {
+        if (settings.trashCleanupThresholdDays === 99999) return false;
         const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
-        return 30 - inactiveDays <= 3; // Trash is 30 days
+        return settings.trashCleanupThresholdDays - inactiveDays <= 3;
       })
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
     const others = trashTasks.filter(t => {
+      if (settings.trashCleanupThresholdDays === 99999) return true;
       const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
-      return 30 - inactiveDays > 3;
+      return settings.trashCleanupThresholdDays - inactiveDays > 3;
     });
 
     const grouped: Record<string, Task[]> = {};
@@ -553,7 +563,7 @@ export default function App() {
       grouped[t.project].push(t);
     });
     return { nearingPurge, grouped };
-  }, [filteredTasks, trashFilter]);
+  }, [filteredTasks, trashFilter, settings.trashCleanupThresholdDays]);
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -738,6 +748,19 @@ export default function App() {
 
       if (activeSection === name) setActiveSection(next[0]);
       setMessage({ text: `Workspace "${name}" and ${affectedTasks.length} tasks deleted.`, type: 'info' });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
+    }
+  };
+
+  const onSectionDragEnd = async (result: any) => {
+    if (!result.destination || !user) return;
+    const items = Array.from(settings.sections);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    try {
+      await updateDoc(doc(db, 'settings', user.uid), { sections: items });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
     }
@@ -1110,14 +1133,48 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [tasks, settings.doneToTrashThresholdDays, user]);
 
-  // Trash Auto-Cleanup Effect (30 days)
+  // Archive to Trash Auto-Move Effect
   useEffect(() => {
-    if (!user || tasks.length === 0) return;
+    if (!user || settings.archiveThresholdDays === 99999) return;
+
+    const cleanup = async () => {
+      const now = Date.now();
+      const thresholdMs = settings.archiveThresholdDays * 24 * 60 * 60 * 1000;
+      
+      const tasksToTrash = tasks.filter(t => 
+        t.category === 'Archive' && 
+        (t.updatedAt || t.createdAt) < (now - thresholdMs)
+      );
+
+      if (tasksToTrash.length > 0) {
+        console.log(`Auto-moving ${tasksToTrash.length} archived tasks to trash`);
+        try {
+          const batch = writeBatch(db);
+          tasksToTrash.forEach(t => {
+            batch.update(doc(db, 'tasks', t.id), { 
+              category: 'Trash',
+              updatedAt: now 
+            });
+          });
+          await batch.commit();
+        } catch (err) {
+          console.error("Auto-archive-trash error", err);
+        }
+      }
+    };
+
+    const timer = setTimeout(cleanup, 12000); // Wait 12s (staggered with done-to-trash)
+    return () => clearTimeout(timer);
+  }, [tasks, settings.archiveThresholdDays, user]);
+
+  // Trash Auto-Cleanup Effect
+  useEffect(() => {
+    if (!user || tasks.length === 0 || settings.trashCleanupThresholdDays === 99999) return;
 
     const cleanupTrash = async () => {
       const now = Date.now();
-      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-      const expiredTrash = tasks.filter(t => t.category === 'Trash' && (now - t.updatedAt) > thirtyDaysMs);
+      const thresholdMs = settings.trashCleanupThresholdDays * 24 * 60 * 60 * 1000;
+      const expiredTrash = tasks.filter(t => t.category === 'Trash' && (now - t.updatedAt) > thresholdMs);
       
       if (expiredTrash.length > 0) {
         try {
@@ -1135,7 +1192,7 @@ export default function App() {
 
     const timer = setTimeout(cleanupTrash, 10000); // Run once shortly after load
     return () => clearTimeout(timer);
-  }, [user, tasks]);
+  }, [user, tasks, settings.trashCleanupThresholdDays]);
 
   const cleanupArchive = async (thresholdDays?: number) => {
     if (!user) return;
@@ -1275,6 +1332,7 @@ export default function App() {
         deadlineThreshold: 3,
         archiveThresholdDays: 30,
         doneToTrashThresholdDays: 7,
+        trashCleanupThresholdDays: 30,
         criticalThreshold: 100
       };
 
@@ -1399,50 +1457,71 @@ export default function App() {
                       <Plus size={14} />
                     </button>
                   </div>
-                  <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
-                    {settings.sections.map(s => (
-                      <div key={s} className="group/item flex items-center border-b border-slate-50 last:border-0">
-                        <button 
-                          onClick={() => {
-                            setActiveSection(s);
-                            setShowSectionMenu(false);
-                          }}
-                          className={cn(
-                            "flex-1 text-left px-4 py-3.5 text-xs font-bold transition-all flex items-center justify-between",
-                            activeSection === s ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                          )}
-                        >
-                          <span className="flex items-center gap-2">
-                             <div className={cn("w-1.5 h-1.5 rounded-full", activeSection === s ? "bg-indigo-500" : "bg-slate-200")} />
-                             {s}
-                          </span>
-                          {activeSection === s && <CheckCircle2 size={12} />}
-                        </button>
-                        <div className="flex px-2 md:opacity-0 group-hover/item:opacity-100 transition-opacity gap-1">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const name = window.prompt("Rename Workspace?", s);
-                              if (name) renameSection(s, name);
-                            }}
-                            className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 text-slate-300 rounded"
-                          >
-                            <SettingsIcon size={12} />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteSection(s);
-                              if (activeSection === s) setShowSectionMenu(false);
-                            }}
-                            className="p-1.5 hover:bg-red-50 hover:text-red-600 text-slate-300 rounded"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                  <DragDropContext onDragEnd={onSectionDragEnd}>
+                    <Droppable droppableId="sections">
+                      {(provided) => (
+                        <div {...provided.droppableProps} ref={provided.innerRef} className="max-h-[350px] overflow-y-auto custom-scrollbar">
+                          {settings.sections.map((s, index) => (
+                            <Draggable key={s} draggableId={s} index={index}>
+                              {(provided, snapshot) => (
+                                <div 
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={cn(
+                                    "group/item flex items-center border-b border-slate-50 last:border-0",
+                                    snapshot.isDragging && "bg-white shadow-xl border border-indigo-200 rounded-lg z-[100]"
+                                  )}
+                                >
+                                  <div {...provided.dragHandleProps} className="pl-3 pr-1 text-slate-300 hover:text-slate-400 cursor-grab active:cursor-grabbing">
+                                    <GripVertical size={14} />
+                                  </div>
+                                  <button 
+                                    onClick={() => {
+                                      setActiveSection(s);
+                                      setShowSectionMenu(false);
+                                    }}
+                                    className={cn(
+                                      "flex-1 text-left px-2 py-3.5 text-xs font-bold transition-all flex items-center justify-between",
+                                      activeSection === s ? "text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                                    )}
+                                  >
+                                    <span className="flex items-center gap-2">
+                                       <div className={cn("w-1.5 h-1.5 rounded-full", activeSection === s ? "bg-indigo-500" : "bg-slate-200")} />
+                                       {s}
+                                    </span>
+                                    {activeSection === s && <CheckCircle2 size={12} />}
+                                  </button>
+                                  <div className="flex px-2 md:opacity-0 group-hover/item:opacity-100 transition-opacity gap-1">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const name = window.prompt("Rename Workspace?", s);
+                                        if (name) renameSection(s, name);
+                                      }}
+                                      className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 text-slate-300 rounded"
+                                    >
+                                      <SettingsIcon size={12} />
+                                    </button>
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteSection(s);
+                                        if (activeSection === s) setShowSectionMenu(false);
+                                      }}
+                                      className="p-1.5 hover:bg-red-50 hover:text-red-600 text-slate-300 rounded"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      )}
+                    </Droppable>
+                  </DragDropContext>
                 </div>
               </>
             )}
@@ -2253,9 +2332,11 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="hidden sm:block">
-                  <p className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-1">
-                    Reviewing items archived within {settings.archiveThresholdDays} days
+                <div className="hidden sm:block text-right">
+                  <p className="text-[10px] uppercase font-black tracking-widest text-slate-400">
+                    {settings.archiveThresholdDays === 99999 
+                      ? "Archive is permanent" 
+                      : `Inactive items moved to trash after ${settings.archiveThresholdDays} days`}
                   </p>
                 </div>
                 
@@ -2276,7 +2357,7 @@ export default function App() {
                       <div className="flex items-center gap-4 px-2">
                         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
                           <AlertTriangle size={10} />
-                          Auto-Purge Soon (3 days)
+                          Moving to Trash Soon {"(< 3 days)"}
                         </h4>
                         <div className="h-px flex-1 bg-red-100"></div>
                       </div>
@@ -2369,8 +2450,8 @@ export default function App() {
             <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/30 border-red-100 h-full overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-2 gap-4">
                 <div className="flex items-center gap-3">
-                  <h3 className="font-bold flex items-center gap-2 text-red-700 text-lg">
-                    <Trash2 size={22} className="text-red-400" />
+                  <h3 className="font-bold flex items-center gap-2 text-red-700 text-lg whitespace-nowrap">
+                    <Trash2 size={22} className="text-red-400 shrink-0" />
                     Trash Bin
                   </h3>
                   {/* Filter controls */}
@@ -2415,9 +2496,11 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <div className="hidden sm:block">
-                  <p className="text-[10px] uppercase font-black tracking-widest text-red-400 mt-1">
-                    Items will be permanently deleted after 30 days
+                <div className="hidden sm:block text-right">
+                  <p className="text-[10px] uppercase font-black tracking-widest text-red-400">
+                    {settings.trashCleanupThresholdDays === 99999 
+                      ? "Trash is permanent" 
+                      : `Permanently deleted after ${settings.trashCleanupThresholdDays} days`}
                   </p>
                 </div>
                 
@@ -2436,7 +2519,7 @@ export default function App() {
                       <div className="flex items-center gap-4 px-2">
                         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
                           <AlertTriangle size={10} />
-                          Auto-Delete Soon (3 days)
+                          Permanent Deletion Soon {"(< 3 days)"}
                         </h4>
                         <div className="h-px flex-1 bg-red-100"></div>
                       </div>
@@ -2720,24 +2803,44 @@ export default function App() {
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-4 text-emerald-600">
                       <RefreshCcw size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Done Cleanup</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">Done & Trash Lifecycle</h3>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-slate-900">Done to Trash</p>
-                        <p className="text-xs text-slate-500">How long to keep completed tasks in Focus before Trashing.</p>
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-slate-900">Done to Trash</p>
+                          <p className="text-xs text-slate-500">How long to keep completed tasks in Focus before Trashing.</p>
+                        </div>
+                        <select 
+                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm"
+                          value={settings.doneToTrashThresholdDays}
+                          onChange={(e) => saveSettings({ doneToTrashThresholdDays: parseInt(e.target.value) })}
+                        >
+                          <option value={1}>1 Day (Clean)</option>
+                          <option value={3}>3 Days (Pragmatic)</option>
+                          <option value={7}>7 Days (Standard)</option>
+                          <option value={14}>14 Days (Relaxed)</option>
+                          <option value={99999}>Never (Manual only)</option>
+                        </select>
                       </div>
-                      <select 
-                        className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm"
-                        value={settings.doneToTrashThresholdDays}
-                        onChange={(e) => saveSettings({ doneToTrashThresholdDays: parseInt(e.target.value) })}
-                      >
-                        <option value={1}>1 Day (Clean)</option>
-                        <option value={3}>3 Days (Pragmatic)</option>
-                        <option value={7}>7 Days (Standard)</option>
-                        <option value={14}>14 Days (Relaxed)</option>
-                        <option value={99999}>Never (Manual only)</option>
-                      </select>
+
+                      <div className="pt-6 border-t border-slate-200/60 flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-slate-900">Trash Auto-Cleanup</p>
+                          <p className="text-xs text-slate-500">Permanently delete items in Trash after this period.</p>
+                        </div>
+                        <select 
+                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm"
+                          value={settings.trashCleanupThresholdDays}
+                          onChange={(e) => saveSettings({ trashCleanupThresholdDays: parseInt(e.target.value) })}
+                        >
+                          <option value={7}>7 Days (Aggressive)</option>
+                          <option value={14}>14 Days (Balanced)</option>
+                          <option value={30}>30 Days (Standard)</option>
+                          <option value={90}>90 Days (Relaxed)</option>
+                          <option value={99999}>Never (Stays in Trash)</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
