@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutGrid,
+  LayoutList,
   List,
   Layout, 
   Search, 
@@ -36,6 +37,7 @@ import {
   Star,
   StarOff,
   Globe,
+  Languages,
   PanelTop,
   Plus,
   Minus,
@@ -140,8 +142,215 @@ export default function App() {
     isLocalBackupEnabled: false,
     localBackupPath: '',
     displayMode: 'card' as 'card' | 'list',
+    language: 'en' as 'en' | 'ja',
     sections: []
   });
+
+  const t = (key: string) => {
+    const translations: Record<string, Record<string, string>> = {
+      en: {
+        'Urgent': 'Urgent',
+        'Focus': 'Focus',
+        'Archive': 'Archive',
+        'Trash': 'Trash Bin',
+        'Settings': 'Settings',
+        'Dashboard': 'Dashboard',
+        'Entry': 'Entry',
+        'Language': 'Language',
+        'English': 'English',
+        'Japanese': 'Japanese',
+        'CardView': 'Card View',
+        'ListView': 'List View',
+        'InactiveMoveToTrash': 'Inactive items moved to trash after',
+        'PermanentDeleteAfter': 'Items will be deleted after',
+        'EmptyTrash': 'Empty Trash',
+        'Reset': 'Reset',
+        'FilterProjects': 'Filter Projects',
+        'Days': 'days',
+        'MovingSoon': 'Moving to Trash Soon',
+        'DeletingSoon': 'Deleting Soon',
+        'ArchiveEmpty': 'Archive Empty',
+        'TrashEmpty': 'Trash Bin is Empty',
+        'NoUrgent': 'No Urgent Tasks',
+        'NoFocus': 'No Focus Tasks',
+        'Expired': 'Expired Deadlines',
+        'Approaching': 'Approaching Deadlines',
+        'Extract': 'Extract',
+        'SystemArchive': 'System Archive',
+        'TaskEntry': 'New Task Entry',
+        'WorkflowHealth': 'Workflow Health',
+        'Status': 'Status',
+        'DoneToday': 'Done Today',
+        'Authenticated': 'Authenticated',
+        'DataLifecycle': 'Data Lifecycle',
+        'ExportData': 'Export Data',
+        'ImportData': 'Import Data',
+        'DownloadCSV': 'Download CSV',
+        'ImportCSV': 'Import CSV',
+        'AccountInformation': 'Account Information',
+        'CloudSynced': 'Cloud Synced',
+        'LocalOnly': 'Local Only',
+        'UrgentCapacity': 'Urgent Capacity',
+        'HealthMetrics': 'Health Metrics',
+        'CriticalThreshold': 'Critical Threshold',
+        'DeadlineThreshold': 'Deadline Threshold',
+        'DoneTrashLifecycle': 'Done & Trash Lifecycle',
+        'PersonalAccount': 'Personal Account',
+        'NotSignedIn': 'Not signed in',
+        'DisconnectAccount': 'Disconnect account',
+        'Items': 'Items',
+        'SystemState': 'System State',
+        'Search': 'Search',
+        'All': 'All',
+        'UrgentSlotLimit': 'Urgent Slot Limit',
+        'MaxConcurrentUrgent': 'Maximum concurrent priority tasks allowed.',
+        'CriticalAlertDesc': 'Maximum focus tasks before critical alert. Warning is at 70%.',
+        'DeadlineThresholdDesc': 'Days before deadline to prioritize task in Focus list.',
+        'DoneToTrash': 'Done to Trash',
+        'DoneToTrashDesc': 'How long to keep completed tasks in Focus before Trashing.',
+        'TrashAutoCleanup': 'Trash Auto-Cleanup',
+        'TrashAutoCleanupDesc': 'Permanently delete items in Trash after this period.',
+        'SelectLanguageDesc': 'Select your preferred interface language.'
+      },
+      ja: {
+        'Urgent': 'アージェント',
+        'Focus': 'フォーカス',
+        'Archive': 'アーカイブ',
+        'Trash': 'ゴミ箱',
+        'Settings': '設定',
+        'Dashboard': 'ダッシュボード',
+        'Entry': '入力',
+        'Language': '言語設定',
+        'English': '英語 (English)',
+        'Japanese': '日本語 (Japanese)',
+        'CardView': 'カード表示',
+        'ListView': 'リスト表示',
+        'InactiveMoveToTrash': '非アクティブなアイテムは自動的にゴミ箱に移動されます - 期間:',
+        'PermanentDeleteAfter': 'ゴミ箱のアイテムは自動的に消去されます - 期間:',
+        'EmptyTrash': 'ゴミ箱を空にする',
+        'Reset': 'リセット',
+        'FilterProjects': 'プロジェクトでフィルタ',
+        'Days': '日',
+        'MovingSoon': 'まもなくゴミ箱へ移動',
+        'DeletingSoon': 'まもなく完全に消去',
+        'ArchiveEmpty': 'アーカイブは空です',
+        'TrashEmpty': 'ゴミ箱は空です',
+        'NoUrgent': 'アージェントはありません',
+        'NoFocus': 'フォーカスはありません',
+        'Expired': '期限切れ',
+        'Approaching': 'まもなく期限',
+        'Extract': '抽出',
+        'SystemArchive': 'アーカイブ',
+        'TaskEntry': 'タスクの追加',
+        'WorkflowHealth': 'ステータス',
+        'Status': 'ステータス',
+        'DoneToday': '本日の完了',
+        'Authenticated': 'ログイン中',
+        'DataLifecycle': 'データ管理',
+        'ExportData': 'データのエクスポート',
+        'ImportData': 'データのインポート',
+        'DownloadCSV': 'CSVをダウンロード',
+        'ImportCSV': 'CSVをインポート',
+        'AccountInformation': 'アカウント情報',
+        'CloudSynced': 'クラウド同期中',
+        'LocalOnly': 'ローカル保存のみ',
+        'UrgentCapacity': 'アージェント容量',
+        'HealthMetrics': 'フォーカス上限設定',
+        'CriticalThreshold': '限界しきい値',
+        'DeadlineThreshold': '締切の事前通知',
+        'DoneTrashLifecycle': '完了したタスクの処理',
+        'PersonalAccount': '共有なし',
+        'NotSignedIn': 'ログインしていません',
+        'DisconnectAccount': 'アカウントの連携解除',
+        'Items': '件',
+        'SystemState': 'システム状態',
+        'Search': '検索',
+        'All': 'すべて',
+        'UrgentSlotLimit': 'アージェント枠の上限',
+        'MaxConcurrentUrgent': '同時に進められる優先タスクの最大数です。',
+        'CriticalAlertDesc': 'フォーカタスクの許容量。70%で警告、100%で限界。',
+        'DeadlineThresholdDesc': '締切の何日前からフォーカスリストで優先するか設定します。',
+        'DoneToTrash': '完了からゴミ箱へ',
+        'DoneToTrashDesc': '完了したタスクをゴミ箱に送るまでの日数。',
+        'TrashAutoCleanup': 'ゴミ箱の自動整理',
+        'TrashAutoCleanupDesc': 'ゴミ箱に入ったアイテムを完全に削除するまでの日数。',
+        'SelectLanguageDesc': 'インターフェースの表示言語を設定します。',
+        'GlobalLoad': '全体の負荷',
+        'CriticalLoad': '限界容量を超過',
+        'WarningHighLoad': '負荷が高い状態',
+        'SafeCapacity': '容量に余裕あり',
+        'ProjectOverview': 'のプロジェクト概況',
+        'Total': '件',
+        'NoProjectsTracked': 'まだ複数のプロジェクトが管理されていません。',
+        'Slots': '最大枠',
+        'SyncToCloud': 'クラウド同期',
+        'SyncToCloudDesc': 'ログインすると、全てのデバイスでタスクをリアルタイムに同期できます。',
+        'ContinueWithGoogle': 'Googleでログイン',
+        'ProjectCode': 'プロジェクト名',
+        'TaskDetail': 'タスク内容',
+        'ContextSubtasks': '背景やサブタスクなど... (Ctrl+Enterで保存)',
+        'DetailsPlaceholder': '詳細を入力... (Ctrl+Enterで保存)',
+        'ExampleProjects': '例: CORE, DEV',
+        'Memos': 'メモ',
+        'Expand': '広げる',
+        'Shrink': '閉じる',
+        'Urls': 'リンク',
+        'Add': '追加',
+        'UrlPlaceholder': 'https://... (Ctrl+Enterで保存)',
+        'AddToFocus': 'フォーカスに追加',
+        'SignIn': 'ログイン',
+        'LogOut': 'ログアウト',
+        'Deadline': '締切',
+        'Never': '自動削除なし (手動のみ)',
+        'NeverCleanup': '自動整理なし',
+        'AutoArchiveSweep': 'アーカイブの自動整理',
+        'ArchiveThreshold': 'アーカイブへの移動',
+        'ArchiveThresholdDesc': '最後に操作してからアーカイブに移動するまでの期間を設定します。',
+        'SyncAndBackup': '同期とバックアップ',
+        'LocalFolderLog': 'ローカル保存ログ',
+        'LocalFolderLogDesc': 'PCへの自動CSVバックアップを有効にします。',
+        'LocalDirectoryPath': '保存先フォルダ',
+        'NoFolderSelected': 'フォルダが選択されていません',
+        'AuthorizeSession': '許可のリクエスト',
+        'SelectFolder': 'フォルダを選択',
+        'ManualLocalBackup': '手動でバックアップ',
+        'SaveBackupToLocal': 'ローカルに保存',
+        'LastSaved': '最終保存',
+        'DailyUpdateRecommendation': '推奨: 1日1回の更新',
+        'DangerZone': '危険な操作',
+        'ResetSettingsDesc': 'ワークスペースやシステム設定を全て初期状態に戻します。',
+        'ForceResetSettings': '設定を強制リセット',
+        'PermissionNeeded': 'ブラウザの更新後、保存を再開するには許可が必要です。',
+        'ProjectFilter': 'プロジェクト',
+        'FilterByProject': 'プロジェクトで絞り込み',
+        'Syncing': '同期中...',
+        'SyncActive': '同期有効',
+        'BackupNeeded': '要バックアップ',
+        'BackedUp': 'バックアップ済み',
+        'SyncOff': '同期オフ',
+        'AutomatedSyncStatus': '自動同期ステータス',
+        'LastSuccessfulLog': '最終ログ保存',
+        'CommittingChanges': '保存中...',
+        'AuthorizedLocalFolder': '認証済みフォルダ',
+        'RenameWorkspace': 'ワークスペース名を変更しますか？',
+        'ForceBackupNow': '今すぐバックアップ',
+        'Star': '重要',
+        'Maximize': '最大化',
+        'SystemActions': '操作',
+        'MoveToUrgent': '緊急に移動',
+        'RestoreToFocus': 'フォーカスに戻す',
+        'ArchiveTask': 'アーカイブする',
+        'MoveToTrash': 'ゴミ箱に移動',
+        'DeletePermanently': '完全に削除',
+        'Metadata': 'メタデータ',
+        'Cancel': 'キャンセル',
+        'CommitChanges': '変更を保存',
+        'DeleteConfirm': 'このタスクを完全に削除しますか？'
+      }
+    };
+    const lang = settings.language || 'en';
+    return translations[lang]?.[key] || key;
+  };
 
   const handleFirestoreError = (err: unknown, operationType: OperationType, path: string | null) => {
     const errInfo = {
@@ -218,6 +427,7 @@ export default function App() {
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
           displayMode: data.displayMode || 'card',
+          language: data.language || 'en',
           sections: loadedSections
         });
         
@@ -241,6 +451,7 @@ export default function App() {
           isLocalBackupEnabled: false,
           localBackupPath: '',
           displayMode: 'card',
+          language: 'en',
           sections: ['General']
         }).catch(err => handleFirestoreError(err, OperationType.WRITE, `settings/${user.uid}`));
       }
@@ -1497,7 +1708,7 @@ export default function App() {
                                     <button 
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        const name = window.prompt("Rename Workspace?", s);
+                                        const name = window.prompt(t('RenameWorkspace'), s);
                                         if (name) renameSection(s, name);
                                       }}
                                       className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 text-slate-300 rounded"
@@ -1533,25 +1744,25 @@ export default function App() {
               onClick={() => { setViewMode('dashboard'); setMobileView('summary'); }}
               className={cn("pb-4 -mb-4 transition-colors", viewMode === 'dashboard' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
             >
-              Dashboard
+              {t('Dashboard')}
             </button>
             <button 
               onClick={() => { setViewMode('archive'); setMobileView('archive'); }}
               className={cn("pb-4 -mb-4 transition-colors", viewMode === 'archive' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
             >
-              Archive
+              {t('Archive')}
             </button>
             <button 
               onClick={() => { setViewMode('trash'); setMobileView('trash'); }}
               className={cn("pb-4 -mb-4 transition-colors uppercase text-[10px] font-black tracking-widest", viewMode === 'trash' ? "text-red-600 border-b-2 border-red-600" : "hover:text-slate-800")}
             >
-              Trash
+              {t('Trash')}
             </button>
             <button 
               onClick={() => { setViewMode('settings'); setMobileView('settings'); }}
               className={cn("pb-4 -mb-4 transition-colors", viewMode === 'settings' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
             >
-              Settings
+              {t('Settings')}
             </button>
           </nav>
         </div>
@@ -1565,7 +1776,7 @@ export default function App() {
                   "p-1.5 rounded-lg transition-all",
                   settings.displayMode === 'card' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
                 )}
-                title="Card View"
+                title={t('CardView')}
               >
                 <LayoutGrid size={14} />
               </button>
@@ -1575,9 +1786,9 @@ export default function App() {
                   "p-1.5 rounded-lg transition-all",
                   settings.displayMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
                 )}
-                title="List View"
+                title={t('ListView')}
               >
-                <List size={14} />
+                <LayoutList size={14} />
               </button>
             </div>
 
@@ -1591,7 +1802,7 @@ export default function App() {
               >
                 <Filter size={12} />
                 <span className="text-[10px] font-bold uppercase tracking-tighter">
-                  {selectedProject === 'All' ? 'Project Filter' : selectedProject}
+                  {selectedProject === 'All' ? t('ProjectFilter') : selectedProject}
                 </span>
               </button>
               {showProjectFilter && (
@@ -1599,7 +1810,7 @@ export default function App() {
                   <div className="fixed inset-0 z-[55]" onClick={() => setShowProjectFilter(false)} />
                   <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
                     <div className="px-4 py-1.5 border-b border-slate-50 mb-1">
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Filter by Project</p>
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">{t('FilterByProject')}</p>
                     </div>
                     <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
                       {projects.map(p => (
@@ -1663,11 +1874,11 @@ export default function App() {
                     : "text-slate-500"
                   )
                 )}>
-                  {isSyncing ? 'Syncing...' : (
-                    dirHandle ? 'Sync Active' : (
+                  {isSyncing ? t('Syncing') : (
+                    dirHandle ? t('SyncActive') : (
                       !window.showDirectoryPicker ? (
-                        !lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000 ? 'Backup Needed' : 'Backed Up'
-                      ) : 'Sync Off'
+                        !lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000 ? t('BackupNeeded') : t('BackedUp')
+                      ) : t('SyncOff')
                     )
                   )}
                 </span>
@@ -1680,12 +1891,12 @@ export default function App() {
                     <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-50">
                       <div className="flex items-center gap-2 text-slate-800">
                         <Activity size={12} className="text-indigo-500" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Automated Sync Status</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest">{t('AutomatedSyncStatus')}</p>
                       </div>
                       <button 
                         onClick={(e) => { e.stopPropagation(); syncToLocalSystem(true); }}
                         className="p-1 hover:bg-slate-100 rounded-lg transition-colors text-indigo-600"
-                        title="Force Backup Now"
+                        title={t('ForceBackupNow')}
                         disabled={isSyncing}
                       >
                         <RefreshCcw size={12} className={cn(isSyncing && "animate-spin")} />
@@ -1699,14 +1910,14 @@ export default function App() {
                         </p>
                       </div>
                       <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
-                        <span>Last Successful Log:</span>
+                        <span>{t('LastSuccessfulLog')}:</span>
                         <span className="text-slate-900 border-b border-indigo-100">
                           {lastSyncTime ? format(lastSyncTime, 'HH:mm:ss') : 'Waiting...'}
                         </span>
                       </div>
                       {isSyncing && (
                         <div className="flex items-center gap-1 text-[9px] text-indigo-600 font-bold animate-pulse">
-                          <RefreshCcw size={10} className="animate-spin" /> Committing changes to local disk...
+                          <RefreshCcw size={10} className="animate-spin" /> {t('CommittingChanges')}
                         </div>
                       )}
                     </div>
@@ -1726,7 +1937,7 @@ export default function App() {
                     "p-1.5 rounded-lg transition-all",
                     settings.displayMode === 'card' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
                   )}
-                  title="Card View"
+                  title={t('CardView')}
                 >
                   <LayoutGrid size={14} />
                 </button>
@@ -1736,9 +1947,9 @@ export default function App() {
                     "p-1.5 rounded-lg transition-all",
                     settings.displayMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
                   )}
-                  title="List View"
+                  title={t('ListView')}
                 >
-                  <List size={14} />
+                  <LayoutList size={14} />
                 </button>
               </div>
 
@@ -1760,13 +1971,13 @@ export default function App() {
                     <div className="fixed inset-0 z-[110]" onClick={() => setShowProjectFilter(false)} />
                     <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.2)] z-[111] py-2 overflow-hidden">
                       <div className="px-4 py-2 border-b border-slate-50 mb-1 flex items-center justify-between">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Filter Projects</p>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">{t('FilterProjects')}</p>
                         {selectedProject !== 'All' && (
                           <button 
                             onClick={() => { setSelectedProject('All'); setShowProjectFilter(false); }}
                             className="text-[8px] font-bold text-indigo-600 uppercase"
                           >
-                            Reset
+                            {t('Reset')}
                           </button>
                         )}
                       </div>
@@ -1794,7 +2005,7 @@ export default function App() {
               </div>
               
               <div className="text-right flex flex-col items-end leading-none hidden sm:flex">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500/50 mb-0.5">Authenticated</span>
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500/50 mb-0.5">{t('Authenticated')}</span>
                 <span className="text-xs font-bold text-slate-700">{user.displayName || user.email?.split('@')[0]}</span>
               </div>
               <div className="w-9 h-9 rounded-xl overflow-hidden border-2 border-white shadow-xl shadow-indigo-100/50 bg-indigo-50 flex items-center justify-center text-indigo-400 shrink-0">
@@ -1807,7 +2018,7 @@ export default function App() {
               <button 
                 onClick={logOut}
                 className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group shrink-0"
-                title="Log Out"
+                title={t('LogOut')}
               >
                 <LogOut size={16} />
               </button>
@@ -1818,7 +2029,7 @@ export default function App() {
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
             >
               <LogIn size={16} />
-              <span className="hidden sm:inline">Sign In</span>
+              <span className="hidden sm:inline">{t('SignIn')}</span>
             </button>
           )}
         </div>
@@ -1833,42 +2044,42 @@ export default function App() {
             className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'dashboard' && mobileView === 'summary' ? "text-indigo-600" : "text-slate-400")}
           >
             <Plus size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Entry</span>
+            <span className="text-[9px] font-bold uppercase tracking-tighter">{t('Entry')}</span>
           </button>
           <button 
             onClick={() => { setViewMode('dashboard'); setMobileView('urgent'); }}
             className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'dashboard' && mobileView === 'urgent' ? "text-red-500" : "text-slate-400")}
           >
             <Zap size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Urgent</span>
+            <span className="text-[9px] font-bold uppercase tracking-tighter">{t('Urgent')}</span>
           </button>
           <button 
             onClick={() => { setViewMode('dashboard'); setMobileView('focus'); }}
             className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'dashboard' && mobileView === 'focus' ? "text-indigo-600" : "text-slate-400")}
           >
             <Target size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Focus</span>
+            <span className="text-[9px] font-bold uppercase tracking-tighter">{t('Focus')}</span>
           </button>
           <button 
             onClick={() => { setViewMode('archive'); setMobileView('archive'); }}
             className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'archive' ? "text-indigo-600" : "text-slate-400")}
           >
             <ArchiveIcon size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Arch</span>
+            <span className="text-[9px] font-bold uppercase tracking-tighter">{t('Archive')}</span>
           </button>
           <button 
             onClick={() => { setViewMode('trash'); setMobileView('trash'); }}
             className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'trash' ? "text-red-500" : "text-slate-400")}
           >
             <Trash2 size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Trash</span>
+            <span className="text-[9px] font-bold uppercase tracking-tighter">{t('Trash')}</span>
           </button>
           <button 
             onClick={() => { setViewMode('settings'); setMobileView('settings'); }}
             className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'settings' ? "text-indigo-600" : "text-slate-400")}
           >
             <SettingsIcon size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Set</span>
+            <span className="text-[9px] font-bold uppercase tracking-tighter">{t('Settings')}</span>
           </button>
         </div>
 
@@ -1897,13 +2108,13 @@ export default function App() {
           ) : (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 shrink-0">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">New Task Entry</h2>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">{t('TaskEntry')}</h2>
                 {/* Desktop layout title helper */}
                 <div className="hidden lg:block h-3" />
               </div>
               <form onSubmit={handleAddTask} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600">Project Code <span className="text-red-500">*</span></label>
+                  <label className="text-xs font-semibold text-slate-600">{t('ProjectCode')} <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <input 
                       list="project-suggestions"
@@ -1921,7 +2132,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600">Task Detail <span className="text-red-500">*</span></label>
+                  <label className="text-xs font-semibold text-slate-600">{t('TaskDetail')} <span className="text-red-500">*</span></label>
                   <textarea 
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none" 
                     placeholder="Details... (Cmd/Ctrl+Enter to save)"
@@ -1997,7 +2208,7 @@ export default function App() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 uppercase tracking-widest text-[9px] opacity-60">
                     <Calendar size={12} className="text-slate-400" />
-                    Deadline
+                    {t('Deadline')}
                   </label>
                   <input 
                     type="date"
@@ -2011,7 +2222,7 @@ export default function App() {
                   disabled={!newTaskTitle.trim() || !newTaskProject.trim()}
                   className="w-full bg-indigo-600 text-white font-semibold py-2 rounded-lg text-sm shadow-md shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50"
                 >
-                  Add to Focus
+                  {t('AddToFocus')}
                 </button>
               </form>
             </div>
@@ -2019,13 +2230,13 @@ export default function App() {
 
           <div className="bg-slate-800 text-slate-300 rounded-xl p-5 shrink-0">
             <h2 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center justify-between">
-              Workflow Health
+              {t('WorkflowHealth')}
               <Activity size={14} className="text-indigo-400" />
             </h2>
             <div className="space-y-4">
               <div className="space-y-2 pb-4 border-b border-slate-700/50">
                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest opacity-40">
-                  <span>Global Load</span>
+                  <span>{t('GlobalLoad')}</span>
                   <span>{stats.focusTasksCount} / {settings.criticalThreshold}</span>
                 </div>
                 <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
@@ -2058,27 +2269,27 @@ export default function App() {
 
                   <div className="pt-2 border-t border-slate-700/50 flex justify-between items-start pt-3">
                 <div className="space-y-1">
-                  <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">System State</p>
+                  <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">{t('SystemState')}</p>
                   <p className={cn("text-[10px] font-bold uppercase leading-none flex items-baseline gap-1", stats.textColor)}>
-                    <span>{stats.focusTasksCount >= settings.criticalThreshold ? 'CRITICAL LOAD' : stats.focusTasksCount >= stats.warningThreshold ? 'WARNING: HIGH LOAD' : 'SAFE CAPACITY'}</span>
+                    <span>{stats.focusTasksCount >= settings.criticalThreshold ? t('CriticalLoad') : stats.focusTasksCount >= stats.warningThreshold ? t('WarningHighLoad') : t('SafeCapacity')}</span>
                     <span className="text-[9px] opacity-70">({stats.loadPercentage}%)</span>
                   </p>
                 </div>
                 <div className="text-right flex flex-col items-end gap-1">
                   <div className="flex flex-col items-end">
-                    <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">Done Today</p>
+                    <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">{t('DoneToday')}</p>
                     <p className="text-[10px] font-bold text-emerald-400 font-mono">{stats.doneToday}</p>
                   </div>
                   <div className="flex gap-3">
                     {stats.pendingDeadlines > 0 && (
                       <div className="flex flex-col items-end">
-                        <p className="text-[9px] font-black uppercase tracking-tighter text-amber-500">Approaching</p>
+                        <p className="text-[9px] font-black uppercase tracking-tighter text-amber-500">{t('Approaching')}</p>
                         <p className="text-[10px] font-bold text-amber-500 font-mono">{stats.pendingDeadlines}</p>
                       </div>
                     )}
                     {stats.expiredDeadlines > 0 && (
                       <div className="flex flex-col items-end">
-                        <p className="text-[9px] font-black uppercase tracking-tighter text-red-500">Expired</p>
+                        <p className="text-[9px] font-black uppercase tracking-tighter text-red-500">{t('Expired')}</p>
                         <p className="text-[10px] font-bold text-red-500 font-mono">{stats.expiredDeadlines}</p>
                       </div>
                     )}
@@ -2091,7 +2302,7 @@ export default function App() {
           {/* Project Distribution Analysis */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 shrink-0 overflow-hidden">
             <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <Activity size={12} /> {activeSection} Projects Overview
+              <Activity size={12} /> {activeSection}{t('ProjectOverview')}
             </h2>
             <div className="space-y-3">
               {(Object.entries(stats.projectStats) as [string, { urgent: number, focus: number, archive: number, trash: number }][])
@@ -2102,7 +2313,7 @@ export default function App() {
                 <div key={proj} className="space-y-1 group">
                   <div className="flex justify-between items-center text-[10px] font-bold">
                     <span className="text-slate-700 truncate max-w-[120px] group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{proj}</span>
-                    <span className="text-slate-400 font-mono text-[9px]">{counts.urgent + counts.focus + counts.archive + counts.trash} total</span>
+                    <span className="text-slate-400 font-mono text-[9px]">{counts.urgent + counts.focus + counts.archive + counts.trash} {t('Total')}</span>
                   </div>
                   <div className="flex h-1 rounded-full overflow-hidden bg-slate-100 shadow-inner">
                     <div className="bg-red-500 transition-all duration-500" style={{ width: `${(counts.urgent / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
@@ -2138,7 +2349,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold flex items-center gap-2 text-red-700">
                       <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-red-500"></span>
-                      Urgent
+                      {t('Urgent')}
                     </h3>
                   </div>
                   <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded border uppercase text-red-400 border-red-100">
@@ -2177,6 +2388,7 @@ export default function App() {
                           onDelete={() => deleteTask(task.id)}
                           onEdit={() => setEditingTask(task)}
                           onStar={() => toggleStar(task.id)}
+                          t={t}
                           variant="Urgent"
                           displayMode={settings.displayMode}
                           deadlineThreshold={settings.deadlineThreshold}
@@ -2186,7 +2398,7 @@ export default function App() {
                   {filteredTasks.filter(t => t.category === 'Urgent').length === 0 && (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                       <Zap size={48} strokeWidth={1} />
-                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">No Urgent Tasks</span>
+                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">{t('NoUrgent')}</span>
                     </div>
                   )}
                 </div>
@@ -2201,14 +2413,14 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold flex items-center gap-2 text-indigo-700">
                       <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-indigo-500"></span>
-                      Focus (Projected)
+                      {t('Focus')}
                     </h3>
                   </div>
                   <button 
                     onClick={() => setIsPickingDaily(true)}
                     className="text-[10px] font-bold text-indigo-500 uppercase tracking-tight hover:underline transition-all"
                   >
-                    Extract &rarr;
+                    {t('Extract')} &rarr;
                   </button>
                 </div>
                 
@@ -2217,7 +2429,7 @@ export default function App() {
                     <div className="space-y-2 mb-4">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600 bg-red-100/50 px-2 py-1.5 rounded-lg border border-red-200 flex items-center gap-2">
                         <AlertCircle size={12} strokeWidth={3} />
-                        Expired Deadlines (Global)
+                        {t('Expired')} (Global)
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
@@ -2233,6 +2445,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               onStar={() => toggleStar(task.id)}
+                              t={t}
                               variant="Focus"
                               displayMode={settings.displayMode}
                               deadlineThreshold={settings.deadlineThreshold}
@@ -2247,7 +2460,7 @@ export default function App() {
                     <div className="space-y-2 mb-8">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 bg-amber-50/50 px-2 py-1.5 rounded-lg border border-amber-100 flex items-center gap-2">
                         <AlertTriangle size={12} strokeWidth={3} />
-                        Approach Deadlines (Global)
+                        {t('Approaching')} (Global)
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
@@ -2263,6 +2476,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               onStar={() => toggleStar(task.id)}
+                              t={t}
                               variant="Focus"
                               displayMode={settings.displayMode}
                               deadlineThreshold={settings.deadlineThreshold}
@@ -2307,6 +2521,7 @@ export default function App() {
                                     onDelete={() => deleteTask(task.id)}
                                     onEdit={() => setEditingTask(task)}
                                     onStar={() => toggleStar(task.id)}
+                                    t={t}
                                     variant="Focus"
                                     displayMode={settings.displayMode}
                                     deadlineThreshold={settings.deadlineThreshold}
@@ -2322,7 +2537,7 @@ export default function App() {
                     groupedFocusTasks.nearDeadline.length === 0 && (
                       <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                         <Target size={48} strokeWidth={1} />
-                        <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">No Focus Tasks</span>
+                        <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">{t('NoFocus')}</span>
                       </div>
                     )
                   )}
@@ -2336,7 +2551,7 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <h3 className="font-bold flex items-center gap-2 text-slate-700 text-lg">
                     <ArchiveIcon size={22} className="text-slate-400" />
-                    System Archive
+                    {t('Archive')}
                   </h3>
                   {/* Filter controls */}
                   <div className="flex items-center gap-1.5">
@@ -2385,7 +2600,7 @@ export default function App() {
                   <p className="text-[10px] uppercase font-black tracking-widest text-slate-400">
                     {settings.archiveThresholdDays === 99999 
                       ? "Archive is permanent" 
-                      : `Inactive items moved to trash after ${settings.archiveThresholdDays} days`}
+                      : `${t('InactiveMoveToTrash')} ${settings.archiveThresholdDays} ${t('Days')}`}
                   </p>
                 </div>
                 
@@ -2406,7 +2621,7 @@ export default function App() {
                       <div className="flex items-center gap-4 px-2">
                         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
                           <AlertTriangle size={10} />
-                          Moving to Trash Soon {"(< 3 days)"}
+                          {t('MovingSoon')} {"(< 3 days)"}
                         </h4>
                         <div className="h-px flex-1 bg-red-100"></div>
                       </div>
@@ -2424,6 +2639,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               onStar={() => toggleStar(task.id)}
+                              t={t}
                               variant="Archive"
                               displayMode={settings.displayMode}
                               deadlineThreshold={settings.deadlineThreshold}
@@ -2473,6 +2689,7 @@ export default function App() {
                                   onDelete={() => deleteTask(task.id)}
                                   onEdit={() => setEditingTask(task)}
                                   onStar={() => toggleStar(task.id)}
+                                  t={t}
                                   variant="Archive"
                                   displayMode={settings.displayMode}
                                   deadlineThreshold={settings.deadlineThreshold}
@@ -2488,7 +2705,7 @@ export default function App() {
                   groupedArchiveTasks.nearingPurge.length === 0 && (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                       <ArchiveIcon size={48} strokeWidth={1} />
-                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">Archive Empty</span>
+                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">{t('ArchiveEmpty')}</span>
                     </div>
                   )
                 )}
@@ -2501,7 +2718,7 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <h3 className="font-bold flex items-center gap-2 text-red-700 text-lg whitespace-nowrap">
                     <Trash2 size={22} className="text-red-400 shrink-0" />
-                    Trash Bin
+                    {t('Trash')}
                   </h3>
                   {/* Filter controls */}
                   <div className="flex items-center gap-1.5">
@@ -2549,7 +2766,7 @@ export default function App() {
                   <p className="text-[10px] uppercase font-black tracking-widest text-red-400">
                     {settings.trashCleanupThresholdDays === 99999 
                       ? "Trash is permanent" 
-                      : `Permanently deleted after ${settings.trashCleanupThresholdDays} days`}
+                      : `${t('PermanentDeleteAfter')} ${settings.trashCleanupThresholdDays} ${t('Days')}`}
                   </p>
                 </div>
                 
@@ -2558,7 +2775,7 @@ export default function App() {
                   className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 rounded-xl text-[10px] font-black text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-sm uppercase tracking-wider"
                 >
                   <Zap size={12} />
-                  Empty Trash
+                  {t('EmptyTrash')}
                 </button>
               </div>
               
@@ -2568,7 +2785,7 @@ export default function App() {
                       <div className="flex items-center gap-4 px-2">
                         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
                           <AlertTriangle size={10} />
-                          Permanent Deletion Soon {"(< 3 days)"}
+                          {t('DeletingSoon')} {"(< 3 days)"}
                         </h4>
                         <div className="h-px flex-1 bg-red-100"></div>
                       </div>
@@ -2586,6 +2803,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               onStar={() => toggleStar(task.id)}
+                              t={t}
                               variant="Trash"
                               displayMode={settings.displayMode}
                               deadlineThreshold={settings.deadlineThreshold}
@@ -2635,6 +2853,7 @@ export default function App() {
                                   onDelete={() => deleteTask(task.id)}
                                   onEdit={() => setEditingTask(task)}
                                   onStar={() => toggleStar(task.id)}
+                                  t={t}
                                   variant="Trash"
                                   displayMode={settings.displayMode}
                                   deadlineThreshold={settings.deadlineThreshold}
@@ -2650,7 +2869,7 @@ export default function App() {
                   groupedTrashTasks.nearingPurge.length === 0 && (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                       <Trash2 size={48} strokeWidth={1} />
-                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">Trash Bin is Empty</span>
+                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">{t('TrashEmpty')}</span>
                     </div>
                   )
                 )}
@@ -2665,8 +2884,8 @@ export default function App() {
                     <SettingsIcon size={28} />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-800">System Preferences</h2>
-                    <p className="text-sm text-slate-500">Tune your focus algorithms and capacity thresholds.</p>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-800">{t('Settings')}</h2>
+                    <p className="text-sm text-slate-500">{t('SelectLanguageDesc')}</p>
                   </div>
                 </div>
 
@@ -2675,12 +2894,12 @@ export default function App() {
                   <div className="bg-slate-50 rounded-3xl p-6 md:p-8 border border-slate-100 shadow-sm space-y-6">
                     <div className="flex items-center gap-2 text-indigo-600">
                       <Download size={20} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Data Lifecycle</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">{t('DataLifecycle')}</h3>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-white p-4 rounded-2xl border border-slate-100">
-                        <p className="text-xs font-bold text-slate-800 mb-1">Export Data</p>
+                        <p className="text-xs font-bold text-slate-800 mb-1">{t('ExportData')}</p>
                         <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Backup to TriFocus CSV</p>
                         <button 
                           onClick={() => {
@@ -2698,7 +2917,7 @@ export default function App() {
                       </div>
 
                       <div className="bg-white p-4 rounded-2xl border border-slate-100">
-                        <p className="text-xs font-bold text-slate-800 mb-1">Import Data</p>
+                        <p className="text-xs font-bold text-slate-800 mb-1">{t('ImportData')}</p>
                         <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Restore from TriFocus CSV</p>
                         <label className="flex items-center justify-center gap-2 w-full py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all cursor-pointer">
                           <Upload size={14} /> Import CSV
@@ -2712,7 +2931,7 @@ export default function App() {
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-4 text-slate-600">
                       <UserIcon size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Account Information</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">{t('AccountInformation')}</h3>
                     </div>
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
@@ -2724,8 +2943,8 @@ export default function App() {
                           )}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 truncate max-w-[200px]">{user?.displayName || 'Personal Account'}</p>
-                          <p className="text-[10px] text-slate-500 truncate max-w-[200px]">{user?.email || 'Not signed in'}</p>
+                          <p className="font-bold text-slate-900 truncate max-w-[200px]">{user?.displayName || t('PersonalAccount')}</p>
+                          <p className="text-[10px] text-slate-500 truncate max-w-[200px]">{user?.email || t('NotSignedIn')}</p>
                         </div>
                       </div>
                       <div className="flex flex-col md:items-end gap-1">
@@ -2733,16 +2952,50 @@ export default function App() {
                           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border self-start md:self-auto",
                           user ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-slate-100 text-slate-400 border-slate-200"
                         )}>
-                          {user ? 'Cloud Synced' : 'Local Only'}
+                          {user ? t('CloudSynced') : t('LocalOnly')}
                         </span>
                         {user && (
                           <button 
                             onClick={logOut}
                             className="text-[10px] font-bold text-red-500 hover:underline flex items-center gap-1"
                           >
-                            <LogOut size={10} /> Disconnect account
+                            <LogOut size={10} /> {t('DisconnectAccount')}
                           </button>
                         )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Language Settings */}
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                    <div className="flex items-center gap-2 mb-4 text-indigo-600">
+                      <Languages size={18} />
+                      <h3 className="font-bold text-sm uppercase tracking-wider">{t('Language')}</h3>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900">{t('Language')}</p>
+                        <p className="text-xs text-slate-500">Select your preferred interface language.</p>
+                      </div>
+                      <div className="flex bg-white border border-slate-200 rounded-xl p-1 overflow-hidden shadow-sm">
+                        <button 
+                          onClick={() => saveSettings({ ...settings, language: 'en' })}
+                          className={cn(
+                            "px-4 py-2 rounded-lg text-xs font-bold transition-all",
+                            settings.language === 'en' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
+                          )}
+                        >
+                          {t('English')}
+                        </button>
+                        <button 
+                          onClick={() => saveSettings({ ...settings, language: 'ja' })}
+                          className={cn(
+                            "px-4 py-2 rounded-lg text-xs font-bold transition-all",
+                            settings.language === 'ja' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
+                          )}
+                        >
+                          {t('Japanese')}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2751,12 +3004,12 @@ export default function App() {
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-4 text-amber-600">
                       <Zap size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Urgent Capacity</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">{t('UrgentCapacity')}</h3>
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-bold text-slate-900">Urgent Slot Limit</p>
-                        <p className="text-xs text-slate-500">Maximum concurrent priority tasks allowed.</p>
+                        <p className="font-bold text-slate-900">{t('UrgentSlotLimit')}</p>
+                        <p className="text-xs text-slate-500">{t('MaxConcurrentUrgent')}</p>
                       </div>
                       <div className="flex items-center gap-3">
                         <button 
@@ -2776,14 +3029,14 @@ export default function App() {
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-6 text-indigo-600">
                       <Activity size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Health Metrics</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">{t('HealthMetrics')}</h3>
                     </div>
                     <div className="space-y-8">
                       <div className="space-y-4">
                         <div className="flex justify-between items-end">
                           <div>
-                            <p className="font-bold text-slate-900">Critical Threshold</p>
-                            <p className="text-xs text-slate-500">Maximum focus tasks before critical alert. Warning is at 70%.</p>
+                            <p className="font-bold text-slate-900">{t('CriticalThreshold')}</p>
+                            <p className="text-xs text-slate-500">{t('CriticalAlertDesc')}</p>
                           </div>
                           <div className="flex items-center gap-2">
                              <input 
@@ -2792,7 +3045,7 @@ export default function App() {
                               value={settings.criticalThreshold}
                               onChange={(e) => saveSettings({ ...settings, criticalThreshold: Math.max(5, parseInt(e.target.value) || 5) })}
                             />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Items</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">{t('Items')}</span>
                           </div>
                         </div>
                         <input 
@@ -2802,8 +3055,8 @@ export default function App() {
                           onChange={(e) => saveSettings({ ...settings, criticalThreshold: parseInt(e.target.value) })}
                         />
                         <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                          <span>5 items</span>
-                          <span>100 items</span>
+                          <span>5 {t('Items')}</span>
+                          <span>100 {t('Items')}</span>
                         </div>
                       </div>
 
@@ -2821,8 +3074,8 @@ export default function App() {
                       <div className="pt-4 border-t border-slate-200/60">
                         <div className="flex justify-between items-center mb-4">
                           <div>
-                            <p className="font-bold text-slate-900">Deadline Threshold</p>
-                            <p className="text-xs text-slate-500">Days before deadline to prioritize task in Focus list.</p>
+                            <p className="font-bold text-slate-900">{t('DeadlineThreshold')}</p>
+                            <p className="text-xs text-slate-500">{t('DeadlineThresholdDesc')}</p>
                           </div>
                           <div className="flex items-center gap-2">
                              <input 
@@ -2831,7 +3084,7 @@ export default function App() {
                               value={settings.deadlineThreshold}
                               onChange={(e) => saveSettings({ ...settings, deadlineThreshold: Math.max(1, parseInt(e.target.value) || 1) })}
                             />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Days</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">{t('Days')}</span>
                           </div>
                         </div>
                         <input 
@@ -2841,8 +3094,8 @@ export default function App() {
                           onChange={(e) => saveSettings({ ...settings, deadlineThreshold: parseInt(e.target.value) })}
                         />
                         <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                          <span>1 day</span>
-                          <span>14 days</span>
+                          <span>1 {t('Days')}</span>
+                          <span>14 {t('Days')}</span>
                         </div>
                       </div>
                     </div>
@@ -2852,42 +3105,42 @@ export default function App() {
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-4 text-emerald-600">
                       <RefreshCcw size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Done & Trash Lifecycle</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">{t('DoneTrashLifecycle')}</h3>
                     </div>
                     <div className="space-y-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-bold text-slate-900">Done to Trash</p>
-                          <p className="text-xs text-slate-500">How long to keep completed tasks in Focus before Trashing.</p>
+                          <p className="font-bold text-slate-900">{t('DoneToTrash')}</p>
+                          <p className="text-xs text-slate-500">{t('DoneToTrashDesc')}</p>
                         </div>
                         <select 
                           className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm"
                           value={settings.doneToTrashThresholdDays}
                           onChange={(e) => saveSettings({ doneToTrashThresholdDays: parseInt(e.target.value) })}
                         >
-                          <option value={1}>1 Day (Clean)</option>
-                          <option value={3}>3 Days (Pragmatic)</option>
-                          <option value={7}>7 Days (Standard)</option>
-                          <option value={14}>14 Days (Relaxed)</option>
-                          <option value={99999}>Never (Manual only)</option>
+                          <option value={1}>1 {t('Days')}</option>
+                          <option value={3}>3 {t('Days')}</option>
+                          <option value={7}>7 {t('Days')}</option>
+                          <option value={14}>14 {t('Days')}</option>
+                          <option value={99999}>{t('Reset')}</option>
                         </select>
                       </div>
 
                       <div className="pt-6 border-t border-slate-200/60 flex items-center justify-between">
                         <div>
-                          <p className="font-bold text-slate-900">Trash Auto-Cleanup</p>
-                          <p className="text-xs text-slate-500">Permanently delete items in Trash after this period.</p>
+                          <p className="font-bold text-slate-900">{t('TrashAutoCleanup')}</p>
+                          <p className="text-xs text-slate-500">{t('TrashAutoCleanupDesc')}</p>
                         </div>
                         <select 
                           className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm"
                           value={settings.trashCleanupThresholdDays}
                           onChange={(e) => saveSettings({ trashCleanupThresholdDays: parseInt(e.target.value) })}
                         >
-                          <option value={7}>7 Days (Aggressive)</option>
-                          <option value={14}>14 Days (Balanced)</option>
-                          <option value={30}>30 Days (Standard)</option>
-                          <option value={90}>90 Days (Relaxed)</option>
-                          <option value={99999}>Never (Stays in Trash)</option>
+                          <option value={7}>7 {t('Days')}</option>
+                          <option value={14}>14 {t('Days')}</option>
+                          <option value={30}>30 {t('Days')}</option>
+                          <option value={90}>90 {t('Days')}</option>
+                          <option value={99999}>{t('NeverCleanup')}</option>
                         </select>
                       </div>
                     </div>
@@ -2897,23 +3150,23 @@ export default function App() {
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-4 text-slate-600">
                       <ArchiveIcon size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Auto-Archive Sweep</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">{t('AutoArchiveSweep')}</h3>
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-bold text-slate-900">Archive Threshold</p>
-                        <p className="text-xs text-slate-500">Inactivity period before automatic archiving.</p>
+                        <p className="font-bold text-slate-900">{t('ArchiveThreshold')}</p>
+                        <p className="text-xs text-slate-500">{t('ArchiveThresholdDesc')}</p>
                       </div>
                       <select 
                         className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
                         value={settings.archiveThresholdDays}
                         onChange={(e) => saveSettings({ archiveThresholdDays: parseInt(e.target.value) })}
                       >
-                        <option value={7}>7 Days (Aggressive)</option>
-                        <option value={14}>14 Days (Balanced)</option>
-                        <option value={30}>30 Days (Standard)</option>
-                        <option value={90}>90 Days (Relaxed)</option>
-                        <option value={99999}>Never (Manual only)</option>
+                        <option value={7}>7 {t('Days')}</option>
+                        <option value={14}>14 {t('Days')}</option>
+                        <option value={30}>30 {t('Days')}</option>
+                        <option value={90}>90 {t('Days')}</option>
+                        <option value={99999}>{t('Never')}</option>
                       </select>
                     </div>
                   </div>
@@ -2922,7 +3175,7 @@ export default function App() {
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                     <div className="flex items-center gap-2 mb-6 text-emerald-600">
                       <Download size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Sync & Backup</h3>
+                      <h3 className="font-bold text-sm uppercase tracking-wider">{t('SyncAndBackup')}</h3>
                     </div>
                     
                     <div className="space-y-6">
@@ -2930,8 +3183,8 @@ export default function App() {
                       <div className="pb-6 border-b border-slate-200">
                         <div className="flex items-center justify-between mb-4">
                           <div>
-                            <p className="font-bold text-slate-900">Local Folder Log</p>
-                            <p className="text-xs text-slate-500">Continuous CSV snapshots to your machine.</p>
+                            <p className="font-bold text-slate-900">{t('LocalFolderLog')}</p>
+                            <p className="text-xs text-slate-500">{t('LocalFolderLogDesc')}</p>
                           </div>
                           <button 
                             onClick={() => saveSettings({ isLocalBackupEnabled: !settings.isLocalBackupEnabled })}
@@ -2952,10 +3205,10 @@ export default function App() {
                         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-inner">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1 min-w-0">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Local Directory Path</label>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">{t('LocalDirectoryPath')}</label>
                               <div className="text-xs font-mono break-all py-1.5 text-slate-600 bg-slate-50 px-2 rounded border border-slate-100 flex items-center gap-2">
                                 <Activity size={10} className="shrink-0 opacity-50" />
-                                {settings.localBackupPath || 'No folder selected'}
+                                {settings.localBackupPath || t('NoFolderSelected')}
                               </div>
                             </div>
                             <div className="flex gap-1 shrink-0 pt-5">
@@ -2969,7 +3222,7 @@ export default function App() {
                                       : "bg-indigo-600 hover:bg-indigo-700 text-white"
                                   )}
                                 >
-                                  {!dirHandle && settings.localBackupPath ? 'Authorize Session' : 'Select Folder'}
+                                  {!dirHandle && settings.localBackupPath ? t('AuthorizeSession') : t('SelectFolder')}
                                 </button>
                                 <button 
                                   onClick={downloadBackup}
@@ -2980,17 +3233,17 @@ export default function App() {
                                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
                                   )}
                                 >
-                                  <Download size={10} /> {window.showDirectoryPicker ? 'Manual Local Backup' : 'Save Backup to Local'}
+                                  <Download size={10} /> {window.showDirectoryPicker ? t('ManualLocalBackup') : t('SaveBackupToLocal')}
                                 </button>
                                 {!window.showDirectoryPicker && (
                                   <div className="mt-1 flex flex-col gap-0.5">
                                     <div className="flex items-center gap-1 text-[8px] text-slate-400 font-bold uppercase tracking-widest">
                                       <Clock size={8} />
-                                      Last saved: {lastBackupTime ? format(lastBackupTime, 'MM/dd HH:mm') : 'Never'}
+                                      {t('LastSaved')}: {lastBackupTime ? format(lastBackupTime, 'MM/dd HH:mm') : t('Never')}
                                     </div>
                                     {lastBackupTime && (Date.now() - lastBackupTime > 24 * 60 * 60 * 1000) && (
                                       <div className="flex items-center gap-1 text-[8px] text-amber-500 font-bold uppercase tracking-widest animate-pulse">
-                                        <AlertTriangle size={8} /> Recommendation: Daily Update
+                                        <AlertTriangle size={8} /> {t('DailyUpdateRecommendation')}
                                       </div>
                                     )}
                                   </div>
@@ -3009,7 +3262,7 @@ export default function App() {
                           </div>
                           {settings.localBackupPath && !dirHandle && (
                             <p className="text-[9px] text-amber-600 mt-2 font-bold flex items-center gap-1">
-                              <Zap size={10} /> Permission needed to resume logging after browser refresh.
+                              <Zap size={10} /> {t('PermissionNeeded')}
                             </p>
                           )}
                         </div>
@@ -3017,19 +3270,19 @@ export default function App() {
 
                       <div className="pt-6 border-t border-slate-200">
                         <p className="font-bold text-red-600 flex items-center gap-2 mb-1">
-                          <AlertTriangle size={16} /> Danger Zone
+                          <AlertTriangle size={16} /> {t('DangerZone')}
                         </p>
                         <p className="text-[10px] text-slate-500 mb-4 uppercase font-black tracking-widest">Database Maintenance & Repair</p>
                         
                         <div className="bg-red-50 border border-red-100 rounded-xl p-4">
                           <p className="text-[11px] text-red-800 font-bold mb-3 leading-relaxed">
-                            Reset your custom workspaces and system preferences to factory defaults.
+                            {t('ResetSettingsDesc')}
                           </p>
                           <button 
                             onClick={forceResetSettings}
                             className="w-full py-2.5 mb-3 bg-red-100 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-200 transition-all flex items-center justify-center gap-2 border border-red-200"
                           >
-                            <RefreshCcw size={14} /> Force Reset Settings to Defaults
+                            <RefreshCcw size={14} /> {t('ForceResetSettings')}
                           </button>
                           
                           <div className="h-px bg-red-200/50 my-4" />
@@ -3091,6 +3344,7 @@ export default function App() {
             tasks={tasks.filter(t => t.category === 'Focus' && !t.isDone)} 
             onClose={() => setIsPickingDaily(false)} 
             onPick={pickDailyTasks} 
+            t={t}
             currentUrgentCount={stats.urgentCount}
             limit={settings.urgentLimit}
           />
@@ -3102,6 +3356,7 @@ export default function App() {
             onSave={(updates) => updateTask(editingTask.id, updates)}
             onMove={(newCat) => moveTask(editingTask.id, newCat)}
             onDelete={() => deleteTask(editingTask.id)}
+            t={t}
           />
         )}
       </AnimatePresence>
@@ -3116,13 +3371,14 @@ interface TaskCardProps {
   onDelete: () => void;
   onEdit: () => void;
   onStar: () => void;
+  t: (key: string) => string;
   variant?: 'Urgent' | 'Focus' | 'Archive' | 'Trash';
   displayMode?: 'card' | 'list';
   deadlineThreshold?: number;
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ 
-  task, onToggle, onMove, onDelete, onEdit, onStar, 
+  task, onToggle, onMove, onDelete, onEdit, onStar, t,
   variant = 'Focus',
   displayMode = 'card',
   deadlineThreshold = 3
@@ -3405,7 +3661,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 };
 
 
-function DailyPickModal({ tasks, onClose, onPick, currentUrgentCount, limit }: { tasks: Task[]; onClose: () => void; onPick: (ids: string[]) => void; currentUrgentCount: number; limit: number }) {
+function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }: { tasks: Task[]; onClose: () => void; onPick: (ids: string[]) => void; t: (key: string) => string; currentUrgentCount: number; limit: number }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const remainingSlots = limit - currentUrgentCount;
 
@@ -3499,7 +3755,7 @@ function DailyPickModal({ tasks, onClose, onPick, currentUrgentCount, limit }: {
   );
 }
 
-function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task; onClose: () => void; onSave: (updates: Partial<Task>) => void; onMove: (cat: Category) => void; onDelete: () => void }) {
+function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: Task; onClose: () => void; onSave: (updates: Partial<Task>) => void; onMove: (cat: Category) => void; onDelete: () => void; t: (key: string) => string }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes || '');
   const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
@@ -3567,7 +3823,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 />
               </div>
               <div className="shrink-0 flex flex-col items-center gap-2">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Star</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Star')}</label>
                 <button 
                   type="button"
                   onClick={() => setIsStarred(!isStarred)}
@@ -3583,17 +3839,17 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between px-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Memos / Context</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Memos')}</label>
                 <button 
                   type="button"
                   onClick={() => setIsMemoModalOpen(true)}
                   className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"
                 >
-                  <ExternalLink size={10} /> Maximize
+                  <ExternalLink size={10} /> {t('Maximize')}
                 </button>
               </div>
               <textarea 
-                placeholder="Memos / context... (Cmd/Ctrl+Enter to save)"
+                placeholder={t('ContextSubtasks')}
                 className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all resize-none h-32"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -3616,7 +3872,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5 opacity-60">
                 <Calendar size={12} />
-                Task Deadline
+                {t('Deadline')}
               </label>
               <input 
                 type="date"
@@ -3628,13 +3884,13 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
 
             <div className="space-y-3">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
-                <span className="flex items-center gap-1.5"><LinkIcon size={10} /> Links / URLs</span>
+                <span className="flex items-center gap-1.5"><LinkIcon size={10} /> {t('Urls')}</span>
                 <button 
                   type="button" 
                   onClick={addUrlField}
                   className="text-indigo-600 hover:underline px-2"
                 >
-                  + Add Link
+                  + {t('Add')}
                 </button>
               </label>
               <div className="space-y-2">
@@ -3642,7 +3898,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                   <div key={idx} className="flex gap-2">
                     <input 
                       type="url"
-                      placeholder="https://... (Cmd/Ctrl+Enter to save)"
+                      placeholder={t('UrlPlaceholder')}
                       className="flex-1 px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-xl text-sm font-medium outline-none transition-all"
                       value={u}
                       onChange={(e) => updateUrlField(idx, e.target.value)}
@@ -3670,14 +3926,14 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 onClick={onClose}
                 className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all active:scale-95"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button 
                 type="submit"
                 disabled={!title.trim()}
                 className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-50 transition-all active:scale-95 shadow-xl shadow-indigo-100"
               >
-                Commit Changes (Cmd+Enter)
+                {t('CommitChanges')}
               </button>
             </div>
           </form>
@@ -3686,7 +3942,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
         {/* Sidebar Actions */}
         <div className="bg-slate-50 p-6 md:p-8 w-full md:w-64 border-l border-slate-100 flex flex-col overflow-y-auto custom-scrollbar pb-24 md:pb-8">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">System Actions</h3>
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t('SystemActions')}</h3>
             <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hidden md:flex">
               <X size={20} />
             </button>
@@ -3699,7 +3955,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-xs font-bold text-red-600 hover:bg-red-100 transition-all group"
               >
                 <Zap size={16} className="text-red-400" />
-                Move to Urgent
+                {t('MoveToUrgent')}
               </button>
             )}
             {task.category === 'Archive' && (
@@ -3708,7 +3964,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-bold text-emerald-600 hover:bg-emerald-100 transition-all group"
               >
                 <RefreshCcw size={16} className="text-emerald-400" />
-                Restore to Focus
+                {t('RestoreToFocus')}
               </button>
             )}
             {task.category !== 'Archive' && task.category !== 'Trash' && (
@@ -3717,7 +3973,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all group"
               >
                 <ArchiveIcon size={16} className="text-slate-300 group-hover:text-indigo-400" />
-                Archive Task
+                {t('ArchiveTask')}
               </button>
             )}
             {task.category !== 'Trash' ? (
@@ -3726,7 +3982,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-red-500 hover:bg-red-50 hover:border-red-200 transition-all"
               >
                 <Trash2 size={16} className="text-red-300" />
-                Move to Trash
+                {t('MoveToTrash')}
               </button>
             ) : (
               <div className="space-y-2">
@@ -3735,14 +3991,14 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                   className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all"
                 >
                   <RefreshCcw size={16} className="text-indigo-400" />
-                  Restore to Focus
+                  {t('RestoreToFocus')}
                 </button>
                 <button 
-                  onClick={() => { if(confirm('Delete this task permanently?')) { onDelete(); onClose(); } }}
+                  onClick={() => { if(confirm(t('DeleteConfirm'))) { onDelete(); onClose(); } }}
                   className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-lg shadow-red-100"
                 >
                   <Trash2 size={16} />
-                  Delete Permanently
+                  {t('DeletePermanently')}
                 </button>
               </div>
             )}
@@ -3750,7 +4006,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
 
           <div className="mt-auto pt-8">
             <div className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm transition-all">
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mb-2">Metadata</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mb-2">{t('Metadata')}</p>
               <div className="space-y-1.5 font-mono text-[9px] text-slate-500">
                 <div className="flex justify-between">
                   <span>ID:</span>

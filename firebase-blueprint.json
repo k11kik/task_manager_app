@@ -32,9 +32,10 @@
         "warningThreshold": { "type": "number" },
         "criticalThreshold": { "type": "number" },
         "isLocalBackupEnabled": { "type": "boolean" },
-        "localBackupPath": { "type": "string" }
+        "localBackupPath": { "type": "string" },
+        "language": { "type": "string", "enum": ["en", "ja"] }
       },
-      "required": ["userId", "urgentLimit", "archiveThresholdDays", "warningThreshold", "criticalThreshold", "isLocalBackupEnabled", "localBackupPath"]
+      "required": ["userId", "urgentLimit", "archiveThresholdDays", "warningThreshold", "criticalThreshold", "isLocalBackupEnabled", "localBackupPath", "language"]
     }
   },
   "firestore": {

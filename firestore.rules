@@ -61,6 +61,7 @@ service cloud.firestore {
           && data.isLocalBackupEnabled is bool
           && data.localBackupPath is string
           && (data.get('displayMode', 'card') in ['card', 'list'])
+          && (data.get('language', 'en') in ['en', 'ja'])
           && (data.get('sections', ['General']) is list);
       }
 
