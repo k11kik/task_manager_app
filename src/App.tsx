@@ -940,23 +940,47 @@ export default function App() {
     });
   };
 
-  const downloadBackup = () => {
+  const downloadBackup = async () => {
     const csv = getCSVData();
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
     const userPart = user?.email?.split('@')[0] || 'local';
+    const fileName = `TriFocus_Log_${userPart}_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
     const now = Date.now();
-    link.setAttribute('href', url);
-    link.setAttribute('download', `TriFocus_Log_${userPart}_Manual.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    setLastBackupTime(now);
-    localStorage.setItem('trifocus_last_backup', now.toString());
-    setMessage({ text: "Backup file downloaded successfully.", type: 'info' });
+
+    try {
+      if ((window as any).showSaveFilePicker) {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{
+            description: 'CSV File',
+            accept: { 'text/csv': ['.csv'] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(csv);
+        await writable.close();
+      } else {
+        // Fallback for older browsers or restricted environments
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+      
+      setLastBackupTime(now);
+      localStorage.setItem('trifocus_last_backup', now.toString());
+      setMessage({ text: "Backup saved successfully.", type: 'info' });
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error("Backup Save Error", err);
+        setMessage({ text: `Save Failed: ${err.message}`, type: 'error' });
+      }
+    }
   };
 
   const selectBackupFolder = async () => {
@@ -3615,12 +3639,16 @@ function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: 
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
       />
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-4xl h-[80vh] bg-white rounded-[2rem] shadow-2xl flex flex-col overflow-hidden"
       >
         <div className="flex items-center justify-between p-6 bg-slate-50 border-b border-slate-100">
@@ -3634,7 +3662,11 @@ function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: 
             </div>
           </div>
           <button 
-            onClick={onClose}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             className="p-3 bg-white hover:bg-slate-100 text-slate-400 rounded-2xl border border-slate-200 transition-all"
           >
             <X size={20} />
@@ -3648,6 +3680,7 @@ function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: 
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                 onClose();
               }
@@ -3664,7 +3697,11 @@ function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: 
              </div>
           </div>
           <button 
-            onClick={onClose}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200 transition-all"
           >
             Finish Editing
