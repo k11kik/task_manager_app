@@ -943,7 +943,7 @@ export default function App() {
   const downloadBackup = async () => {
     const csv = getCSVData();
     const userPart = user?.email?.split('@')[0] || 'local';
-    const fileName = `TriFocus_Log_${userPart}_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
+    const fileName = `TriFocus_Log_${userPart}_Manual.csv`;
     const now = Date.now();
 
     try {
