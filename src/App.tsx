@@ -747,18 +747,34 @@ export default function App() {
 
   const emptyTrash = async () => {
     if (!user) return;
-    const trashTasks = tasks.filter(t => t.category === 'Trash');
-    if (trashTasks.length === 0) return;
+    
+    // Respect active filters (Project, Section, and Time Filter)
+    const now = Date.now();
+    const oneWeek = 7 * 86400000;
+    const twoWeeks = 14 * 86400000;
 
-    if (!window.confirm(`Permanently delete all ${trashTasks.length} items in the trash? This cannot be undone.`)) return;
+    const trashTasksVisible = filteredTasks.filter(t => {
+      if (t.category !== 'Trash') return false;
+      const age = now - (t.updatedAt || t.createdAt);
+      if (trashFilter === '1w') return age >= oneWeek;
+      if (trashFilter === '2w') return age >= twoWeeks;
+      return true;
+    });
+
+    if (trashTasksVisible.length === 0) {
+      setMessage({ text: "No trash items match current filter criteria.", type: 'info' });
+      return;
+    }
+
+    if (!window.confirm(`Permanently delete ${trashTasksVisible.length} items matching current filters? This cannot be undone.`)) return;
 
     try {
       const batch = writeBatch(db);
-      trashTasks.forEach(t => {
+      trashTasksVisible.forEach(t => {
         batch.delete(doc(db, 'tasks', t.id));
       });
       await batch.commit();
-      setMessage({ text: `${trashTasks.length} items permanently deleted.`, type: 'info' });
+      setMessage({ text: `${trashTasksVisible.length} items permanently deleted.`, type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'batch/empty-trash');
     }
@@ -1045,7 +1061,8 @@ export default function App() {
       
       const cutoff = activeThreshold ? now - (activeThreshold * 24 * 60 * 60 * 1000) : null;
       
-      const archiveTasks = tasks.filter(t => {
+      // Respect project and section filters by using filteredTasks
+      const archiveTasks = filteredTasks.filter(t => {
         if (t.category !== 'Archive') return false;
         if (!cutoff) return true;
         return (t.updatedAt || t.createdAt) < cutoff;
@@ -1056,14 +1073,14 @@ export default function App() {
         return;
       }
 
-      if (!window.confirm(`Delete ${archiveTasks.length} archived items matching current filter?`)) return;
+      if (!window.confirm(`Delete ${archiveTasks.length} archived items matching current filters?`)) return;
 
-      let count = 0;
-      for (const task of archiveTasks) {
-        await deleteDoc(doc(db, 'tasks', task.id));
-        count++;
-      }
-      setMessage({ text: `Archive cleanup complete: ${count} items removed.`, type: 'info' });
+      const batch = writeBatch(db);
+      archiveTasks.forEach(task => {
+        batch.delete(doc(db, 'tasks', task.id));
+      });
+      await batch.commit();
+      setMessage({ text: `Archive cleanup complete: ${archiveTasks.length} items removed.`, type: 'info' });
     } catch (err: any) {
       console.error("Archive cleanup error", err);
       setMessage({ text: `Archive Error: ${err.message}`, type: 'error' });
@@ -2120,42 +2137,6 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <div className="relative">
                       <button 
-                        onClick={() => setShowProjectFilter(!showProjectFilter)}
-                        className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
-                          selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-white border-slate-200 text-slate-400"
-                        )}
-                      >
-                        <Filter size={10} />
-                        {selectedProject === 'All' ? 'Project' : selectedProject}
-                      </button>
-                      {showProjectFilter && (
-                        <>
-                          <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
-                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
-                            {projects.map(p => (
-                              <button
-                                key={p}
-                                onClick={() => {
-                                  setSelectedProject(p);
-                                  setShowProjectFilter(false);
-                                }}
-                                className={cn(
-                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
-                                  selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                                )}
-                              >
-                                <span className="truncate">{p}</span>
-                                {selectedProject === p && <CheckCircle2 size={10} />}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="relative">
-                      <button 
                         onClick={() => setShowCleanupMenu(!showCleanupMenu)}
                         className={cn(
                           "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
@@ -2163,12 +2144,12 @@ export default function App() {
                         )}
                       >
                         <Clock size={10} />
-                        {archiveFilter === 'all' ? 'Time' : archiveFilter}
+                        {archiveFilter === 'all' ? 'Time Filter' : archiveFilter}
                       </button>
                       {showCleanupMenu && (
                         <>
                           <div className="fixed inset-0 z-[80]" onClick={() => setShowCleanupMenu(false)} />
-                          <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                          <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
                             {[
                               { id: 'all', label: 'All Items' },
                               { id: '1w', label: 'Older than 1 week' },
@@ -2181,7 +2162,7 @@ export default function App() {
                                   setShowCleanupMenu(false);
                                 }}
                                 className={cn(
-                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                  "w-full text-left px-3 py-2 text-[10px] font-bold transition-all flex items-center justify-between",
                                   archiveFilter === f.id ? "bg-rose-50 text-rose-600" : "text-slate-600 hover:bg-slate-50"
                                 )}
                               >
@@ -2319,42 +2300,6 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <div className="relative">
                       <button 
-                        onClick={() => setShowProjectFilter(!showProjectFilter)}
-                        className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
-                          selectedProject !== 'All' ? "bg-red-100 border-red-200 text-red-700" : "bg-white border-red-100 text-red-300"
-                        )}
-                      >
-                        <Filter size={10} />
-                        {selectedProject === 'All' ? 'Project' : selectedProject}
-                      </button>
-                      {showProjectFilter && (
-                        <>
-                          <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
-                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
-                            {projects.map(p => (
-                              <button
-                                key={p}
-                                onClick={() => {
-                                  setSelectedProject(p);
-                                  setShowProjectFilter(false);
-                                }}
-                                className={cn(
-                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
-                                  selectedProject === p ? "bg-red-50 text-red-600" : "text-slate-600 hover:bg-slate-50"
-                                )}
-                              >
-                                <span className="truncate">{p}</span>
-                                {selectedProject === p && <CheckCircle2 size={10} />}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="relative">
-                      <button 
                         onClick={() => setShowSyncDetails(!showSyncDetails)}
                         className={cn(
                           "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
@@ -2362,12 +2307,12 @@ export default function App() {
                         )}
                       >
                         <Clock size={10} />
-                        {trashFilter === 'all' ? 'Time' : trashFilter}
+                        {trashFilter === 'all' ? 'Time Filter' : trashFilter}
                       </button>
                       {showSyncDetails && (
                         <>
                           <div className="fixed inset-0 z-[80]" onClick={() => setShowSyncDetails(false)} />
-                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                          <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
                             {[
                               { id: 'all', label: 'All Items' },
                               { id: '1w', label: 'Older than 1 week' },
@@ -2380,7 +2325,7 @@ export default function App() {
                                   setShowSyncDetails(false);
                                 }}
                                 className={cn(
-                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                  "w-full text-left px-3 py-2 text-[10px] font-bold transition-all flex items-center justify-between",
                                   trashFilter === f.id ? "bg-red-50 text-red-600" : "text-slate-600 hover:bg-slate-50"
                                 )}
                               >
@@ -3635,6 +3580,11 @@ function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: 
             placeholder="Deep dive into context, sub-tasks, or brainstorm ideas here..."
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                onClose();
+              }
+            }}
             autoFocus
           />
         </div>
