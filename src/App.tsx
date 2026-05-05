@@ -99,6 +99,9 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<string>('General');
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings'>('urgent');
+  const [isNewTaskMemoExpanded, setIsNewTaskMemoExpanded] = useState(false);
+  const [archiveFilter, setArchiveFilter] = useState<'all' | '1w' | '1m'>('all');
+  const [trashFilter, setTrashFilter] = useState<'all' | '1w' | '1m'>('all');
 
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -330,14 +333,20 @@ export default function App() {
   }, [tasks, activeSection, settings.sections]);
 
   const stats = useMemo(() => {
-    const activeTasks = tasks.filter(t => t.category !== 'Archive' && !t.isDone);
-    const focusTasksCount = tasks.filter(t => t.category === 'Focus' && !t.isDone).length;
-    const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
+    // Current workspace filter
+    const isInActiveSection = (t: Task) => t.section === activeSection || (!t.section && activeSection === settings.sections[0]);
     
-    // Per-section metrics
+    // Global metrics (Urgent + Focus)
+    const priorityTasks = tasks.filter(t => (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone);
+    const combinedCount = priorityTasks.length;
+    
+    const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
+    const activeTasksCount = tasks.filter(t => (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone).length;
+    
+    // Per-section metrics (Urgent + Focus)
     const sectionMetrics = settings.sections.reduce((acc, sec, idx) => {
       acc[sec] = {
-        focus: tasks.filter(t => (t.section === sec || (!t.section && idx === 0)) && t.category === 'Focus' && !t.isDone).length,
+        focus: tasks.filter(t => (t.section === sec || (!t.section && idx === 0)) && (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone).length,
         total: tasks.filter(t => (t.section === sec || (!t.section && idx === 0)) && !t.isDone).length
       };
       return acc;
@@ -347,10 +356,10 @@ export default function App() {
     let gaugeColor = 'bg-indigo-400';
     let textColor = 'text-white';
     
-    if (focusTasksCount >= settings.criticalThreshold) {
+    if (combinedCount >= settings.criticalThreshold) {
       gaugeColor = 'bg-red-600';
       textColor = 'text-red-500 font-black';
-    } else if (focusTasksCount >= warningThreshold) {
+    } else if (combinedCount >= warningThreshold) {
       gaugeColor = 'bg-orange-400';
       textColor = 'text-orange-400 font-black';
     }
@@ -358,24 +367,32 @@ export default function App() {
     const now = Date.now();
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const doneTodayCount = tasks.filter(t => t.isDone && t.updatedAt >= todayStart.getTime()).length;
+    
+    // Done today (Urgent + Focus)
+    const doneTodayCount = tasks.filter(t => 
+      t.isDone && 
+      (t.category === 'Urgent' || t.category === 'Focus') && 
+      t.updatedAt >= todayStart.getTime()
+    ).length;
     
     let expiredCount = 0;
     let approachingCount = 0;
     
-    tasks.filter(t => t.category === 'Focus' && !t.isDone && t.deadline).forEach(t => {
-      if (t.deadline! < now) {
-        expiredCount++;
-      } else if (t.deadline! - now <= settings.deadlineThreshold * 86400000) {
-        approachingCount++;
+    priorityTasks.forEach(t => {
+      if (t.deadline) {
+        if (t.deadline < now) {
+          expiredCount++;
+        } else if (t.deadline - now <= settings.deadlineThreshold * 86400000) {
+          approachingCount++;
+        }
       }
     });
 
-    const loadPercentage = Math.round(Math.min((focusTasksCount / settings.criticalThreshold) * 100, 100));
+    const loadPercentage = Math.round(Math.min((combinedCount / settings.criticalThreshold) * 100, 100));
 
     // Project distribution (filtered by active workspace)
     const projectStats: Record<string, { urgent: number, focus: number, archive: number, trash: number }> = {};
-    tasks.filter(t => t.section === activeSection || (!t.section && activeSection === settings.sections[0])).forEach(t => {
+    tasks.filter(t => isInActiveSection(t)).forEach(t => {
       if (!projectStats[t.project]) {
         projectStats[t.project] = { urgent: 0, focus: 0, archive: 0, trash: 0 };
       }
@@ -386,12 +403,12 @@ export default function App() {
     });
 
     return {
-      active: activeTasks.length,
+      active: activeTasksCount,
       doneToday: doneTodayCount,
       pendingDeadlines: approachingCount,
       expiredDeadlines: expiredCount,
       urgentCount,
-      focusTasksCount,
+      focusTasksCount: combinedCount,
       gaugeColor,
       textColor,
       warningThreshold,
@@ -413,73 +430,109 @@ export default function App() {
         return matchesSearch && matchesProject && matchesSection;
       })
       .sort((a, b) => {
-        const now = Date.now();
-        const threshold = (settings.deadlineThreshold || 3) * 24 * 60 * 60 * 1000;
-        
-        // Priority 1: Near Deadline (Focused items only)
-        if (a.category === 'Focus' && b.category === 'Focus') {
-          const aNear = a.deadline && (a.deadline - now) <= threshold && !a.isDone;
-          const bNear = b.deadline && (b.deadline - now) <= threshold && !b.isDone;
-          if (aNear && !bNear) return -1;
-          if (!aNear && bNear) return 1;
-          if (aNear && bNear) return (a.deadline || 0) - (b.deadline || 0);
-        }
+        // Universal Priority 1: Done state (Done always goes to bottom in all views for consistency)
+        if (a.isDone && !b.isDone) return 1;
+        if (!a.isDone && b.isDone) return -1;
 
-        // Priority 2: Starred
-        const starA = !!a.isStarred;
-        const starB = !!b.isStarred;
-        if (starA !== starB) return starA ? -1 : 1;
-        
-        // Priority 3: Deadlines in general
+        // Universal Priority 2: Deadline (earliest first)
         if (a.deadline && b.deadline) return a.deadline - b.deadline;
         if (a.deadline) return -1;
         if (b.deadline) return 1;
 
-        // Priority 4: Recency (Updated at descending)
+        // Universal Priority 3: Starred (starred first)
+        const starA = !!a.isStarred;
+        const starB = !!b.isStarred;
+        if (starA !== starB) return starA ? -1 : 1;
+
+        // Universal Priority 4: Recency (updatedAt descending)
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
-  }, [tasks, searchTerm, selectedProject, activeSection, settings.deadlineThreshold]);
+  }, [tasks, searchTerm, selectedProject, activeSection, settings.sections, settings.deadlineThreshold]);
 
   const groupedFocusTasks = useMemo(() => {
     const focusTasks = filteredTasks.filter(t => t.category === 'Focus');
     const threshold = (settings.deadlineThreshold || 3) * 24 * 60 * 60 * 1000;
     const now = Date.now();
 
+    // Separate expired tasks (top priority)
+    const expired = focusTasks
+      .filter(t => t.deadline && (t.deadline - now) < 0 && !t.isDone)
+      .sort((a, b) => (a.deadline || 0) - (b.deadline || 0));
+
     // Separate near deadline tasks (excluding expired ones) and sort by date
     const nearDeadline = focusTasks
       .filter(t => t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0 && !t.isDone)
       .sort((a, b) => (a.deadline || 0) - (b.deadline || 0));
       
-    // Others includes those without deadlines, far deadlines, or expired deadlines
-    const others = focusTasks.filter(t => !t.deadline || (t.deadline - now) > threshold || (t.deadline - now) < 0 || t.isDone);
+    // Others includes those without deadlines, far deadlines, or done tasks
+    const others = focusTasks.filter(t => {
+       const isExpired = t.deadline && (t.deadline - now) < 0 && !t.isDone;
+       const isNear = t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0 && !t.isDone;
+       return !isExpired && !isNear;
+    });
 
     const grouped: Record<string, Task[]> = {};
     others.forEach(t => {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
-    return { nearDeadline, grouped };
+    return { expired, nearDeadline, grouped };
   }, [filteredTasks, settings.deadlineThreshold]);
 
   const groupedArchiveTasks = useMemo(() => {
-    const archiveTasks = filteredTasks.filter(t => t.category === 'Archive');
+    const now = Date.now();
+    const oneWeek = 7 * 86400000;
+    const oneMonth = 30 * 86400000;
+    
+    const archiveTasks = filteredTasks.filter(t => {
+      if (t.category !== 'Archive') return false;
+      const age = now - (t.updatedAt || t.createdAt);
+      if (archiveFilter === '1w') return age >= oneWeek;
+      if (archiveFilter === '1m') return age >= oneMonth;
+      return true;
+    });
+
+    // Special category for items nearing auto-purge (3 days)
+    const nearingPurge = archiveTasks
+      .filter(t => {
+        const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
+        return settings.archiveThresholdDays - inactiveDays <= 3;
+      })
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    const others = archiveTasks.filter(t => {
+      const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
+      return settings.archiveThresholdDays - inactiveDays > 3;
+    });
+
     const grouped: Record<string, Task[]> = {};
-    archiveTasks.forEach(t => {
+    others.forEach(t => {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
-    return grouped;
-  }, [filteredTasks]);
+    return { nearingPurge, grouped };
+  }, [filteredTasks, settings.archiveThresholdDays, archiveFilter]);
 
   const groupedTrashTasks = useMemo(() => {
-    const trashTasks = filteredTasks.filter(t => t.category === 'Trash');
+    const now = Date.now();
+    const oneWeek = 7 * 86400000;
+    const oneMonth = 30 * 86400000;
+
+    const trashTasks = filteredTasks.filter(t => {
+      if (t.category !== 'Trash') return false;
+      const age = now - (t.updatedAt || t.createdAt);
+      if (trashFilter === '1w') return age >= oneWeek;
+      if (trashFilter === '1m') return age >= oneMonth;
+      return true;
+    });
+
     const grouped: Record<string, Task[]> = {};
     trashTasks.forEach(t => {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
     return grouped;
-  }, [filteredTasks]);
+  }, [filteredTasks, trashFilter]);
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -851,6 +904,21 @@ export default function App() {
         setMessage({ text: `CSV Parse Error: ${err.message}`, type: 'error' });
       }
     });
+  };
+
+  const downloadBackup = () => {
+    const csv = getCSVData();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const userPart = user?.email?.split('@')[0] || 'local';
+    link.setAttribute('href', url);
+    link.setAttribute('download', `TriFocus_Log_${userPart}_Manual.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setMessage({ text: "Backup file downloaded successfully.", type: 'info' });
   };
 
   const selectBackupFolder = async () => {
@@ -1552,9 +1620,21 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-widest text-[9px] opacity-60">Memos</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-widest text-[9px] opacity-60 flex items-center justify-between">
+                    <span>Memos</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setIsNewTaskMemoExpanded(!isNewTaskMemoExpanded)}
+                      className="text-indigo-600 hover:underline p-1"
+                    >
+                      {isNewTaskMemoExpanded ? 'Shrink' : 'Expand'}
+                    </button>
+                  </label>
                   <textarea 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-16 resize-none" 
+                    className={cn(
+                      "w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none transition-all duration-300",
+                      isNewTaskMemoExpanded ? "h-64" : "h-16"
+                    )}
                     placeholder="Context, sub-tasks... (Cmd/Ctrl+Enter to save)"
                     value={newTaskNotes}
                     onChange={(e) => setNewTaskNotes(e.target.value)}
@@ -1793,6 +1873,24 @@ export default function App() {
                   <AnimatePresence mode="popLayout">
                     {filteredTasks
                       .filter(t => t.category === 'Urgent')
+                      .sort((a, b) => {
+                        // Priority 1: Done state (lowest priority)
+                        if (a.isDone && !b.isDone) return 1;
+                        if (!a.isDone && b.isDone) return -1;
+                        
+                        // Priority 2: Deadline (earliest first)
+                        if (a.deadline && b.deadline) return a.deadline - b.deadline;
+                        if (a.deadline) return -1;
+                        if (b.deadline) return 1;
+
+                        // Priority 3: Starred (starred first)
+                        const starA = !!a.isStarred;
+                        const starB = !!b.isStarred;
+                        if (starA !== starB) return starA ? -1 : 1;
+
+                        // Priority 4: Recency (updatedAt descending)
+                        return (b.updatedAt || 0) - (a.updatedAt || 0);
+                      })
                       .map(task => (
                         <TaskCard 
                           key={task.id} 
@@ -1874,9 +1972,39 @@ export default function App() {
                 </div>
                 
                 <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
+                  {groupedFocusTasks.expired.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                       <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600 bg-red-100/50 px-2 py-1.5 rounded-lg border border-red-200 flex items-center gap-2">
+                        <AlertCircle size={12} strokeWidth={3} />
+                        Expired Deadlines (Global)
+                      </h4>
+                      <div className={cn(
+                        "grid grid-cols-1 gap-2.5",
+                        !isListMode && "md:grid-cols-2"
+                      )}>
+                        <AnimatePresence mode="popLayout">
+                          {groupedFocusTasks.expired.map(task => (
+                            <TaskCard 
+                              key={task.id} 
+                              task={task} 
+                              onToggle={() => toggleDone(task.id)}
+                              onMove={(newCat) => moveTask(task.id, newCat)}
+                              onDelete={() => deleteTask(task.id)}
+                              onEdit={() => setEditingTask(task)}
+                              onStar={() => toggleStar(task.id)}
+                              variant="Focus"
+                              displayMode={settings.displayMode}
+                              deadlineThreshold={settings.deadlineThreshold}
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  )}
+
                   {groupedFocusTasks.nearDeadline.length > 0 && (
                     <div className="space-y-2 mb-8">
-                       <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50/50 px-2 py-1.5 rounded-lg border border-red-100 flex items-center gap-2">
+                       <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 bg-amber-50/50 px-2 py-1.5 rounded-lg border border-amber-100 flex items-center gap-2">
                         <AlertTriangle size={12} strokeWidth={3} />
                         Approach Deadlines (Global)
                       </h4>
@@ -1969,43 +2097,85 @@ export default function App() {
                     <ArchiveIcon size={22} className="text-slate-400" />
                     System Archive
                   </h3>
-                  {/* Mobile Project Filter for Archive View */}
-                  <div className="lg:hidden relative">
-                    <button 
-                      onClick={() => setShowProjectFilter(!showProjectFilter)}
-                      className={cn(
-                        "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border transition-all text-[8px] font-black uppercase tracking-tighter",
-                        selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-white border-slate-200 text-slate-400"
+                  {/* Filter controls */}
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowProjectFilter(!showProjectFilter)}
+                        className={cn(
+                          "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
+                          selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-white border-slate-200 text-slate-400"
+                        )}
+                      >
+                        <Filter size={10} />
+                        {selectedProject === 'All' ? 'Project' : selectedProject}
+                      </button>
+                      {showProjectFilter && (
+                        <>
+                          <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
+                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                            {projects.map(p => (
+                              <button
+                                key={p}
+                                onClick={() => {
+                                  setSelectedProject(p);
+                                  setShowProjectFilter(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                  selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                              >
+                                <span className="truncate">{p}</span>
+                                {selectedProject === p && <CheckCircle2 size={10} />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
                       )}
-                    >
-                      <Filter size={8} />
-                      {selectedProject === 'All' ? 'Filter' : selectedProject}
-                    </button>
-                    {showProjectFilter && (
-                      <>
-                        <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
-                        <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
-                          {projects.map(p => (
-                            <button
-                              key={p}
-                              onClick={() => {
-                                setSelectedProject(p);
-                                setShowProjectFilter(false);
-                              }}
-                              className={cn(
-                                "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
-                                selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                              )}
-                            >
-                              <span className="truncate">{p}</span>
-                              {selectedProject === p && <CheckCircle2 size={10} />}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                    </div>
+
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowCleanupMenu(!showCleanupMenu)}
+                        className={cn(
+                          "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
+                          archiveFilter !== 'all' ? "bg-rose-100 border-rose-200 text-rose-700" : "bg-white border-slate-200 text-slate-400"
+                        )}
+                      >
+                        <Clock size={10} />
+                        {archiveFilter === 'all' ? 'Time' : archiveFilter}
+                      </button>
+                      {showCleanupMenu && (
+                        <>
+                          <div className="fixed inset-0 z-[80]" onClick={() => setShowCleanupMenu(false)} />
+                          <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                            {[
+                              { id: 'all', label: 'All Time' },
+                              { id: '1w', label: 'Older 1w' },
+                              { id: '1m', label: 'Older 1m' }
+                            ].map(f => (
+                              <button
+                                key={f.id}
+                                onClick={() => {
+                                  setArchiveFilter(f.id as any);
+                                  setShowCleanupMenu(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                  archiveFilter === f.id ? "bg-rose-50 text-rose-600" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
+
                 <div className="hidden sm:block">
                   <p className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-1">
                     Reviewing items archived within {settings.archiveThresholdDays} days
@@ -2013,63 +2183,32 @@ export default function App() {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <button 
-                      onClick={() => setShowCleanupMenu(!showCleanupMenu)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:border-red-200 hover:text-red-500 transition-all shadow-sm"
-                    >
-                      <Trash2 size={12} />
-                      Cleanup Options
-                    </button>
-                    {showCleanupMenu && (
-                      <>
-                        <div className="fixed inset-0 z-[75]" onClick={() => setShowCleanupMenu(false)} />
-                        <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 min-w-[200px] z-[80] transition-all">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); cleanupArchive(30); setShowCleanupMenu(false); }}
-                            className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
-                          >
-                            <span>Older than 1 Month</span>
-                            <span className="text-[9px] opacity-50 font-normal normal-case">Items inactive for 30+ days</span>
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); cleanupArchive(7); setShowCleanupMenu(false); }}
-                            className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-red-500 transition-colors flex flex-col"
-                          >
-                            <span>Older than 1 Week</span>
-                            <span className="text-[9px] opacity-50 font-normal normal-case">Items inactive for 7+ days</span>
-                          </button>
-                          <div className="h-px bg-slate-100 my-1 mx-2"></div>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); cleanupArchive(); setShowCleanupMenu(false); }}
-                            className="w-full text-left px-4 py-2 text-[10px] font-black text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
-                          >
-                            <Zap size={10} strokeWidth={3} />
-                            Purge All Archive
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <button 
+                    onClick={() => cleanupArchive()}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:border-red-200 hover:text-red-500 transition-all shadow-sm"
+                  >
+                    <Trash2 size={12} />
+                    Purge All
+                  </button>
                 </div>
               </div>
               
               <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-32">
-                {Object.keys(groupedArchiveTasks).length > 0 ? (
-                  (Object.entries(groupedArchiveTasks) as [string, Task[]][]).map(([project, tasks]) => (
-                    <div key={project} className="space-y-3">
+                {groupedArchiveTasks.nearingPurge.length > 0 && (
+                   <div className="space-y-3 mb-8">
                       <div className="flex items-center gap-4 px-2">
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 bg-white/50 px-2 py-0.5 rounded border border-slate-100">
-                          {project}
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
+                          <AlertTriangle size={10} />
+                          Auto-Purge Soon (3 days)
                         </h4>
-                        <div className="h-px flex-1 bg-slate-200"></div>
+                        <div className="h-px flex-1 bg-red-100"></div>
                       </div>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
                         !isListMode && "md:grid-cols-3 xl:grid-cols-4"
                       )}>
                         <AnimatePresence mode="popLayout">
-                          {tasks.map(task => (
+                          {groupedArchiveTasks.nearingPurge.map(task => (
                             <TaskCard 
                               key={task.id} 
                               task={task} 
@@ -2086,12 +2225,65 @@ export default function App() {
                         </AnimatePresence>
                       </div>
                     </div>
-                  ))
+                )}
+
+                {Object.keys(groupedArchiveTasks.grouped).length > 0 ? (
+                  (Object.entries(groupedArchiveTasks.grouped) as [string, Task[]][]).map(([project, tasks]) => {
+                    const isCollapsed = collapsedProjects.has(`archive-${project}`);
+                    return (
+                      <div key={project} className="space-y-3">
+                        <button 
+                          onClick={() => {
+                            const next = new Set(collapsedProjects);
+                            if (next.has(`archive-${project}`)) next.delete(`archive-${project}`);
+                            else next.add(`archive-${project}`);
+                            setCollapsedProjects(next);
+                          }}
+                          className="w-full flex items-center gap-4 px-2 hover:opacity-70 transition-opacity"
+                        >
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 bg-white/50 px-2 py-0.5 rounded border border-slate-100 flex items-center gap-1.5">
+                            {isCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                            {project}
+                          </h4>
+                          <div className="h-px flex-1 bg-slate-200"></div>
+                          <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
+                            {tasks.length} item{tasks.length > 1 ? 's' : ''}
+                          </span>
+                        </button>
+
+                        {!isCollapsed && (
+                          <div className={cn(
+                            "grid grid-cols-1 gap-2.5",
+                            !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                          )}>
+                            <AnimatePresence mode="popLayout">
+                              {tasks.map(task => (
+                                <TaskCard 
+                                  key={task.id} 
+                                  task={task} 
+                                  onToggle={() => toggleDone(task.id)}
+                                  onMove={(newCat) => moveTask(task.id, newCat)}
+                                  onDelete={() => deleteTask(task.id)}
+                                  onEdit={() => setEditingTask(task)}
+                                  onStar={() => toggleStar(task.id)}
+                                  variant="Archive"
+                                  displayMode={settings.displayMode}
+                                  deadlineThreshold={settings.deadlineThreshold}
+                                />
+                              ))}
+                            </AnimatePresence>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 ) : (
-                  <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
-                    <ArchiveIcon size={48} strokeWidth={1} />
-                    <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">Archive Empty</span>
-                  </div>
+                  groupedArchiveTasks.nearingPurge.length === 0 && (
+                    <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
+                      <ArchiveIcon size={48} strokeWidth={1} />
+                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">Archive Empty</span>
+                    </div>
+                  )
                 )}
               </div>
             </section>
@@ -2104,41 +2296,82 @@ export default function App() {
                     <Trash2 size={22} className="text-red-400" />
                     Trash Bin
                   </h3>
-                  {/* Mobile Project Filter for Trash View */}
-                  <div className="lg:hidden relative">
-                    <button 
-                      onClick={() => setShowProjectFilter(!showProjectFilter)}
-                      className={cn(
-                        "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border transition-all text-[8px] font-black uppercase tracking-tighter",
-                        selectedProject !== 'All' ? "bg-red-100 border-red-200 text-red-700" : "bg-white border-red-100 text-red-300"
+                  {/* Filter controls */}
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowProjectFilter(!showProjectFilter)}
+                        className={cn(
+                          "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
+                          selectedProject !== 'All' ? "bg-red-100 border-red-200 text-red-700" : "bg-white border-red-100 text-red-300"
+                        )}
+                      >
+                        <Filter size={10} />
+                        {selectedProject === 'All' ? 'Project' : selectedProject}
+                      </button>
+                      {showProjectFilter && (
+                        <>
+                          <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
+                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                            {projects.map(p => (
+                              <button
+                                key={p}
+                                onClick={() => {
+                                  setSelectedProject(p);
+                                  setShowProjectFilter(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                  selectedProject === p ? "bg-red-50 text-red-600" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                              >
+                                <span className="truncate">{p}</span>
+                                {selectedProject === p && <CheckCircle2 size={10} />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
                       )}
-                    >
-                      <Filter size={8} />
-                      {selectedProject === 'All' ? 'Filter' : selectedProject}
-                    </button>
-                    {showProjectFilter && (
-                      <>
-                        <div className="fixed inset-0 z-[80]" onClick={() => setShowProjectFilter(false)} />
-                        <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
-                          {projects.map(p => (
-                            <button
-                              key={p}
-                              onClick={() => {
-                                setSelectedProject(p);
-                                setShowProjectFilter(false);
-                              }}
-                              className={cn(
-                                "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
-                                selectedProject === p ? "bg-red-50 text-red-600" : "text-slate-600 hover:bg-slate-50"
-                              )}
-                            >
-                              <span className="truncate">{p}</span>
-                              {selectedProject === p && <CheckCircle2 size={10} />}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                    </div>
+
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowSyncDetails(!showSyncDetails)}
+                        className={cn(
+                          "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
+                          trashFilter !== 'all' ? "bg-red-200 border-red-300 text-red-800" : "bg-white border-red-100 text-red-300"
+                        )}
+                      >
+                        <Clock size={10} />
+                        {trashFilter === 'all' ? 'Time' : trashFilter}
+                      </button>
+                      {showSyncDetails && (
+                        <>
+                          <div className="fixed inset-0 z-[80]" onClick={() => setShowSyncDetails(false)} />
+                          <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                            {[
+                              { id: 'all', label: 'All Time' },
+                              { id: '1w', label: 'Older 1w' },
+                              { id: '1m', label: 'Older 1m' }
+                            ].map(f => (
+                              <button
+                                key={f.id}
+                                onClick={() => {
+                                  setTrashFilter(f.id as any);
+                                  setShowSyncDetails(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 text-[9px] font-bold transition-all flex items-center justify-between",
+                                  trashFilter === f.id ? "bg-red-50 text-red-600" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="hidden sm:block">
@@ -2158,37 +2391,55 @@ export default function App() {
               
               <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
                 {Object.keys(groupedTrashTasks).length > 0 ? (
-                  (Object.entries(groupedTrashTasks) as [string, Task[]][]).map(([project, tasks]) => (
-                    <div key={project} className="space-y-3">
-                      <div className="flex items-center gap-4 px-2">
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400 bg-white/50 px-2 py-0.5 rounded border border-red-100">
-                          {project}
-                        </h4>
-                        <div className="h-px flex-1 bg-red-100"></div>
+                  (Object.entries(groupedTrashTasks) as [string, Task[]][]).map(([project, tasks]) => {
+                    const isCollapsed = collapsedProjects.has(`trash-${project}`);
+                    return (
+                      <div key={project} className="space-y-3">
+                        <button 
+                          onClick={() => {
+                            const next = new Set(collapsedProjects);
+                            if (next.has(`trash-${project}`)) next.delete(`trash-${project}`);
+                            else next.add(`trash-${project}`);
+                            setCollapsedProjects(next);
+                          }}
+                          className="w-full flex items-center gap-4 px-2 hover:opacity-70 transition-opacity"
+                        >
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400 bg-white/50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
+                            {isCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                            {project}
+                          </h4>
+                          <div className="h-px flex-1 bg-red-100"></div>
+                          <span className="text-[9px] font-bold text-red-300 uppercase tracking-tighter">
+                            {tasks.length} item{tasks.length > 1 ? 's' : ''}
+                          </span>
+                        </button>
+                        
+                        {!isCollapsed && (
+                          <div className={cn(
+                            "grid grid-cols-1 gap-2.5",
+                            !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                          )}>
+                            <AnimatePresence mode="popLayout">
+                              {tasks.map(task => (
+                                <TaskCard 
+                                  key={task.id} 
+                                  task={task} 
+                                  onToggle={() => toggleDone(task.id)}
+                                  onMove={(newCat) => moveTask(task.id, newCat)}
+                                  onDelete={() => deleteTask(task.id)}
+                                  onEdit={() => setEditingTask(task)}
+                                  onStar={() => toggleStar(task.id)}
+                                  variant="Trash"
+                                  displayMode={settings.displayMode}
+                                  deadlineThreshold={settings.deadlineThreshold}
+                                />
+                              ))}
+                            </AnimatePresence>
+                          </div>
+                        )}
                       </div>
-                      <div className={cn(
-                        "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
-                      )}>
-                        <AnimatePresence mode="popLayout">
-                          {tasks.map(task => (
-                            <TaskCard 
-                              key={task.id} 
-                              task={task} 
-                              onToggle={() => toggleDone(task.id)}
-                              onMove={(newCat) => moveTask(task.id, newCat)}
-                              onDelete={() => deleteTask(task.id)}
-                              onEdit={() => setEditingTask(task)}
-                              onStar={() => toggleStar(task.id)}
-                              variant="Trash"
-                              displayMode={settings.displayMode}
-                              deadlineThreshold={settings.deadlineThreshold}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                     <Trash2 size={48} strokeWidth={1} />
@@ -2489,17 +2740,25 @@ export default function App() {
                               </div>
                             </div>
                             <div className="flex gap-1 shrink-0 pt-5">
-                              <button 
-                                onClick={selectBackupFolder}
-                                className={cn(
-                                  "p-1.5 px-3 rounded text-[10px] font-bold transition-colors",
-                                  !dirHandle && settings.localBackupPath 
-                                    ? "bg-amber-500 hover:bg-amber-600 text-white animate-pulse" 
-                                    : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                                )}
-                              >
-                                {!dirHandle && settings.localBackupPath ? 'Authorize Session' : 'Select Folder'}
-                              </button>
+                              <div className="flex flex-col gap-1">
+                                <button 
+                                  onClick={selectBackupFolder}
+                                  className={cn(
+                                    "p-1.5 px-3 rounded text-[10px] font-bold transition-colors w-full",
+                                    !dirHandle && settings.localBackupPath 
+                                      ? "bg-amber-500 hover:bg-amber-600 text-white animate-pulse" 
+                                      : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                  )}
+                                >
+                                  {!dirHandle && settings.localBackupPath ? 'Authorize Session' : 'Select Folder'}
+                                </button>
+                                <button 
+                                  onClick={downloadBackup}
+                                  className="p-1.5 px-3 bg-white border border-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-50 transition-colors w-full flex items-center justify-center gap-1"
+                                >
+                                  <Download size={10} /> Manual Local Backup
+                                </button>
+                              </div>
                               {window.self !== window.top && (
                                 <button 
                                   onClick={() => window.open(window.location.href, '_blank')}
