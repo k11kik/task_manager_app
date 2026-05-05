@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
+  LayoutGrid,
+  List,
   Layout, 
   Search, 
   Calendar, 
@@ -1556,6 +1558,29 @@ export default function App() {
 
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-2 mr-2">
+            <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
+              <button 
+                onClick={() => saveSettings({ displayMode: 'card' })}
+                className={cn(
+                  "p-1.5 rounded-lg transition-all",
+                  settings.displayMode === 'card' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                )}
+                title="Card View"
+              >
+                <LayoutGrid size={14} />
+              </button>
+              <button 
+                onClick={() => saveSettings({ displayMode: 'list' })}
+                className={cn(
+                  "p-1.5 rounded-lg transition-all",
+                  settings.displayMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                )}
+                title="List View"
+              >
+                <List size={14} />
+              </button>
+            </div>
+
             <div className="relative">
               <button 
                 onClick={() => setShowProjectFilter(!showProjectFilter)}
@@ -2840,40 +2865,6 @@ export default function App() {
                           <option value={90}>90 Days (Relaxed)</option>
                           <option value={99999}>Never (Stays in Trash)</option>
                         </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Display Options */}
-                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                    <div className="flex items-center gap-2 mb-4 text-indigo-600">
-                      <Layout size={18} />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">Display Options</h3>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-slate-900">Task Layout</p>
-                        <p className="text-xs text-slate-500">Choose between detailed icons or compact list view.</p>
-                      </div>
-                      <div className="flex p-1 bg-white border border-slate-200 rounded-xl gap-1">
-                        <button 
-                          onClick={() => saveSettings({ displayMode: 'card' })}
-                          className={cn(
-                            "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5",
-                            settings.displayMode === 'card' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-400 hover:text-slate-600"
-                          )}
-                        >
-                          <Layout size={12} /> Cards
-                        </button>
-                        <button 
-                          onClick={() => saveSettings({ displayMode: 'list' })}
-                          className={cn(
-                            "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5",
-                            settings.displayMode === 'list' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-400 hover:text-slate-600"
-                          )}
-                        >
-                          <CheckCircle2 size={12} /> List
-                        </button>
                       </div>
                     </div>
                   </div>
