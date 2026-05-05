@@ -1718,6 +1718,30 @@ export default function App() {
           
           {user ? (
             <div className="flex items-center gap-2 md:gap-3">
+              {/* Mobile Display Mode Toggle */}
+              <div className="md:hidden flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
+                <button 
+                  onClick={() => saveSettings({ displayMode: 'card' })}
+                  className={cn(
+                    "p-1.5 rounded-lg transition-all",
+                    settings.displayMode === 'card' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                  )}
+                  title="Card View"
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <button 
+                  onClick={() => saveSettings({ displayMode: 'list' })}
+                  className={cn(
+                    "p-1.5 rounded-lg transition-all",
+                    settings.displayMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                  )}
+                  title="List View"
+                >
+                  <List size={14} />
+                </button>
+              </div>
+
               {/* Mobile Project Filter for All Tabs */}
               <div className="md:hidden relative">
                 <button 
