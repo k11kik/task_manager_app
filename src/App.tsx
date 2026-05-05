@@ -20,6 +20,7 @@ import {
   Settings as SettingsIcon,
   Activity,
   Download,
+  ExternalLink,
   Upload,
   FileText,
   LogOut,
@@ -101,7 +102,7 @@ export default function App() {
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings'>('urgent');
   const [isNewTaskMemoExpanded, setIsNewTaskMemoExpanded] = useState(false);
   const [archiveFilter, setArchiveFilter] = useState<'all' | '1w' | '1m'>('all');
-  const [trashFilter, setTrashFilter] = useState<'all' | '1w' | '1m'>('all');
+  const [trashFilter, setTrashFilter] = useState<'all' | '1w' | '2w'>('all');
 
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -516,22 +517,35 @@ export default function App() {
   const groupedTrashTasks = useMemo(() => {
     const now = Date.now();
     const oneWeek = 7 * 86400000;
-    const oneMonth = 30 * 86400000;
+    const twoWeeks = 14 * 86400000;
 
     const trashTasks = filteredTasks.filter(t => {
       if (t.category !== 'Trash') return false;
       const age = now - (t.updatedAt || t.createdAt);
       if (trashFilter === '1w') return age >= oneWeek;
-      if (trashFilter === '1m') return age >= oneMonth;
+      if (trashFilter === '2w') return age >= twoWeeks;
       return true;
     });
 
+    // Special category for items nearing auto-purge (3 days)
+    const nearingPurge = trashTasks
+      .filter(t => {
+        const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
+        return 30 - inactiveDays <= 3; // Trash is 30 days
+      })
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    const others = trashTasks.filter(t => {
+      const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
+      return 30 - inactiveDays > 3;
+    });
+
     const grouped: Record<string, Task[]> = {};
-    trashTasks.forEach(t => {
+    others.forEach(t => {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
-    return grouped;
+    return { nearingPurge, grouped };
   }, [filteredTasks, trashFilter]);
 
   const handleAddTask = async (e: React.FormEvent) => {
@@ -925,8 +939,8 @@ export default function App() {
     try {
       if (!window.showDirectoryPicker) {
         setMessage({ 
-          text: "Sync Notice: Safari does not currently support direct folder access via the File System API. For local sync, please use a Chromium-based browser (Chrome, Edge) on Desktop.",
-          type: 'error'
+          text: "Safari Notice: Full folder sync is not supported by Safari yet. Please use Chrome/Edge for auto-sync, or use 'Manual Local Backup' below to save your data.",
+          type: 'info'
         });
         return;
       }
@@ -1022,32 +1036,37 @@ export default function App() {
     if (!user) return;
     try {
       const now = Date.now();
-      const cutoff = thresholdDays ? now - (thresholdDays * 24 * 60 * 60 * 1000) : null;
+      
+      let activeThreshold = thresholdDays;
+      if (!activeThreshold) {
+        if (archiveFilter === '1w') activeThreshold = 7;
+        else if (archiveFilter === '1m') activeThreshold = 30;
+      }
+      
+      const cutoff = activeThreshold ? now - (activeThreshold * 24 * 60 * 60 * 1000) : null;
       
       const archiveTasks = tasks.filter(t => {
         if (t.category !== 'Archive') return false;
-        if (!cutoff) return true; // Delete all
-        return t.updatedAt < cutoff;
+        if (!cutoff) return true;
+        return (t.updatedAt || t.createdAt) < cutoff;
       });
 
       if (archiveTasks.length === 0) {
-        setMessage({ text: "No tasks match the cleanup criteria.", type: 'info' });
+        setMessage({ text: "No tasks match current filter criteria.", type: 'info' });
         return;
       }
 
-      if (!window.confirm(`Are you sure you want to move ${archiveTasks.length} archived tasks to the Trash?`)) return;
+      if (!window.confirm(`Delete ${archiveTasks.length} archived items matching current filter?`)) return;
 
-      const batch = writeBatch(db);
-      archiveTasks.forEach(task => {
-        batch.update(doc(db, 'tasks', task.id), {
-          category: 'Trash',
-          updatedAt: now
-        });
-      });
-      await batch.commit();
-      setMessage({ text: `Archive Updated: Moved ${archiveTasks.length} entries to Trash.`, type: 'info' });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'batch/cleanup-archive');
+      let count = 0;
+      for (const task of archiveTasks) {
+        await deleteDoc(doc(db, 'tasks', task.id));
+        count++;
+      }
+      setMessage({ text: `Archive cleanup complete: ${count} items removed.`, type: 'info' });
+    } catch (err: any) {
+      console.error("Archive cleanup error", err);
+      setMessage({ text: `Archive Error: ${err.message}`, type: 'error' });
     }
   };
 
@@ -2151,9 +2170,9 @@ export default function App() {
                           <div className="fixed inset-0 z-[80]" onClick={() => setShowCleanupMenu(false)} />
                           <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
                             {[
-                              { id: 'all', label: 'All Time' },
-                              { id: '1w', label: 'Older 1w' },
-                              { id: '1m', label: 'Older 1m' }
+                              { id: 'all', label: 'All Items' },
+                              { id: '1w', label: 'Older than 1 week' },
+                              { id: '1m', label: 'Older than 1 month' }
                             ].map(f => (
                               <button
                                 key={f.id}
@@ -2348,11 +2367,11 @@ export default function App() {
                       {showSyncDetails && (
                         <>
                           <div className="fixed inset-0 z-[80]" onClick={() => setShowSyncDetails(false)} />
-                          <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
+                          <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
                             {[
-                              { id: 'all', label: 'All Time' },
-                              { id: '1w', label: 'Older 1w' },
-                              { id: '1m', label: 'Older 1m' }
+                              { id: 'all', label: 'All Items' },
+                              { id: '1w', label: 'Older than 1 week' },
+                              { id: '2w', label: 'Older than 2 weeks' }
                             ].map(f => (
                               <button
                                 key={f.id}
@@ -2390,8 +2409,41 @@ export default function App() {
               </div>
               
               <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
-                {Object.keys(groupedTrashTasks).length > 0 ? (
-                  (Object.entries(groupedTrashTasks) as [string, Task[]][]).map(([project, tasks]) => {
+                {groupedTrashTasks.nearingPurge.length > 0 && (
+                   <div className="space-y-3 mb-8">
+                      <div className="flex items-center gap-4 px-2">
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
+                          <AlertTriangle size={10} />
+                          Auto-Delete Soon (3 days)
+                        </h4>
+                        <div className="h-px flex-1 bg-red-100"></div>
+                      </div>
+                      <div className={cn(
+                        "grid grid-cols-1 gap-2.5",
+                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                      )}>
+                        <AnimatePresence mode="popLayout">
+                          {groupedTrashTasks.nearingPurge.map(task => (
+                            <TaskCard 
+                              key={task.id} 
+                              task={task} 
+                              onToggle={() => toggleDone(task.id)}
+                              onMove={(newCat) => moveTask(task.id, newCat)}
+                              onDelete={() => deleteTask(task.id)}
+                              onEdit={() => setEditingTask(task)}
+                              onStar={() => toggleStar(task.id)}
+                              variant="Trash"
+                              displayMode={settings.displayMode}
+                              deadlineThreshold={settings.deadlineThreshold}
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                )}
+
+                {Object.keys(groupedTrashTasks.grouped).length > 0 ? (
+                  (Object.entries(groupedTrashTasks.grouped) as [string, Task[]][]).map(([project, tasks]) => {
                     const isCollapsed = collapsedProjects.has(`trash-${project}`);
                     return (
                       <div key={project} className="space-y-3">
@@ -2441,10 +2493,12 @@ export default function App() {
                     );
                   })
                 ) : (
-                  <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
-                    <Trash2 size={48} strokeWidth={1} />
-                    <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">Trash Bin is Empty</span>
-                  </div>
+                  groupedTrashTasks.nearingPurge.length === 0 && (
+                    <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
+                      <Trash2 size={48} strokeWidth={1} />
+                      <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">Trash Bin is Empty</span>
+                    </div>
+                  )
                 )}
               </div>
             </section>
@@ -2754,9 +2808,14 @@ export default function App() {
                                 </button>
                                 <button 
                                   onClick={downloadBackup}
-                                  className="p-1.5 px-3 bg-white border border-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-50 transition-colors w-full flex items-center justify-center gap-1"
+                                  className={cn(
+                                    "p-1.5 px-3 rounded text-[10px] font-bold transition-all w-full flex items-center justify-center gap-1",
+                                    !window.showDirectoryPicker 
+                                      ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-100" 
+                                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                  )}
                                 >
-                                  <Download size={10} /> Manual Local Backup
+                                  <Download size={10} /> {window.showDirectoryPicker ? 'Manual Local Backup' : 'Save Backup to Local'}
                                 </button>
                               </div>
                               {window.self !== window.top && (
@@ -3268,6 +3327,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
   const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
   const [isStarred, setIsStarred] = useState(task.isStarred || false);
   const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, 'yyyy-MM-dd') : '');
+  const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -3344,7 +3404,16 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Memos / Context</label>
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Memos / Context</label>
+                <button 
+                  type="button"
+                  onClick={() => setIsMemoModalOpen(true)}
+                  className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"
+                >
+                  <ExternalLink size={10} /> Maximize
+                </button>
+              </div>
               <textarea 
                 placeholder="Memos / context... (Cmd/Ctrl+Enter to save)"
                 className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all resize-none h-32"
@@ -3355,6 +3424,16 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
                 }}
               />
             </div>
+            
+            <AnimatePresence>
+              {isMemoModalOpen && (
+                <MemoModal 
+                  value={notes}
+                  onChange={setNotes}
+                  onClose={() => setIsMemoModalOpen(false)}
+                />
+              )}
+            </AnimatePresence>
             
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5 opacity-60">
@@ -3510,6 +3589,69 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete }: { task: Task
               </div>
             </div>
           </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: string) => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+        onClick={onClose}
+      />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="relative w-full max-w-4xl h-[80vh] bg-white rounded-[2rem] shadow-2xl flex flex-col overflow-hidden"
+      >
+        <div className="flex items-center justify-between p-6 bg-slate-50 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+              <ExternalLink size={20} />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-800">Broad View Memo</h3>
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Enhanced context editor</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-3 bg-white hover:bg-slate-100 text-slate-400 rounded-2xl border border-slate-200 transition-all"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="flex-1 p-6">
+          <textarea 
+            className="w-full h-full p-8 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] text-lg font-medium text-slate-700 outline-none focus:bg-white focus:border-indigo-500 transition-all resize-none custom-scrollbar shadow-inner"
+            placeholder="Deep dive into context, sub-tasks, or brainstorm ideas here..."
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            autoFocus
+          />
+        </div>
+        
+        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+          <div className="flex gap-4">
+             <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Auto-saving to temporary buffer
+             </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200 transition-all"
+          >
+            Finish Editing
+          </button>
         </div>
       </motion.div>
     </div>
