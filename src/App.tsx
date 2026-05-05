@@ -26,6 +26,7 @@ import {
   User as UserIcon,
   LogIn,
   AlertTriangle,
+  AlertCircle,
   Link as LinkIcon,
   ChevronDown,
   ChevronRight as ChevronRightIcon,
@@ -111,7 +112,7 @@ export default function App() {
     if (message && message.type !== 'error') {
       const timer = setTimeout(() => {
         setMessage(null);
-      }, 10000);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [message]);
@@ -358,7 +359,17 @@ export default function App() {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const doneTodayCount = tasks.filter(t => t.isDone && t.updatedAt >= todayStart.getTime()).length;
-    const pendingDeadlinesCount = tasks.filter(t => t.category === 'Focus' && !t.isDone && t.deadline && (t.deadline - now <= settings.deadlineThreshold * 86400000)).length;
+    
+    let expiredCount = 0;
+    let approachingCount = 0;
+    
+    tasks.filter(t => t.category === 'Focus' && !t.isDone && t.deadline).forEach(t => {
+      if (t.deadline! < now) {
+        expiredCount++;
+      } else if (t.deadline! - now <= settings.deadlineThreshold * 86400000) {
+        approachingCount++;
+      }
+    });
 
     const loadPercentage = Math.round(Math.min((focusTasksCount / settings.criticalThreshold) * 100, 100));
 
@@ -377,7 +388,8 @@ export default function App() {
     return {
       active: activeTasks.length,
       doneToday: doneTodayCount,
-      pendingDeadlines: pendingDeadlinesCount,
+      pendingDeadlines: approachingCount,
+      expiredDeadlines: expiredCount,
       urgentCount,
       focusTasksCount,
       gaugeColor,
@@ -845,7 +857,7 @@ export default function App() {
     try {
       if (!window.showDirectoryPicker) {
         setMessage({ 
-          text: "Your browser does not support the File System Access API. Please use a Chromium-based browser (Chrome, Edge) on Desktop.",
+          text: "Sync Notice: Safari does not currently support direct folder access via the File System API. For local sync, please use a Chromium-based browser (Chrome, Edge) on Desktop.",
           type: 'error'
         });
         return;
@@ -871,13 +883,17 @@ export default function App() {
     }
   };
 
-  const syncToLocalSystem = async (manual = false) => {
-    if (!settings.isLocalBackupEnabled || tasks.length === 0 || !dirHandle) return;
+  const syncToLocalSystem = async (manual = false, customName?: string) => {
+    if (!settings.isLocalBackupEnabled || tasks.length === 0 || !dirHandle) {
+      if (manual && !dirHandle) setMessage({ text: "Please select a backup folder first.", type: 'error' });
+      return;
+    }
 
     setIsSyncing(true);
     try {
       const csvContent = getCSVData();
-      const fileName = `TriFocus_Log_${user?.email?.split('@')[0] || 'local'}.csv`;
+      const userPart = user?.email?.split('@')[0] || 'local';
+      const fileName = customName || `TriFocus_Log_${userPart}.csv`;
       
       const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
       const writable = await fileHandle.createWritable();
@@ -885,7 +901,7 @@ export default function App() {
       await writable.close();
       
       setLastSyncTime(Date.now());
-      if (manual) setMessage({ text: "Log saved to selected folder.", type: 'info' });
+      if (manual) setMessage({ text: customName ? `Emergency backup created: ${fileName}` : "Log saved to selected folder.", type: 'info' });
     } catch (err: any) {
       console.error("Local backup failed", err);
       setMessage({ 
@@ -967,11 +983,23 @@ export default function App() {
     }
   };
 
+  const triggerEmergencyBackup = async () => {
+    if (settings.isLocalBackupEnabled && dirHandle) {
+      const userPart = user?.email?.split('@')[0] || 'user';
+      const backupName = `TriFocus_Log_${userPart}_backup.csv`;
+      await syncToLocalSystem(true, backupName);
+    } else {
+      // Fallback to browser download if sync not active
+      exportTasks();
+    }
+  };
+
   const purgeAllData = async () => {
     if (!user) return;
-    if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will try to delete EVERY task in the 'tasks' collection for your ID. Proceed?")) return;
+    if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will try to delete EVERY task in the 'tasks' collection for your ID. A backup will be attempted first. Proceed?")) return;
 
     try {
+      await triggerEmergencyBackup();
       setMessage({ text: "Purge started. Clearing cloud data...", type: 'info' });
       
       const snap = await getDocs(query(collection(db, 'tasks'), where('userId', '==', user.uid)));
@@ -1002,6 +1030,36 @@ export default function App() {
       
     } catch (err: any) {
       console.error("Purge Error:", err);
+      setMessage({ text: `Purge Error: ${err.message}`, type: 'error' });
+    }
+  };
+
+  const purgeSectionData = async () => {
+    if (!user || !activeSection) return;
+    if (!window.confirm(`Are you sure you want to delete ALL tasks in the workspace "${activeSection}"? A backup will be attempted first.`)) return;
+
+    try {
+      await triggerEmergencyBackup();
+      setMessage({ text: `Purging workspace "${activeSection}"...`, type: 'info' });
+
+      const workspaceTasks = tasks.filter(t => t.section === activeSection || (!t.section && activeSection === settings.sections[0]));
+      
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const t of workspaceTasks) {
+        try {
+          await deleteDoc(doc(db, 'tasks', t.id));
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to delete task ${t.id}:`, err);
+          failCount++;
+        }
+      }
+
+      setMessage({ text: `Workspace Purge Complete: ${successCount} deleted, ${failCount} failed.`, type: 'info' });
+    } catch (err: any) {
+      console.error("Workspace Purge Error:", err);
       setMessage({ text: `Purge Error: ${err.message}`, type: 'error' });
     }
   };
@@ -1464,7 +1522,7 @@ export default function App() {
               </div>
               <form onSubmit={handleAddTask} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600">Project Code</label>
+                  <label className="text-xs font-semibold text-slate-600">Project Code <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <input 
                       list="project-suggestions"
@@ -1482,7 +1540,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600">Task Detail</label>
+                  <label className="text-xs font-semibold text-slate-600">Task Detail <span className="text-red-500">*</span></label>
                   <textarea 
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none" 
                     placeholder="Details... (Cmd/Ctrl+Enter to save)"
@@ -1494,7 +1552,7 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-widest text-[9px] opacity-60">Memos (Optional)</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-widest text-[9px] opacity-60">Memos</label>
                   <textarea 
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-16 resize-none" 
                     placeholder="Context, sub-tasks... (Cmd/Ctrl+Enter to save)"
@@ -1546,7 +1604,7 @@ export default function App() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 uppercase tracking-widest text-[9px] opacity-60">
                     <Calendar size={12} className="text-slate-400" />
-                    Deadline (Optional)
+                    Deadline
                   </label>
                   <input 
                     type="date"
@@ -1605,7 +1663,7 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="pt-2 border-t border-slate-700/50 flex justify-between items-start pt-3">
+                  <div className="pt-2 border-t border-slate-700/50 flex justify-between items-start pt-3">
                 <div className="space-y-1">
                   <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">System State</p>
                   <p className={cn("text-[10px] font-bold uppercase leading-none flex items-baseline gap-1", stats.textColor)}>
@@ -1618,12 +1676,20 @@ export default function App() {
                     <p className="text-[9px] font-black uppercase tracking-tighter text-slate-500">Done Today</p>
                     <p className="text-[10px] font-bold text-emerald-400 font-mono">{stats.doneToday}</p>
                   </div>
-                  {stats.pendingDeadlines > 0 && (
-                    <div className="flex flex-col items-end">
-                      <p className="text-[9px] font-black uppercase tracking-tighter text-red-500">Approaching</p>
-                      <p className="text-[10px] font-bold text-red-500 font-mono">{stats.pendingDeadlines}</p>
-                    </div>
-                  )}
+                  <div className="flex gap-3">
+                    {stats.pendingDeadlines > 0 && (
+                      <div className="flex flex-col items-end">
+                        <p className="text-[9px] font-black uppercase tracking-tighter text-amber-500">Approaching</p>
+                        <p className="text-[10px] font-bold text-amber-500 font-mono">{stats.pendingDeadlines}</p>
+                      </div>
+                    )}
+                    {stats.expiredDeadlines > 0 && (
+                      <div className="flex flex-col items-end">
+                        <p className="text-[9px] font-black uppercase tracking-tighter text-red-500">Expired</p>
+                        <p className="text-[10px] font-bold text-red-500 font-mono">{stats.expiredDeadlines}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2473,14 +2539,22 @@ export default function App() {
                           <div className="h-px bg-red-200/50 my-4" />
                           
                           <p className="text-[11px] text-red-800 font-bold mb-3 leading-relaxed">
-                            CRITICAL: Delete ALL tasks in the cloud. This cannot be undone. Use only for full data clearing.
+                            CRITICAL: Delete ALL tasks in the cloud. This cannot be undone. An emergency backup will be created first if sync is enabled.
                           </p>
-                          <button 
-                            onClick={purgeAllData}
-                            className="w-full py-3 bg-red-600 text-white rounded-lg text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center justify-center gap-2"
-                          >
-                            <Trash2 size={14} /> Purge All Database Content
-                          </button>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                             <button 
+                                onClick={purgeSectionData}
+                                className="flex-1 py-3 bg-red-100 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-200 transition-all border border-red-200 flex items-center justify-center gap-2"
+                              >
+                                <Trash2 size={14} /> Purge "{activeSection}"
+                              </button>
+                              <button 
+                                onClick={purgeAllData}
+                                className="flex-1 py-3 bg-red-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center justify-center gap-2"
+                              >
+                                <AlertCircle size={14} /> Purge All Content
+                              </button>
+                          </div>
                         </div>
                       </div>
 
