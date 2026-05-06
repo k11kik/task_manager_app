@@ -21,12 +21,6 @@
       "purpose": "any"
     },
     {
-      "src": "icon-maskable.svg",
-      "type": "image/svg+xml",
-      "sizes": "any",
-      "purpose": "maskable"
-    },
-    {
       "src": "apple-touch-icon.png",
       "type": "image/png",
       "sizes": "180x180",
@@ -35,6 +29,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#4f46e5",
+  "theme_color": "#ffffff",
   "background_color": "#ffffff"
 }
