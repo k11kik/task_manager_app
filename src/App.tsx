@@ -2155,7 +2155,7 @@ export default function App() {
 
         {/* Sidebar / Input Section */}
         <aside className={cn(
-          "col-span-12 lg:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pb-20 lg:pb-0",
+          "col-span-12 lg:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pb-24 lg:pb-0",
           (viewMode !== 'dashboard' || mobileView !== 'summary') && "hidden lg:flex"
         )}>
           {!user ? (
@@ -2420,7 +2420,7 @@ export default function App() {
         {/* Task Columns */}
         <div className="col-span-12 lg:col-span-9 h-full min-h-0 overflow-hidden">
           {viewMode === 'dashboard' ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full lg:pb-0">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full lg:pb-0">
               {/* Urgent Column */}
               <section className={cn(
                 "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/50 border-red-100 transition-all h-full",
@@ -2438,7 +2438,7 @@ export default function App() {
                   </span>
                 </div>
                 
-                <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-20 lg:pb-10">
+                <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
                   <AnimatePresence mode="popLayout">
                     {filteredTasks
                       .filter(t => t.category === 'Urgent')
@@ -2493,7 +2493,7 @@ export default function App() {
 
               {/* Focus Column (Spans 2) */}
               <section className={cn(
-                "col-span-1 md:col-span-2 flex flex-col rounded-2xl border p-4 min-h-0 bg-indigo-50/50 border-indigo-100 transition-all h-full",
+                "col-span-1 lg:col-span-2 flex flex-col rounded-2xl border p-4 min-h-0 bg-indigo-50/50 border-indigo-100 transition-all h-full",
                 mobileView === 'focus' ? "flex" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
@@ -2511,7 +2511,7 @@ export default function App() {
                   </button>
                 </div>
                 
-                <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-20 lg:pb-10">
+                <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
                   {groupedFocusTasks.expired.length > 0 && (
                     <div className="space-y-2 mb-4">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600 bg-red-100/50 px-2 py-1.5 rounded-lg border border-red-200 flex items-center gap-2">
@@ -2737,7 +2737,7 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-20">
+              <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-24">
                 {groupedArchiveTasks.nearingPurge.length > 0 && (
                    <div className="space-y-3 mb-8">
                       <div className="flex items-center gap-4 px-2">
@@ -2938,7 +2938,7 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-20">
+              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-24">
                 {groupedTrashTasks.nearingPurge.length > 0 && (
                    <div className="space-y-3 mb-8">
                       <div className="flex items-center gap-4 px-2">
