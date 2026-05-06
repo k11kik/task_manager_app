@@ -1018,9 +1018,11 @@ export default function App() {
 
   const addSection = async (name: string) => {
     if (!user || !name.trim()) return;
-    const next = [...settings.sections, name.trim()];
+    const trimmedName = name.trim();
+    const next = [...settings.sections, trimmedName];
     try {
       await updateDoc(doc(db, 'settings', user.uid), { sections: next });
+      setActiveSection(trimmedName);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `settings/${user.uid}`);
     }
