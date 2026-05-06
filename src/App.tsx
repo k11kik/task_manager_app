@@ -41,6 +41,8 @@ import {
   PanelTop,
   Plus,
   Minus,
+  Pin,
+  PinOff,
   GripVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -84,8 +86,8 @@ enum OperationType {
 }
 
 const THEME_CATEGORIES = [
-  { id: 'Urgent', label: 'Urgent', icon: Zap, color: 'bg-red-50/50 border-red-100', accent: 'bg-red-500', text: 'text-red-700', badge: 'text-red-400 border-red-100', desc: '3 Slots' },
-  { id: 'Focus', label: 'Focus', icon: Target, color: 'bg-indigo-50/50 border-indigo-100', accent: 'bg-indigo-500', text: 'text-indigo-700', badge: 'text-indigo-500', desc: 'Main' },
+  { id: 'Urgent', label: 'Focus', icon: Zap, color: 'bg-red-50/50 border-red-100', accent: 'bg-red-500', text: 'text-red-700', badge: 'text-red-400 border-red-100', desc: '3 Slots' },
+  { id: 'Focus', label: 'ToDo', icon: Target, color: 'bg-indigo-50/50 border-indigo-100', accent: 'bg-indigo-500', text: 'text-indigo-700', badge: 'text-indigo-500', desc: 'Main' },
 ];
 
 export default function App() {
@@ -149,8 +151,8 @@ export default function App() {
   const t = (key: string) => {
     const translations: Record<string, Record<string, string>> = {
       en: {
-        'Urgent': 'Urgent',
-        'Focus': 'Focus',
+        'Urgent': 'Focus',
+        'Focus': 'ToDo',
         'Archive': 'Archive',
         'Trash': 'Trash Bin',
         'Settings': 'Settings',
@@ -171,15 +173,15 @@ export default function App() {
         'DeletingSoon': 'Deleting Soon',
         'ArchiveEmpty': 'Archive Empty',
         'TrashEmpty': 'Trash Bin is Empty',
-        'NoUrgent': 'No Urgent Tasks',
-        'NoFocus': 'No Focus Tasks',
+        'NoUrgent': 'No Focus Tasks',
+        'NoFocus': 'No ToDo Tasks',
         'Expired': 'Expired Deadlines',
         'Approaching': 'Approaching Deadlines',
         'Extract': 'Extract',
         'SystemArchive': 'System Archive',
         'TaskEntry': 'New Task Entry',
-        'WorkflowHealth': 'Workflow Health',
-        'Status': 'Status',
+        'WorkflowHealth': 'Working Status',
+        'Status': 'Working Status',
         'DoneToday': 'Done Today',
         'Authenticated': 'Authenticated',
         'DataLifecycle': 'Data Lifecycle',
@@ -190,11 +192,17 @@ export default function App() {
         'AccountInformation': 'Account Information',
         'CloudSynced': 'Cloud Synced',
         'LocalOnly': 'Local Only',
-        'UrgentCapacity': 'Urgent Capacity',
-        'HealthMetrics': 'Health Metrics',
+        'UrgentCapacity': 'Focus Capacity',
+        'HealthMetrics': 'ToDo Limit Settings',
         'CriticalThreshold': 'Critical Threshold',
         'DeadlineThreshold': 'Deadline Threshold',
         'DoneTrashLifecycle': 'Done & Trash Lifecycle',
+        'GlobalLoad': 'Global Load',
+        'CriticalLoad': 'Critical Load',
+        'WarningHighLoad': 'Warning High Load',
+        'SafeCapacity': 'Safe Capacity',
+        'AutomatedSyncStatus': 'Automated Sync Status',
+        'TaskDetail': 'Task Detail',
         'PersonalAccount': 'Personal Account',
         'NotSignedIn': 'Not signed in',
         'DisconnectAccount': 'Disconnect account',
@@ -202,19 +210,67 @@ export default function App() {
         'SystemState': 'System State',
         'Search': 'Search',
         'All': 'All',
-        'UrgentSlotLimit': 'Urgent Slot Limit',
+        'UrgentSlotLimit': 'Focus Slot Limit',
         'MaxConcurrentUrgent': 'Maximum concurrent priority tasks allowed.',
-        'CriticalAlertDesc': 'Maximum focus tasks before critical alert. Warning is at 70%.',
-        'DeadlineThresholdDesc': 'Days before deadline to prioritize task in Focus list.',
+        'CriticalAlertDesc': 'Maximum ToDo tasks before critical alert. Warning is at 70%.',
+        'DeadlineThresholdDesc': 'Days before deadline to prioritize task in ToDo list.',
         'DoneToTrash': 'Done to Trash',
-        'DoneToTrashDesc': 'How long to keep completed tasks in Focus before Trashing.',
+        'DoneToTrashDesc': 'How long to keep completed tasks in ToDo before Trashing.',
         'TrashAutoCleanup': 'Trash Auto-Cleanup',
         'TrashAutoCleanupDesc': 'Permanently delete items in Trash after this period.',
-        'SelectLanguageDesc': 'Select your preferred interface language.'
+        'AutoArchiveSweep': 'Auto Archive Sweep',
+        'ArchiveThreshold': 'Archive Threshold',
+        'ArchiveThresholdDesc': 'Move items to archive after specified inactivity period.',
+        'SyncToCloud': 'Sync to Cloud',
+        'SyncToCloudDesc': 'Sign in to sync across all devices in real-time.',
+        'ContinueWithGoogle': 'Continue with Google',
+        'ResetSettingsDesc': 'Reset all app settings to default.',
+        'PermissionNeeded': 'Permission needed to continue saving after refresh.',
+        'Syncing': 'Syncing...',
+        'BackupNeeded': 'Backup Needed',
+        'BackedUp': 'Backed Up',
+        'LastSuccessfulLog': 'Last Successful Log',
+        'SelectLanguageDesc': 'Select your preferred interface language.',
+        'ProjectFilter': 'Project Filter',
+        'SyncActive': 'Sync Active',
+        'SyncOff': 'Sync Off',
+        'AddToFocus': 'Add ToDo',
+        'SyncAndBackup': 'Sync & Backup',
+        'LocalFolderLog': 'Local Folder Log',
+        'LocalDirectoryPath': 'Local Directory Path',
+        'NoFolderSelected': 'No Folder Selected',
+        'AuthorizeSession': 'Authorize Session',
+        'SelectFolder': 'Select Folder',
+        'ManualLocalBackup': 'Manual Local Backup',
+        'SaveBackupToLocal': 'Save Backup to Local',
+        'DangerZone': 'Danger Zone',
+        'ForceResetSettings': 'Force Reset Settings',
+        'CommittingChanges': 'Committing Changes...',
+        'AuthorizedLocalFolder': 'Authorized Local Folder',
+        'RenameWorkspace': 'Rename Workspace?',
+        'ForceBackupNow': 'Force Backup Now',
+        'Star': 'Important',
+        'Maximize': 'Maximize',
+        'SystemActions': 'System Actions',
+        'MoveToUrgent': 'Move to Focus',
+        'RestoreToFocus': 'Restore to ToDo',
+        'ArchiveTask': 'Archive Task',
+        'MoveToTrash': 'Move to Trash',
+        'DeletePermanently': 'Delete Permanently',
+        'Metadata': 'Metadata',
+        'Cancel': 'Cancel',
+        'CommitChanges': 'Commit Changes',
+        'DeleteConfirm': 'Delete this task permanently?',
+        'ProjectCode': 'Project Code',
+        'SafeCapacityUppercase': 'SAFE CAPACITY',
+        'GeneralProjectOverview': 'General Project Overview',
+        'ProjectOverview': ' Project Overview',
+        'NoTasks': 'No tasks found.',
+        'SyncOffUppercase': 'SYNC OFF'
       },
       ja: {
-        'Urgent': 'アージェント',
-        'Focus': 'フォーカス',
+        'Urgent': 'フォーカス',
+        'Focus': 'ToDo',
         'Archive': 'アーカイブ',
         'Trash': 'ゴミ箱',
         'Settings': '設定',
@@ -225,25 +281,30 @@ export default function App() {
         'Japanese': '日本語 (Japanese)',
         'CardView': 'カード表示',
         'ListView': 'リスト表示',
+        'Done': '完了',
+        'Pending': '未完了',
+        'Filters': 'フィルター',
+        'Reset': 'リセット',
+        'NoTasks': 'タスクがありません',
+        'NoProjectsTracked': 'まだプロジェクトが管理されていません。',
         'InactiveMoveToTrash': '非アクティブなアイテムは自動的にゴミ箱に移動されます - 期間:',
         'PermanentDeleteAfter': 'ゴミ箱のアイテムは自動的に消去されます - 期間:',
         'EmptyTrash': 'ゴミ箱を空にする',
-        'Reset': 'リセット',
         'FilterProjects': 'プロジェクトでフィルタ',
         'Days': '日',
         'MovingSoon': 'まもなくゴミ箱へ移動',
         'DeletingSoon': 'まもなく完全に消去',
         'ArchiveEmpty': 'アーカイブは空です',
         'TrashEmpty': 'ゴミ箱は空です',
-        'NoUrgent': 'アージェントはありません',
-        'NoFocus': 'フォーカスはありません',
+        'NoUrgent': 'フォーカスはありません',
+        'NoFocus': 'ToDoはありません',
         'Expired': '期限切れ',
         'Approaching': 'まもなく期限',
         'Extract': '抽出',
         'SystemArchive': 'アーカイブ',
         'TaskEntry': 'タスクの追加',
-        'WorkflowHealth': 'ステータス',
-        'Status': 'ステータス',
+        'WorkflowHealth': 'ワークステータス',
+        'Status': 'ワークステータス',
         'DoneToday': '本日の完了',
         'Authenticated': 'ログイン中',
         'DataLifecycle': 'データ管理',
@@ -254,31 +315,31 @@ export default function App() {
         'AccountInformation': 'アカウント情報',
         'CloudSynced': 'クラウド同期中',
         'LocalOnly': 'ローカル保存のみ',
-        'UrgentCapacity': 'アージェント容量',
-        'HealthMetrics': 'フォーカス上限設定',
+        'UrgentCapacity': 'フォーカス容量',
+        'HealthMetrics': 'ToDo上限設定',
         'CriticalThreshold': '限界しきい値',
-        'DeadlineThreshold': '締切の事前通知',
+        'DeadlineThreshold': '締切しきい値',
         'DoneTrashLifecycle': '完了したタスクの処理',
         'PersonalAccount': '共有なし',
         'NotSignedIn': 'ログインしていません',
         'DisconnectAccount': 'アカウントの連携解除',
         'Items': '件',
-        'SystemState': 'システム状態',
+        'SystemState': 'System State',
         'Search': '検索',
         'All': 'すべて',
-        'UrgentSlotLimit': 'アージェント枠の上限',
+        'UrgentSlotLimit': 'フォーカス枠の上限',
         'MaxConcurrentUrgent': '同時に進められる優先タスクの最大数です。',
-        'CriticalAlertDesc': 'フォーカタスクの許容量。70%で警告、100%で限界。',
-        'DeadlineThresholdDesc': '締切の何日前からフォーカスリストで優先するか設定します。',
+        'CriticalAlertDesc': 'ToDoタスクの許容量。70%で警告、100%で限界。',
+        'DeadlineThresholdDesc': '締切の何日前からToDoリストで優先するか設定します。',
         'DoneToTrash': '完了からゴミ箱へ',
         'DoneToTrashDesc': '完了したタスクをゴミ箱に送るまでの日数。',
         'TrashAutoCleanup': 'ゴミ箱の自動整理',
         'TrashAutoCleanupDesc': 'ゴミ箱に入ったアイテムを完全に削除するまでの日数。',
         'SelectLanguageDesc': 'インターフェースの表示言語を設定します。',
         'GlobalLoad': '全体の負荷',
-        'CriticalLoad': '限界容量を超過',
-        'WarningHighLoad': '負荷が高い状態',
-        'SafeCapacity': '容量に余裕あり',
+        'CriticalLoad': 'CRITICAL LOAD',
+        'WarningHighLoad': 'HIGH LOAD',
+        'SafeCapacity': 'SAFE CAPACITY',
         'ProjectOverview': 'のプロジェクト概況',
         'Total': '件',
         'NoProjectsTracked': 'まだ複数のプロジェクトが管理されていません。',
@@ -297,7 +358,7 @@ export default function App() {
         'Urls': 'リンク',
         'Add': '追加',
         'UrlPlaceholder': 'https://... (Ctrl+Enterで保存)',
-        'AddToFocus': 'フォーカスに追加',
+        'AddToFocus': 'ToDoに追加',
         'SignIn': 'ログイン',
         'LogOut': 'ログアウト',
         'Deadline': '締切',
@@ -318,8 +379,8 @@ export default function App() {
         'LastSaved': '最終保存',
         'DailyUpdateRecommendation': '推奨: 1日1回の更新',
         'DangerZone': '危険な操作',
-        'ResetSettingsDesc': 'ワークスペースやシステム設定を全て初期状態に戻します。',
-        'ForceResetSettings': '設定を強制リセット',
+        'ResetSettingsDesc': 'CRITICAL: Cloud上の全タスクを削除します。この操作は取り消せません。同期が有効な場合、まず緊急バックアップが作成されます。',
+        'ForceResetSettings': 'クラウドタスクを完全に消去',
         'PermissionNeeded': 'ブラウザの更新後、保存を再開するには許可が必要です。',
         'ProjectFilter': 'プロジェクト',
         'FilterByProject': 'プロジェクトで絞り込み',
@@ -328,6 +389,7 @@ export default function App() {
         'BackupNeeded': '要バックアップ',
         'BackedUp': 'バックアップ済み',
         'SyncOff': '同期オフ',
+        'SyncOffUppercase': '同期オフ',
         'AutomatedSyncStatus': '自動同期ステータス',
         'LastSuccessfulLog': '最終ログ保存',
         'CommittingChanges': '保存中...',
@@ -337,8 +399,8 @@ export default function App() {
         'Star': '重要',
         'Maximize': '最大化',
         'SystemActions': '操作',
-        'MoveToUrgent': '緊急に移動',
-        'RestoreToFocus': 'フォーカスに戻す',
+        'MoveToUrgent': 'フォーカスに移動',
+        'RestoreToFocus': 'ToDoに戻す',
         'ArchiveTask': 'アーカイブする',
         'MoveToTrash': 'ゴミ箱に移動',
         'DeletePermanently': '完全に削除',
@@ -652,7 +714,7 @@ export default function App() {
         const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                              t.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
                              (t.notes || '').toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesProject = selectedProject === 'All' || t.project === selectedProject;
+        const matchesProject = selectedProject === 'All' || t.project === selectedProject || t.isPinned;
         const matchesSection = t.section === activeSection || (!t.section && activeSection === settings.sections[0]);
         return matchesSearch && matchesProject && matchesSection;
       })
@@ -661,17 +723,34 @@ export default function App() {
         if (a.isDone && !b.isDone) return 1;
         if (!a.isDone && b.isDone) return -1;
 
-        // Universal Priority 2: Deadline (earliest first)
+        // Universal Priority 2: Deadline Status
+        const now = Date.now();
+        const threshold = (settings.deadlineThreshold || 3) * 24 * 60 * 60 * 1000;
+        
+        const isExpiredA = a.deadline && (a.deadline < now);
+        const isExpiredB = b.deadline && (b.deadline < now);
+        if (isExpiredA !== isExpiredB) return isExpiredA ? -1 : 1;
+
+        const isApproachingA = a.deadline && (a.deadline - now <= threshold);
+        const isApproachingB = b.deadline && (b.deadline - now <= threshold);
+        if (isApproachingA !== isApproachingB) return isApproachingA ? -1 : 1;
+
+        // Universal Priority 3: Pinned tasks
+        const pinA = !!a.isPinned;
+        const pinB = !!b.isPinned;
+        if (pinA !== pinB) return pinA ? -1 : 1;
+
+        // Universal Priority 4: Specified Deadline
         if (a.deadline && b.deadline) return a.deadline - b.deadline;
         if (a.deadline) return -1;
         if (b.deadline) return 1;
 
-        // Universal Priority 3: Starred (starred first)
+        // Universal Priority 5: Starred (starred first)
         const starA = !!a.isStarred;
         const starB = !!b.isStarred;
         if (starA !== starB) return starA ? -1 : 1;
 
-        // Universal Priority 4: Recency (updatedAt descending)
+        // Universal Priority 6: Recency (updatedAt descending)
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
   }, [tasks, searchTerm, selectedProject, activeSection, settings.sections, settings.deadlineThreshold]);
@@ -690,12 +769,20 @@ export default function App() {
     const nearDeadline = focusTasks
       .filter(t => t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0 && !t.isDone)
       .sort((a, b) => (a.deadline || 0) - (b.deadline || 0));
+    
+    // Separate pinned tasks (excluding those already in expired or near deadline)
+    const pinned = focusTasks
+      .filter(t => t.isPinned && !t.isDone && 
+                   !(t.deadline && (t.deadline - now) < 0) &&
+                   !(t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       
-    // Others includes those without deadlines, far deadlines, or done tasks
+    // Others includes those without deadlines, far deadlines, non-pinned, or done tasks
     const others = focusTasks.filter(t => {
        const isExpired = t.deadline && (t.deadline - now) < 0 && !t.isDone;
        const isNear = t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0 && !t.isDone;
-       return !isExpired && !isNear;
+       const isPinnedNotHandled = t.isPinned && !t.isDone && !isExpired && !isNear;
+       return !isExpired && !isNear && !isPinnedNotHandled;
     });
 
     const grouped: Record<string, Task[]> = {};
@@ -703,7 +790,7 @@ export default function App() {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
-    return { expired, nearDeadline, grouped };
+    return { expired, nearDeadline, pinned, grouped };
   }, [filteredTasks, settings.deadlineThreshold]);
 
   const groupedArchiveTasks = useMemo(() => {
@@ -728,10 +815,17 @@ export default function App() {
       })
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
+    // Separate pinned tasks
+    const pinned = archiveTasks
+      .filter(t => t.isPinned && !nearingPurge.find(np => np.id === t.id))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
     const others = archiveTasks.filter(t => {
-      if (settings.archiveThresholdDays === 99999) return true;
-      const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
-      return settings.archiveThresholdDays - inactiveDays > 3;
+      if (settings.archiveThresholdDays !== 99999) {
+        const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
+        if (settings.archiveThresholdDays - inactiveDays <= 3) return false;
+      }
+      return !t.isPinned;
     });
 
     const grouped: Record<string, Task[]> = {};
@@ -739,7 +833,7 @@ export default function App() {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
-    return { nearingPurge, grouped };
+    return { nearingPurge, pinned, grouped };
   }, [filteredTasks, settings.archiveThresholdDays, archiveFilter]);
 
   const groupedTrashTasks = useMemo(() => {
@@ -900,6 +994,20 @@ export default function App() {
     try {
       await updateDoc(doc(db, 'tasks', id), { 
         isStarred: !task.isStarred, 
+        updatedAt: Date.now() 
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
+    }
+  };
+
+  const togglePin = async (id: string) => {
+    if (!user) return;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    try {
+      await updateDoc(doc(db, 'tasks', id), { 
+        isPinned: !task.isPinned, 
         updatedAt: Date.now() 
       });
     } catch (err) {
@@ -1634,6 +1742,7 @@ export default function App() {
 
       {/* Header Navigation */}
       <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex justify-between items-center shrink-0">
+        {/* Left Side: Logo & Workspace Menu */}
         <div className="flex items-center gap-4 md:gap-8">
           <div className="relative">
             <button 
@@ -1739,299 +1848,259 @@ export default function App() {
               </>
             )}
           </div>
-          <nav className="hidden lg:flex gap-6 text-sm font-medium text-slate-500">
-            <button 
-              onClick={() => { setViewMode('dashboard'); setMobileView('summary'); }}
-              className={cn("pb-4 -mb-4 transition-colors", viewMode === 'dashboard' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
-            >
-              {t('Dashboard')}
-            </button>
-            <button 
-              onClick={() => { setViewMode('archive'); setMobileView('archive'); }}
-              className={cn("pb-4 -mb-4 transition-colors", viewMode === 'archive' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
-            >
-              {t('Archive')}
-            </button>
-            <button 
-              onClick={() => { setViewMode('trash'); setMobileView('trash'); }}
-              className={cn("pb-4 -mb-4 transition-colors uppercase text-[10px] font-black tracking-widest", viewMode === 'trash' ? "text-red-600 border-b-2 border-red-600" : "hover:text-slate-800")}
-            >
-              {t('Trash')}
-            </button>
-            <button 
-              onClick={() => { setViewMode('settings'); setMobileView('settings'); }}
-              className={cn("pb-4 -mb-4 transition-colors", viewMode === 'settings' ? "text-indigo-600 border-b-2 border-indigo-600" : "hover:text-slate-800")}
-            >
-              {t('Settings')}
-            </button>
-          </nav>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-2 mr-2">
-            <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
-              <button 
-                onClick={() => saveSettings({ displayMode: 'card' })}
-                className={cn(
-                  "p-1.5 rounded-lg transition-all",
-                  settings.displayMode === 'card' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
-                )}
-                title={t('CardView')}
-              >
-                <LayoutGrid size={14} />
-              </button>
-              <button 
-                onClick={() => saveSettings({ displayMode: 'list' })}
-                className={cn(
-                  "p-1.5 rounded-lg transition-all",
-                  settings.displayMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
-                )}
-                title={t('ListView')}
-              >
-                <LayoutList size={14} />
-              </button>
-            </div>
-
-            <div className="relative">
-              <button 
-                onClick={() => setShowProjectFilter(!showProjectFilter)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all",
-                  selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700 shadow-sm" : "bg-slate-50/50 border-slate-100 hover:bg-white text-slate-500"
-                )}
-              >
-                <Filter size={12} />
-                <span className="text-[10px] font-bold uppercase tracking-tighter">
-                  {selectedProject === 'All' ? t('ProjectFilter') : selectedProject}
-                </span>
-              </button>
-              {showProjectFilter && (
-                <>
-                  <div className="fixed inset-0 z-[55]" onClick={() => setShowProjectFilter(false)} />
-                  <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
-                    <div className="px-4 py-1.5 border-b border-slate-50 mb-1">
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">{t('FilterByProject')}</p>
-                    </div>
-                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
-                      {projects.map(p => (
-                        <button
-                          key={p}
-                          onClick={() => {
-                            setSelectedProject(p);
-                            setShowProjectFilter(false);
-                          }}
-                          className={cn(
-                            "w-full text-left px-4 py-2.5 text-[10px] font-bold transition-all flex items-center justify-between",
-                            selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                          )}
-                        >
-                          <span className="truncate">{p}</span>
-                          {selectedProject === p && <CheckCircle2 size={12} />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="relative ml-1">
-              <button 
-                onClick={() => {
-                  if (!dirHandle) {
-                    if (!window.showDirectoryPicker) {
-                      downloadBackup();
-                    } else {
-                      selectBackupFolder();
-                    }
-                  } else {
-                    syncToLocalSystem(true);
-                    setShowSyncDetails(!showSyncDetails);
-                  }
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all",
-                  dirHandle ? "bg-emerald-50 border-emerald-100" : (
-                    !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
-                    ? "bg-amber-50 border-amber-100 animate-pulse"
-                    : "bg-slate-50/50 border-slate-100 hover:bg-white"
-                  )
-                )}
-              >
-                <Globe size={12} className={cn(
-                  isSyncing ? "text-indigo-500 animate-spin" : (
-                    dirHandle ? "text-emerald-500" : (
-                      !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
-                      ? "text-amber-500"
-                      : "text-slate-300"
-                    )
-                  )
-                )} />
-                <span className={cn("text-[10px] font-bold uppercase tracking-tighter", 
-                  dirHandle ? "text-emerald-600" : (
-                    !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
-                    ? "text-amber-600"
-                    : "text-slate-500"
-                  )
-                )}>
-                  {isSyncing ? t('Syncing') : (
-                    dirHandle ? t('SyncActive') : (
-                      !window.showDirectoryPicker ? (
-                        !lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000 ? t('BackupNeeded') : t('BackedUp')
-                      ) : t('SyncOff')
-                    )
+        {/* Right Side: Desktop Nav & Tools & User */}
+        <div className="flex items-center gap-2">
+          {user && (
+            <>
+              {/* Desktop Dashboard/Archive/Trash/Settings Buttons */}
+              <nav className="hidden lg:flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100 mr-2">
+                <button 
+                  onClick={() => setViewMode('dashboard')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-tighter transition-all",
+                    viewMode === 'dashboard' ? "bg-white text-indigo-600 shadow-sm border border-indigo-50" : "text-slate-400 hover:text-slate-600"
                   )}
-                </span>
-              </button>
-              
-              {showSyncDetails && dirHandle && (
-                <>
-                  <div className="fixed inset-0 z-[55]" onClick={() => setShowSyncDetails(false)} />
-                  <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] p-4">
-                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-50">
-                      <div className="flex items-center gap-2 text-slate-800">
-                        <Activity size={12} className="text-indigo-500" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">{t('AutomatedSyncStatus')}</p>
-                      </div>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); syncToLocalSystem(true); }}
-                        className="p-1 hover:bg-slate-100 rounded-lg transition-colors text-indigo-600"
-                        title={t('ForceBackupNow')}
-                        disabled={isSyncing}
-                      >
-                        <RefreshCcw size={12} className={cn(isSyncing && "animate-spin")} />
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                       <div className="bg-slate-50 rounded-lg p-2.5">
-                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Local Directory Path</label>
-                        <p className="text-[10px] font-mono break-all text-slate-600 leading-tight">
-                          {settings.localBackupPath || 'Authorized Local Folder'}
-                        </p>
-                      </div>
-                      <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
-                        <span>{t('LastSuccessfulLog')}:</span>
-                        <span className="text-slate-900 border-b border-indigo-100">
-                          {lastSyncTime ? format(lastSyncTime, 'HH:mm:ss') : 'Waiting...'}
-                        </span>
-                      </div>
-                      {isSyncing && (
-                        <div className="flex items-center gap-1 text-[9px] text-indigo-600 font-bold animate-pulse">
-                          <RefreshCcw size={10} className="animate-spin" /> {t('CommittingChanges')}
+                >
+                  {t('Dashboard')}
+                </button>
+                <button 
+                  onClick={() => setViewMode('archive')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-tighter transition-all",
+                    viewMode === 'archive' ? "bg-white text-indigo-600 shadow-sm border border-indigo-50" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  {t('Archive')}
+                </button>
+                <button 
+                  onClick={() => setViewMode('trash')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-tighter transition-all",
+                    viewMode === 'trash' ? "bg-white text-red-500 shadow-sm border border-red-50" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  {t('Trash')}
+                </button>
+                <button 
+                  onClick={() => setViewMode('settings')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-tighter transition-all",
+                    viewMode === 'settings' ? "bg-white text-indigo-600 shadow-sm border border-indigo-50" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  {t('Settings')}
+                </button>
+              </nav>
+
+              <div className="hidden md:flex items-center gap-2 mr-2">
+                {/* Card/List Toggle */}
+                <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
+                  <button 
+                    onClick={() => saveSettings({ displayMode: 'card' })}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all",
+                      settings.displayMode === 'card' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                    )}
+                    title={t('CardView')}
+                  >
+                    <LayoutGrid size={14} />
+                  </button>
+                  <button 
+                    onClick={() => saveSettings({ displayMode: 'list' })}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all",
+                      settings.displayMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                    )}
+                    title={t('ListView')}
+                  >
+                    <LayoutList size={14} />
+                  </button>
+                </div>
+
+                {/* Project Filter */}
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowProjectFilter(!showProjectFilter)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all",
+                      selectedProject !== 'All' ? "bg-indigo-100 border-indigo-200 text-indigo-700 shadow-sm" : "bg-slate-50/50 border-slate-100 hover:bg-white text-slate-500"
+                    )}
+                  >
+                    <Filter size={12} />
+                    <span className="text-[10px] font-bold uppercase tracking-tighter">
+                      {selectedProject === 'All' ? t('ProjectFilter') : selectedProject}
+                    </span>
+                  </button>
+                  {showProjectFilter && (
+                    <>
+                      <div className="fixed inset-0 z-[55]" onClick={() => setShowProjectFilter(false)} />
+                      <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
+                        <div className="px-4 py-1.5 border-b border-slate-50 mb-1">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">{t('FilterByProject')}</p>
                         </div>
+                        <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                          {projects.map(p => (
+                            <button
+                              key={p}
+                              onClick={() => {
+                                setSelectedProject(p);
+                                setShowProjectFilter(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-4 py-2.5 text-[10px] font-bold transition-all flex items-center justify-between",
+                                selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                              )}
+                            >
+                              <span className="truncate">{p}</span>
+                              {selectedProject === p && <CheckCircle2 size={12} />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Sync Toggle */}
+                <div className="relative ml-1">
+                  <button 
+                    onClick={() => {
+                      if (!dirHandle) {
+                        if (!window.showDirectoryPicker) {
+                          downloadBackup();
+                        } else {
+                          selectBackupFolder();
+                        }
+                      } else {
+                        syncToLocalSystem(true);
+                        setShowSyncDetails(!showSyncDetails);
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all",
+                      dirHandle ? "bg-emerald-50 border-emerald-100" : (
+                        !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
+                        ? "bg-amber-50 border-amber-100 animate-pulse"
+                        : "bg-slate-50/50 border-slate-100 hover:bg-white"
+                      )
+                    )}
+                  >
+                    <Globe size={12} className={cn(
+                      isSyncing ? "text-indigo-500 animate-spin" : (
+                        dirHandle ? "text-emerald-500" : (
+                          !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
+                          ? "text-amber-500"
+                          : "text-slate-300"
+                        )
+                      )
+                    )} />
+                    <span className={cn("text-[10px] font-bold uppercase tracking-tighter", 
+                      dirHandle ? "text-emerald-600" : (
+                        !window.showDirectoryPicker && (!lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000)
+                        ? "text-amber-600"
+                        : "text-slate-500"
+                      )
+                    )}>
+                      {isSyncing ? t('Syncing') : (
+                        dirHandle ? t('SyncActive') : (
+                          !window.showDirectoryPicker ? (
+                            !lastBackupTime || Date.now() - lastBackupTime > 24*60*60*1000 ? t('BackupNeeded') : t('BackedUp')
+                          ) : t('SyncOffUppercase')
+                        )
                       )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-          
-          {user ? (
-            <div className="flex items-center gap-2 md:gap-3">
-              {/* Mobile Display Mode Toggle */}
-              <div className="md:hidden flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
-                <button 
-                  onClick={() => saveSettings({ displayMode: 'card' })}
-                  className={cn(
-                    "p-1.5 rounded-lg transition-all",
-                    settings.displayMode === 'card' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                    </span>
+                  </button>
+                  
+                  {showSyncDetails && dirHandle && (
+                    <>
+                      <div className="fixed inset-0 z-[55]" onClick={() => setShowSyncDetails(false)} />
+                      <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] p-4">
+                        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-50">
+                          <div className="flex items-center gap-2 text-slate-800">
+                            <Activity size={12} className="text-indigo-500" />
+                            <p className="text-[10px] font-black uppercase tracking-widest">{t('AutomatedSyncStatus')}</p>
+                          </div>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); syncToLocalSystem(true); }}
+                            className="p-1 hover:bg-slate-100 rounded-lg transition-colors text-indigo-600"
+                            title={t('ForceBackupNow')}
+                            disabled={isSyncing}
+                          >
+                            <RefreshCcw size={12} className={cn(isSyncing && "animate-spin")} />
+                          </button>
+                        </div>
+                        <div className="space-y-3">
+                           <div className="bg-slate-50 rounded-lg p-2.5">
+                            <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Local Directory Path</label>
+                            <p className="text-[10px] font-mono break-all text-slate-600 leading-tight">
+                              {settings.localBackupPath || 'Authorized Local Folder'}
+                            </p>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                            <span>{t('LastSuccessfulLog')}:</span>
+                            <span className="text-slate-900 border-b border-indigo-100">
+                              {lastSyncTime ? format(lastSyncTime, 'HH:mm:ss') : 'Waiting...'}
+                            </span>
+                          </div>
+                          {isSyncing && (
+                            <div className="flex items-center gap-1 text-[9px] text-indigo-600 font-bold animate-pulse">
+                              <RefreshCcw size={10} className="animate-spin" /> {t('CommittingChanges')}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
                   )}
-                  title={t('CardView')}
-                >
-                  <LayoutGrid size={14} />
-                </button>
-                <button 
-                  onClick={() => saveSettings({ displayMode: 'list' })}
-                  className={cn(
-                    "p-1.5 rounded-lg transition-all",
-                    settings.displayMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
-                  )}
-                  title={t('ListView')}
-                >
-                  <LayoutList size={14} />
-                </button>
+                </div>
               </div>
 
-              {/* Mobile Project Filter for All Tabs */}
-              <div className="md:hidden relative">
+              {/* Mobile Tools (Simplified) */}
+              <div className="md:hidden flex items-center gap-2">
                 <button 
-                  onClick={() => setShowProjectFilter(!showProjectFilter)}
-                  className={cn(
-                    "w-9 h-9 rounded-xl flex items-center justify-center transition-all border",
-                    selectedProject !== 'All' 
-                      ? (viewMode === 'trash' ? "bg-red-100 border-red-200 text-red-700 shadow-lg shadow-red-100/50" : "bg-indigo-100 border-indigo-200 text-indigo-700 shadow-lg shadow-indigo-100/50")
-                      : "bg-white border-slate-200 text-slate-400 shadow-sm"
-                  )}
+                  onClick={() => saveSettings({ displayMode: settings.displayMode === 'card' ? 'list' : 'card' })}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-white border border-slate-200 text-slate-400 shadow-sm"
                 >
-                  <Filter size={16} />
+                  {settings.displayMode === 'card' ? <LayoutList size={16} /> : <LayoutGrid size={16} />}
                 </button>
-                {showProjectFilter && (
-                  <>
-                    <div className="fixed inset-0 z-[110]" onClick={() => setShowProjectFilter(false)} />
-                    <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.2)] z-[111] py-2 overflow-hidden">
-                      <div className="px-4 py-2 border-b border-slate-50 mb-1 flex items-center justify-between">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">{t('FilterProjects')}</p>
-                        {selectedProject !== 'All' && (
-                          <button 
-                            onClick={() => { setSelectedProject('All'); setShowProjectFilter(false); }}
-                            className="text-[8px] font-bold text-indigo-600 uppercase"
-                          >
-                            {t('Reset')}
-                          </button>
-                        )}
-                      </div>
-                      <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
-                        {projects.map(p => (
-                          <button
-                            key={p}
-                            onClick={() => {
-                              setSelectedProject(p);
-                              setShowProjectFilter(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-4 py-3 text-[10px] font-bold transition-all flex items-center justify-between",
-                              selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
-                            )}
-                          >
-                            <span className="truncate">{p}</span>
-                            {selectedProject === p && <CheckCircle2 size={12} />}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
-              
-              <div className="text-right flex flex-col items-end leading-none hidden sm:flex">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500/50 mb-0.5">{t('Authenticated')}</span>
-                <span className="text-xs font-bold text-slate-700">{user.displayName || user.email?.split('@')[0]}</span>
-              </div>
-              <div className="w-9 h-9 rounded-xl overflow-hidden border-2 border-white shadow-xl shadow-indigo-100/50 bg-indigo-50 flex items-center justify-center text-indigo-400 shrink-0">
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <UserIcon size={18} />
-                )}
-              </div>
-              <button 
-                onClick={logOut}
-                className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group shrink-0"
-                title={t('LogOut')}
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-          ) : (
-            <button 
-              onClick={() => handleSignIn()}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-            >
-              <LogIn size={16} />
-              <span className="hidden sm:inline">{t('SignIn')}</span>
-            </button>
+            </>
           )}
+
+          {/* User Profile / LogOut */}
+          <div className="flex items-center gap-2 border-l border-slate-100 pl-4 ml-2">
+            {user ? (
+              <>
+                <div className="text-right flex flex-col items-end leading-none hidden sm:flex">
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500/50 mb-0.5">{t('Authenticated')}</span>
+                  <span className="text-xs font-bold text-slate-700">{user.displayName || user.email?.split('@')[0]}</span>
+                </div>
+                <div className="w-9 h-9 rounded-xl overflow-hidden border-2 border-white shadow-xl shadow-indigo-100/50 bg-indigo-50 flex items-center justify-center text-indigo-400 shrink-0">
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <UserIcon size={18} />
+                  )}
+                </div>
+                <button 
+                  onClick={logOut}
+                  className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 transition-all group shrink-0"
+                  title={t('LogOut')}
+                >
+                  <LogOut size={16} />
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={() => handleSignIn()}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+              >
+                <LogIn size={16} />
+                <span className="hidden sm:inline">{t('SignIn')}</span>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -2206,10 +2275,21 @@ export default function App() {
                   ))}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 uppercase tracking-widest text-[9px] opacity-60">
-                    <Calendar size={12} className="text-slate-400" />
-                    {t('Deadline')}
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 uppercase tracking-widest text-[9px] opacity-60">
+                      <Calendar size={12} className="text-slate-400" />
+                      {t('Deadline')}
+                    </label>
+                    {newTaskDeadline && (
+                      <button 
+                        type="button" 
+                        onClick={() => setNewTaskDeadline('')}
+                        className="text-[9px] font-bold text-red-500 hover:underline"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                   <input 
                     type="date"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-400 font-medium [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
@@ -2329,8 +2409,8 @@ export default function App() {
                   </div>
                 </div>
               ))}
-              {Object.keys(stats.projectStats).length <= 1 && (
-                <p className="text-[10px] text-slate-400 italic text-center py-2">No multiple projects tracked yet.</p>
+              {Object.keys(stats.projectStats).length === 0 && (
+                <p className="text-[10px] text-slate-400 italic text-center py-2">{t('NoTasks')}</p>
               )}
             </div>
           </div>
@@ -2339,7 +2419,7 @@ export default function App() {
         {/* Task Columns */}
         <div className="col-span-12 lg:col-span-9 h-full min-h-0 overflow-hidden">
           {viewMode === 'dashboard' ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full pb-20 lg:pb-0">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full lg:pb-0">
               {/* Urgent Column */}
               <section className={cn(
                 "flex flex-col rounded-2xl border p-4 min-h-0 bg-red-50/50 border-red-100 transition-all h-full",
@@ -2357,7 +2437,7 @@ export default function App() {
                   </span>
                 </div>
                 
-                <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
+                <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-20 lg:pb-10">
                   <AnimatePresence mode="popLayout">
                     {filteredTasks
                       .filter(t => t.category === 'Urgent')
@@ -2365,18 +2445,23 @@ export default function App() {
                         // Priority 1: Done state (lowest priority)
                         if (a.isDone && !b.isDone) return 1;
                         if (!a.isDone && b.isDone) return -1;
+
+                        // Priority 2: Pinned tasks (global)
+                        const pinA = !!a.isPinned;
+                        const pinB = !!b.isPinned;
+                        if (pinA !== pinB) return pinA ? -1 : 1;
                         
-                        // Priority 2: Deadline (earliest first)
+                        // Priority 3: Deadline (earliest first)
                         if (a.deadline && b.deadline) return a.deadline - b.deadline;
                         if (a.deadline) return -1;
                         if (b.deadline) return 1;
 
-                        // Priority 3: Starred (starred first)
+                        // Priority 4: Starred (starred first)
                         const starA = !!a.isStarred;
                         const starB = !!b.isStarred;
                         if (starA !== starB) return starA ? -1 : 1;
 
-                        // Priority 4: Recency (updatedAt descending)
+                        // Priority 5: Recency (updatedAt descending)
                         return (b.updatedAt || 0) - (a.updatedAt || 0);
                       })
                       .map(task => (
@@ -2388,6 +2473,7 @@ export default function App() {
                           onDelete={() => deleteTask(task.id)}
                           onEdit={() => setEditingTask(task)}
                           onStar={() => toggleStar(task.id)}
+                          onPin={() => togglePin(task.id)}
                           t={t}
                           variant="Urgent"
                           displayMode={settings.displayMode}
@@ -2424,7 +2510,7 @@ export default function App() {
                   </button>
                 </div>
                 
-                <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
+                <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-20 lg:pb-10">
                   {groupedFocusTasks.expired.length > 0 && (
                     <div className="space-y-2 mb-4">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600 bg-red-100/50 px-2 py-1.5 rounded-lg border border-red-200 flex items-center gap-2">
@@ -2445,6 +2531,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               onStar={() => toggleStar(task.id)}
+                              onPin={() => togglePin(task.id)}
                               t={t}
                               variant="Focus"
                               displayMode={settings.displayMode}
@@ -2476,6 +2563,39 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               onStar={() => toggleStar(task.id)}
+                              onPin={() => togglePin(task.id)}
+                              t={t}
+                              variant="Focus"
+                              displayMode={settings.displayMode}
+                              deadlineThreshold={settings.deadlineThreshold}
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  )}
+
+                  {groupedFocusTasks.pinned.length > 0 && (
+                    <div className="space-y-2 mb-8">
+                       <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-lg border border-indigo-100 flex items-center gap-2">
+                        <Pin size={12} strokeWidth={3} className="rotate-45" />
+                        {t('Pinned')} (Global)
+                      </h4>
+                      <div className={cn(
+                        "grid grid-cols-1 gap-2.5",
+                        !isListMode && "md:grid-cols-2"
+                      )}>
+                        <AnimatePresence mode="popLayout">
+                          {groupedFocusTasks.pinned.map(task => (
+                            <TaskCard 
+                              key={task.id} 
+                              task={task} 
+                              onToggle={() => toggleDone(task.id)}
+                              onMove={(newCat) => moveTask(task.id, newCat)}
+                              onDelete={() => deleteTask(task.id)}
+                              onEdit={() => setEditingTask(task)}
+                              onStar={() => toggleStar(task.id)}
+                              onPin={() => togglePin(task.id)}
                               t={t}
                               variant="Focus"
                               displayMode={settings.displayMode}
@@ -2521,6 +2641,7 @@ export default function App() {
                                     onDelete={() => deleteTask(task.id)}
                                     onEdit={() => setEditingTask(task)}
                                     onStar={() => toggleStar(task.id)}
+                                    onPin={() => togglePin(task.id)}
                                     t={t}
                                     variant="Focus"
                                     displayMode={settings.displayMode}
@@ -2615,7 +2736,7 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-32">
+              <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-20">
                 {groupedArchiveTasks.nearingPurge.length > 0 && (
                    <div className="space-y-3 mb-8">
                       <div className="flex items-center gap-4 px-2">
@@ -2639,6 +2760,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               onStar={() => toggleStar(task.id)}
+                              onPin={() => togglePin(task.id)}
                               t={t}
                               variant="Archive"
                               displayMode={settings.displayMode}
@@ -2648,6 +2770,41 @@ export default function App() {
                         </AnimatePresence>
                       </div>
                     </div>
+                )}
+
+                {groupedArchiveTasks.pinned.length > 0 && (
+                  <div className="space-y-3 mb-8">
+                    <div className="flex items-center gap-4 px-2">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 flex items-center gap-1.5">
+                        <Pin size={10} strokeWidth={3} className="rotate-45" />
+                        {t('Pinned')} (Global)
+                      </h4>
+                      <div className="h-px flex-1 bg-indigo-100"></div>
+                    </div>
+                    <div className={cn(
+                      "grid grid-cols-1 gap-2.5",
+                      !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                    )}>
+                      <AnimatePresence mode="popLayout">
+                        {groupedArchiveTasks.pinned.map(task => (
+                          <TaskCard 
+                            key={task.id} 
+                            task={task} 
+                            onToggle={() => toggleDone(task.id)}
+                            onMove={(newCat) => moveTask(task.id, newCat)}
+                            onDelete={() => deleteTask(task.id)}
+                            onEdit={() => setEditingTask(task)}
+                            onStar={() => toggleStar(task.id)}
+                            onPin={() => togglePin(task.id)}
+                            t={t}
+                            variant="Archive"
+                            displayMode={settings.displayMode}
+                            deadlineThreshold={settings.deadlineThreshold}
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </div>
                 )}
 
                 {Object.keys(groupedArchiveTasks.grouped).length > 0 ? (
@@ -2689,6 +2846,7 @@ export default function App() {
                                   onDelete={() => deleteTask(task.id)}
                                   onEdit={() => setEditingTask(task)}
                                   onStar={() => toggleStar(task.id)}
+                                  onPin={() => togglePin(task.id)}
                                   t={t}
                                   variant="Archive"
                                   displayMode={settings.displayMode}
@@ -2779,7 +2937,7 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-40">
+              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-20">
                 {groupedTrashTasks.nearingPurge.length > 0 && (
                    <div className="space-y-3 mb-8">
                       <div className="flex items-center gap-4 px-2">
@@ -2803,6 +2961,7 @@ export default function App() {
                               onDelete={() => deleteTask(task.id)}
                               onEdit={() => setEditingTask(task)}
                               onStar={() => toggleStar(task.id)}
+                              onPin={() => togglePin(task.id)}
                               t={t}
                               variant="Trash"
                               displayMode={settings.displayMode}
@@ -2853,6 +3012,7 @@ export default function App() {
                                   onDelete={() => deleteTask(task.id)}
                                   onEdit={() => setEditingTask(task)}
                                   onStar={() => toggleStar(task.id)}
+                                  onPin={() => togglePin(task.id)}
                                   t={t}
                                   variant="Trash"
                                   displayMode={settings.displayMode}
@@ -2967,59 +3127,61 @@ export default function App() {
                   </div>
 
                   {/* Language Settings */}
-                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                    <div className="flex items-center gap-2 mb-4 text-indigo-600">
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-4">
+                    <div className="flex items-center gap-2 text-indigo-600">
                       <Languages size={18} />
                       <h3 className="font-bold text-sm uppercase tracking-wider">{t('Language')}</h3>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-slate-900">{t('Language')}</p>
-                        <p className="text-xs text-slate-500">Select your preferred interface language.</p>
-                      </div>
-                      <div className="flex bg-white border border-slate-200 rounded-xl p-1 overflow-hidden shadow-sm">
-                        <button 
-                          onClick={() => saveSettings({ ...settings, language: 'en' })}
-                          className={cn(
-                            "px-4 py-2 rounded-lg text-xs font-bold transition-all",
-                            settings.language === 'en' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
-                          )}
-                        >
-                          {t('English')}
-                        </button>
-                        <button 
-                          onClick={() => saveSettings({ ...settings, language: 'ja' })}
-                          className={cn(
-                            "px-4 py-2 rounded-lg text-xs font-bold transition-all",
-                            settings.language === 'ja' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
-                          )}
-                        >
-                          {t('Japanese')}
-                        </button>
+                    <div className="flex flex-col gap-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-bold text-slate-900">{t('Language')}</p>
+                          <p className="text-xs text-slate-500">{t('SelectLanguageDesc')}</p>
+                        </div>
+                        <div className="flex bg-white border border-slate-200 rounded-xl p-1 overflow-hidden shadow-sm w-full sm:w-64 shrink-0 h-11">
+                          <button 
+                            onClick={() => saveSettings({ ...settings, language: 'en' })}
+                            className={cn(
+                              "flex-1 py-3 rounded-lg text-xs font-bold transition-all",
+                              settings.language === 'en' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
+                            )}
+                          >
+                            {t('English')}
+                          </button>
+                          <button 
+                            onClick={() => saveSettings({ ...settings, language: 'ja' })}
+                            className={cn(
+                              "flex-1 py-3 rounded-lg text-xs font-bold transition-all",
+                              settings.language === 'ja' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
+                            )}
+                          >
+                            {t('Japanese')}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Urgent Limits */}
-                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                    <div className="flex items-center gap-2 mb-4 text-amber-600">
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-4">
+                    <div className="flex items-center gap-2 text-amber-600">
                       <Zap size={18} />
                       <h3 className="font-bold text-sm uppercase tracking-wider">{t('UrgentCapacity')}</h3>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex-1">
                         <p className="font-bold text-slate-900">{t('UrgentSlotLimit')}</p>
                         <p className="text-xs text-slate-500">{t('MaxConcurrentUrgent')}</p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 w-full sm:w-48 shrink-0">
                         <button 
                           onClick={() => saveSettings({ ...settings, urgentLimit: Math.max(1, settings.urgentLimit - 1) })}
-                          className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors font-bold shadow-sm"
+                          className="flex-1 h-11 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors font-bold shadow-sm"
                         >-</button>
-                        <span className="w-10 text-center font-mono font-bold text-xl">{settings.urgentLimit}</span>
+                        <span className="w-12 text-center font-mono font-bold text-xl">{settings.urgentLimit}</span>
                         <button 
                           onClick={() => saveSettings({ ...settings, urgentLimit: settings.urgentLimit + 1 })}
-                          className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors font-bold shadow-sm"
+                          className="flex-1 h-11 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors font-bold shadow-sm"
                         >+</button>
                       </div>
                     </div>
@@ -3032,16 +3194,16 @@ export default function App() {
                       <h3 className="font-bold text-sm uppercase tracking-wider">{t('HealthMetrics')}</h3>
                     </div>
                     <div className="space-y-8">
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-end">
-                          <div>
+                      <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-end justify-between items-start gap-4">
+                          <div className="flex-1">
                             <p className="font-bold text-slate-900">{t('CriticalThreshold')}</p>
                             <p className="text-xs text-slate-500">{t('CriticalAlertDesc')}</p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                              <input 
                               type="number"
-                              className="w-16 bg-white border border-slate-200 rounded px-2 py-1 text-sm font-mono font-bold outline-none focus:ring-1 focus:ring-red-500 text-center"
+                              className="w-16 bg-white border border-slate-200 rounded-lg h-10 text-sm font-mono font-bold outline-none focus:ring-1 focus:ring-red-500 text-center"
                               value={settings.criticalThreshold}
                               onChange={(e) => saveSettings({ ...settings, criticalThreshold: Math.max(5, parseInt(e.target.value) || 5) })}
                             />
@@ -3071,16 +3233,16 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-200/60">
-                        <div className="flex justify-between items-center mb-4">
-                          <div>
+                      <div className="pt-6 border-t border-slate-200/60">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between items-start gap-4 mb-4">
+                          <div className="flex-1">
                             <p className="font-bold text-slate-900">{t('DeadlineThreshold')}</p>
                             <p className="text-xs text-slate-500">{t('DeadlineThresholdDesc')}</p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                              <input 
                               type="number"
-                              className="w-16 bg-white border border-slate-200 rounded px-2 py-1 text-sm font-mono font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-center"
+                              className="w-16 bg-white border border-slate-200 rounded-lg h-10 text-sm font-mono font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-center"
                               value={settings.deadlineThreshold}
                               onChange={(e) => saveSettings({ ...settings, deadlineThreshold: Math.max(1, parseInt(e.target.value) || 1) })}
                             />
@@ -3108,13 +3270,13 @@ export default function App() {
                       <h3 className="font-bold text-sm uppercase tracking-wider">{t('DoneTrashLifecycle')}</h3>
                     </div>
                     <div className="space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
                           <p className="font-bold text-slate-900">{t('DoneToTrash')}</p>
                           <p className="text-xs text-slate-500">{t('DoneToTrashDesc')}</p>
                         </div>
                         <select 
-                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm"
+                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm w-full sm:w-48 shrink-0 h-11"
                           value={settings.doneToTrashThresholdDays}
                           onChange={(e) => saveSettings({ doneToTrashThresholdDays: parseInt(e.target.value) })}
                         >
@@ -3126,13 +3288,13 @@ export default function App() {
                         </select>
                       </div>
 
-                      <div className="pt-6 border-t border-slate-200/60 flex items-center justify-between">
-                        <div>
+                      <div className="pt-6 border-t border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
                           <p className="font-bold text-slate-900">{t('TrashAutoCleanup')}</p>
                           <p className="text-xs text-slate-500">{t('TrashAutoCleanupDesc')}</p>
                         </div>
                         <select 
-                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm"
+                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm w-full sm:w-48 shrink-0 h-11"
                           value={settings.trashCleanupThresholdDays}
                           onChange={(e) => saveSettings({ trashCleanupThresholdDays: parseInt(e.target.value) })}
                         >
@@ -3152,13 +3314,13 @@ export default function App() {
                       <ArchiveIcon size={18} />
                       <h3 className="font-bold text-sm uppercase tracking-wider">{t('AutoArchiveSweep')}</h3>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex-1">
                         <p className="font-bold text-slate-900">{t('ArchiveThreshold')}</p>
                         <p className="text-xs text-slate-500">{t('ArchiveThresholdDesc')}</p>
                       </div>
                       <select 
-                        className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                        className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm w-full sm:w-48 shrink-0 h-11"
                         value={settings.archiveThresholdDays}
                         onChange={(e) => saveSettings({ archiveThresholdDays: parseInt(e.target.value) })}
                       >
@@ -3179,10 +3341,40 @@ export default function App() {
                     </div>
                     
                     <div className="space-y-6">
+                      {/* Cloud Sync */}
+                      <div className="pb-6 border-b border-slate-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                          <div className="flex-1">
+                            <p className="font-bold text-slate-900">{t('SyncToCloud')}</p>
+                            <p className="text-xs text-slate-500">{t('SyncToCloudDesc')}</p>
+                          </div>
+                          {!user ? (
+                            <button 
+                              onClick={() => handleSignIn()}
+                              className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm w-full sm:w-auto justify-center h-11"
+                            >
+                              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-4 h-4" alt="" />
+                              {t('ContinueWithGoogle')}
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-3 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 w-full sm:w-auto justify-center sm:justify-start h-11">
+                              <div className="w-8 h-8 rounded-full overflow-hidden border border-white shadow-sm flex-shrink-0">
+                                {user.photoURL ? <img src={user.photoURL} alt="" /> : <UserIcon size={14} className="m-2" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-bold text-emerald-800 truncate">{user.displayName || user.email}</p>
+                                <p className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">{t('CloudSynced')}</p>
+                              </div>
+                              <button onClick={logOut} className="text-xs font-bold text-emerald-800/40 hover:text-emerald-800 ml-2">&times;</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Local Backup */}
                       <div className="pb-6 border-b border-slate-200">
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                          <div className="flex-1">
                             <p className="font-bold text-slate-900">{t('LocalFolderLog')}</p>
                             <p className="text-xs text-slate-500">{t('LocalFolderLogDesc')}</p>
                           </div>
@@ -3190,7 +3382,7 @@ export default function App() {
                             onClick={() => saveSettings({ isLocalBackupEnabled: !settings.isLocalBackupEnabled })}
                             disabled={!dirHandle}
                             className={cn(
-                                "w-12 h-6 rounded-full p-1 transition-all duration-300",
+                                "w-12 h-6 rounded-full p-1 transition-all duration-300 shrink-0",
                                 settings.isLocalBackupEnabled ? "bg-indigo-600" : "bg-slate-300",
                                 !dirHandle && "opacity-50 cursor-not-allowed"
                             )}
@@ -3203,38 +3395,37 @@ export default function App() {
                         </div>
                         
                         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-inner">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0 w-full">
                               <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">{t('LocalDirectoryPath')}</label>
                               <div className="text-xs font-mono break-all py-1.5 text-slate-600 bg-slate-50 px-2 rounded border border-slate-100 flex items-center gap-2">
                                 <Activity size={10} className="shrink-0 opacity-50" />
                                 {settings.localBackupPath || t('NoFolderSelected')}
                               </div>
                             </div>
-                            <div className="flex gap-1 shrink-0 pt-5">
-                              <div className="flex flex-col gap-1">
-                                <button 
-                                  onClick={selectBackupFolder}
-                                  className={cn(
-                                    "p-1.5 px-3 rounded text-[10px] font-bold transition-colors w-full",
-                                    !dirHandle && settings.localBackupPath 
-                                      ? "bg-amber-500 hover:bg-amber-600 text-white animate-pulse" 
-                                      : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                                  )}
-                                >
-                                  {!dirHandle && settings.localBackupPath ? t('AuthorizeSession') : t('SelectFolder')}
-                                </button>
-                                <button 
-                                  onClick={downloadBackup}
-                                  className={cn(
-                                    "p-1.5 px-3 rounded text-[10px] font-bold transition-all w-full flex items-center justify-center gap-1",
-                                    !window.showDirectoryPicker 
-                                      ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200" 
-                                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                                  )}
-                                >
-                                  <Download size={10} /> {window.showDirectoryPicker ? t('ManualLocalBackup') : t('SaveBackupToLocal')}
-                                </button>
+                            <div className="flex flex-col gap-2 shrink-0 sm:pt-5 w-full sm:w-48">
+                              <button 
+                                onClick={selectBackupFolder}
+                                className={cn(
+                                  "p-2 px-3 rounded text-[10px] font-bold transition-colors w-full h-10 flex items-center justify-center",
+                                  !dirHandle && settings.localBackupPath 
+                                    ? "bg-amber-500 hover:bg-amber-600 text-white animate-pulse" 
+                                    : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                )}
+                              >
+                                {!dirHandle && settings.localBackupPath ? t('AuthorizeSession') : t('SelectFolder')}
+                              </button>
+                              <button 
+                                onClick={downloadBackup}
+                                className={cn(
+                                  "p-2 px-3 rounded text-[10px] font-bold transition-all w-full h-10 flex items-center justify-center gap-1.5",
+                                  !window.showDirectoryPicker 
+                                    ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200" 
+                                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                )}
+                              >
+                                <Download size={12} /> {window.showDirectoryPicker ? t('ManualLocalBackup') : t('SaveBackupToLocal')}
+                              </button>
                                 {!window.showDirectoryPicker && (
                                   <div className="mt-1 flex flex-col gap-0.5">
                                     <div className="flex items-center gap-1 text-[8px] text-slate-400 font-bold uppercase tracking-widest">
@@ -3314,8 +3505,7 @@ export default function App() {
                 <div className="mt-8 border-t border-slate-100 flex items-center py-4">
                   <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest italic">System state synced successfully</p>
                 </div>
-              </div>
-            </section>
+              </section>
           )}
         </div>
       </main>
@@ -3371,6 +3561,7 @@ interface TaskCardProps {
   onDelete: () => void;
   onEdit: () => void;
   onStar: () => void;
+  onPin: () => void;
   t: (key: string) => string;
   variant?: 'Urgent' | 'Focus' | 'Archive' | 'Trash';
   displayMode?: 'card' | 'list';
@@ -3378,7 +3569,7 @@ interface TaskCardProps {
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ 
-  task, onToggle, onMove, onDelete, onEdit, onStar, t,
+  task, onToggle, onMove, onDelete, onEdit, onStar, onPin, t,
   variant = 'Focus',
   displayMode = 'card',
   deadlineThreshold = 3
@@ -3456,6 +3647,16 @@ const TaskCard: React.FC<TaskCardProps> = ({
           <span className="hidden md:inline text-[9px] font-black text-slate-300 tabular-nums">
             {format(task.updatedAt, 'MM/dd HH:mm')}
           </span>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onPin(); }}
+            className={cn(
+              "p-1 rounded transition-colors",
+              task.isPinned ? "text-indigo-600" : "text-slate-200 hover:text-indigo-400"
+            )}
+            title={task.isPinned ? "Unpin task" : "Pin task"}
+          >
+            <Pin size={14} className={cn("rotate-45", task.isPinned && "fill-indigo-600")} />
+          </button>
           <button 
             onClick={(e) => { e.stopPropagation(); onStar(); }}
             className={cn(
@@ -3545,6 +3746,16 @@ const TaskCard: React.FC<TaskCardProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onPin(); }}
+            className={cn(
+              "p-1 rounded transition-colors group/pin",
+              task.isPinned ? "text-indigo-600" : "text-slate-300 hover:text-indigo-400"
+            )}
+            title={task.isPinned ? "Unpin task" : "Pin task"}
+          >
+            <Pin size={12} className={cn("rotate-45", task.isPinned && "fill-indigo-600")} />
+          </button>
           <button 
             onClick={(e) => { e.stopPropagation(); onStar(); }}
             className={cn(
@@ -3760,19 +3971,49 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   const [notes, setNotes] = useState(task.notes || '');
   const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
   const [isStarred, setIsStarred] = useState(task.isStarred || false);
+  const [isPinned, setIsPinned] = useState(task.isPinned || false);
   const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, 'yyyy-MM-dd') : '');
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const isDirty = title !== task.title || 
+                  notes !== (task.notes || '') || 
+                  JSON.stringify(urls.filter(u => u.trim() !== '')) !== JSON.stringify(task.urls || []) ||
+                  isStarred !== (task.isStarred || false) ||
+                  isPinned !== (task.isPinned || false) ||
+                  (deadline ? new Date(deadline).getTime() : '') !== (task.deadline || '');
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     onSave({ 
       title, 
       notes, 
       urls: urls.filter(u => u.trim() !== ''),
       isStarred,
+      isPinned,
       deadline: deadline ? new Date(deadline).getTime() : null as any // Using null to clear
     });
   };
+
+  const handleClose = () => {
+    if (isDirty) {
+      handleSubmit();
+      onClose();
+    } else {
+      onClose();
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSubmit();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [title, notes, urls, isStarred, isPinned, deadline]);
 
   const addUrlField = () => setUrls([...urls, '']);
   const updateUrlField = (index: number, val: string) => {
@@ -3791,7 +4032,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleClose}
       />
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -3802,7 +4043,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
         <div className="p-4 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold tracking-tight">Modify Task</h2>
-            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 md:hidden">
+            <button onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 md:hidden">
               <X size={20} />
             </button>
           </div>
@@ -3817,23 +4058,35 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                   placeholder="Task detail... (Cmd/Ctrl+Enter to save)"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit(e);
-                  }}
                 />
               </div>
-              <div className="shrink-0 flex flex-col items-center gap-2">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Star')}</label>
-                <button 
-                  type="button"
-                  onClick={() => setIsStarred(!isStarred)}
-                  className={cn(
-                    "w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all",
-                    isStarred ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-slate-50 border-transparent text-slate-300 hover:border-slate-200"
-                  )}
-                >
-                  <Star size={24} className={isStarred ? "fill-amber-500" : ""} />
-                </button>
+              <div className="shrink-0 flex items-center gap-2">
+                <div className="flex flex-col items-center gap-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pin</label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsPinned(!isPinned)}
+                    className={cn(
+                      "w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all",
+                      isPinned ? "bg-indigo-50 border-indigo-200 text-indigo-500" : "bg-slate-50 border-transparent text-slate-300 hover:border-slate-200"
+                    )}
+                  >
+                    <Pin size={24} className={cn("rotate-45", isPinned && "fill-indigo-500")} />
+                  </button>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Star')}</label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsStarred(!isStarred)}
+                    className={cn(
+                      "w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all",
+                      isStarred ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-slate-50 border-transparent text-slate-300 hover:border-slate-200"
+                    )}
+                  >
+                    <Star size={24} className={isStarred ? "fill-amber-500" : ""} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -3841,7 +4094,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
               <div className="flex items-center justify-between px-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Memos')}</label>
                 <button 
-                  type="button"
+                  type="button" 
                   onClick={() => setIsMemoModalOpen(true)}
                   className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"
                 >
@@ -3853,9 +4106,6 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                 className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all resize-none h-32"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit(e);
-                }}
               />
             </div>
             
@@ -3864,16 +4114,28 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                 <MemoModal 
                   value={notes}
                   onChange={setNotes}
+                  onSave={handleSubmit}
                   onClose={() => setIsMemoModalOpen(false)}
                 />
               )}
             </AnimatePresence>
             
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5 opacity-60">
-                <Calendar size={12} />
-                {t('Deadline')}
-              </label>
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 opacity-60">
+                  <Calendar size={12} />
+                  {t('Deadline')}
+                </label>
+                {deadline && (
+                  <button 
+                    type="button"
+                    onClick={() => setDeadline('')}
+                    className="text-[10px] font-bold text-red-500 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
               <input 
                 type="date"
                 className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all text-slate-400 [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
@@ -3902,9 +4164,6 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                       className="flex-1 px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-xl text-sm font-medium outline-none transition-all"
                       value={u}
                       onChange={(e) => updateUrlField(idx, e.target.value)}
-                      onKeyDown={(e) => {
-                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit(e);
-                      }}
                     />
                     {urls.length > 1 && (
                       <button 
@@ -3920,10 +4179,17 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
               </div>
             </div>
 
+            {isDirty && (
+              <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-orange-600 bg-orange-50 p-2 rounded-lg animate-pulse border border-orange-100">
+                <AlertCircle size={14} />
+                <span>You have unsaved changes. Press Cmd/Ctrl+Enter or click Save to keep them.</span>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4">
               <button 
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all active:scale-95"
               >
                 {t('Cancel')}
@@ -3943,7 +4209,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
         <div className="bg-slate-50 p-6 md:p-8 w-full md:w-64 border-l border-slate-100 flex flex-col overflow-y-auto custom-scrollbar pb-24 md:pb-8">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t('SystemActions')}</h3>
-            <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hidden md:flex">
+            <button onClick={handleClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hidden md:flex">
               <X size={20} />
             </button>
           </div>
@@ -3951,7 +4217,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
           <div className="space-y-3">
             {task.category === 'Focus' && (
               <button 
-                onClick={() => { onMove('Urgent'); onClose(); }}
+                onClick={() => { onMove('Urgent'); handleSubmit(); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-xs font-bold text-red-600 hover:bg-red-100 transition-all group"
               >
                 <Zap size={16} className="text-red-400" />
@@ -3960,7 +4226,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
             )}
             {task.category === 'Archive' && (
               <button 
-                onClick={() => { onMove('Focus'); onClose(); }}
+                onClick={() => { onMove('Focus'); handleSubmit(); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-bold text-emerald-600 hover:bg-emerald-100 transition-all group"
               >
                 <RefreshCcw size={16} className="text-emerald-400" />
@@ -3969,7 +4235,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
             )}
             {task.category !== 'Archive' && task.category !== 'Trash' && (
               <button 
-                onClick={() => { onMove('Archive'); onClose(); }}
+                onClick={() => { onMove('Archive'); handleSubmit(); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all group"
               >
                 <ArchiveIcon size={16} className="text-slate-300 group-hover:text-indigo-400" />
@@ -3978,7 +4244,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
             )}
             {task.category !== 'Trash' ? (
               <button 
-                onClick={() => { onMove('Trash'); onClose(); }}
+                onClick={() => { onMove('Trash'); handleSubmit(); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-red-500 hover:bg-red-50 hover:border-red-200 transition-all"
               >
                 <Trash2 size={16} className="text-red-300" />
@@ -3987,7 +4253,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
             ) : (
               <div className="space-y-2">
                 <button 
-                  onClick={() => { onMove('Focus'); onClose(); }}
+                  onClick={() => { onMove('Focus'); handleSubmit(); onClose(); }}
                   className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all"
                 >
                   <RefreshCcw size={16} className="text-indigo-400" />
@@ -4025,11 +4291,68 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
           </div>
         </div>
       </motion.div>
+
+      {/* Dirty Confirmation Modal */}
+      <AnimatePresence>
+        {showConfirmClose && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
+              onClick={() => setShowConfirmClose(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
+            >
+              <AlertTriangle className="mx-auto text-amber-500 mb-4" size={48} />
+              <h3 className="text-xl font-bold mb-2">Unsaved Changes</h3>
+              <p className="text-slate-500 text-sm mb-8">You have modified this task. Would you like to save your changes before closing?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => { onClose(); setShowConfirmClose(false); }}
+                  className="py-3 px-4 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs"
+                >
+                  Discard Changes
+                </button>
+                <button 
+                  onClick={() => { handleSubmit(); onClose(); setShowConfirmClose(false); }}
+                  className="py-3 px-4 bg-indigo-600 text-white rounded-xl font-bold text-xs"
+                >
+                  Save & Close
+                </button>
+              </div>
+              <button 
+                 onClick={() => setShowConfirmClose(false)}
+                 className="mt-4 text-xs font-bold text-slate-400 hover:text-slate-600"
+              >
+                Back to Edit
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: string) => void; onClose: () => void }) {
+function MemoModal({ value, onChange, onSave, onClose }: { value: string; onChange: (v: string) => void; onSave: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        onSave();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSave, onClose]);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <motion.div 
@@ -4043,11 +4366,11 @@ function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: 
         }}
       />
       <motion.div 
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.95 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-4xl h-[80vh] bg-white rounded-[2rem] shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-full max-w-4xl h-[85vh] sm:h-[80vh] bg-white rounded-3xl overflow-hidden flex flex-col shadow-2xl"
       >
         <div className="flex items-center justify-between p-6 bg-slate-50 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -4080,6 +4403,7 @@ function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: 
             onKeyDown={(e) => {
               e.stopPropagation();
               if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                onSave();
                 onClose();
               }
             }}
@@ -4098,6 +4422,7 @@ function MemoModal({ value, onChange, onClose }: { value: string; onChange: (v: 
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              onSave();
               onClose();
             }}
             className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200 transition-all"

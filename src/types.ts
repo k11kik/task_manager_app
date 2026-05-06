@@ -12,6 +12,7 @@ export interface Task {
   notes?: string;
   urls?: string[];
   isStarred?: boolean;
+  isPinned?: boolean;
   section?: string;
   deadline?: number; // timestamp
 }
