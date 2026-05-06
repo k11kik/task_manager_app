@@ -3525,7 +3525,7 @@ export default function App() {
           </div>
         </div>
         <div className="text-[10px] font-mono text-slate-400 font-extrabold ml-4 uppercase">
-          NavFOR V2.3
+          Navigation Focus Objectives & Results V2.3
         </div>
       </footer>
 
