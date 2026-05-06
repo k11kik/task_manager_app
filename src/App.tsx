@@ -2064,6 +2064,47 @@ export default function App() {
 
               {/* Mobile Tools (Simplified) */}
               <div className="md:hidden flex items-center gap-2">
+                {/* Project Filter (Mobile) */}
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowProjectFilter(!showProjectFilter)}
+                    className={cn(
+                      "w-9 h-9 rounded-xl flex items-center justify-center border transition-all shadow-sm",
+                      selectedProject !== 'All' ? "bg-indigo-600 border-indigo-700 text-white" : "bg-white border-slate-200 text-slate-400"
+                    )}
+                  >
+                    <Filter size={16} />
+                  </button>
+                  {showProjectFilter && (
+                    <>
+                      <div className="fixed inset-0 z-[55]" onClick={() => setShowProjectFilter(false)} />
+                      <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
+                        <div className="px-4 py-1.5 border-b border-slate-50 mb-1">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">{t('FilterByProject')}</p>
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                          {projects.map(p => (
+                            <button
+                              key={p}
+                              onClick={() => {
+                                setSelectedProject(p);
+                                setShowProjectFilter(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-4 py-2.5 text-[10px] font-bold transition-all flex items-center justify-between",
+                                selectedProject === p ? "bg-indigo-50 text-indigo-600" : "text-slate-600 hover:bg-slate-50"
+                              )}
+                            >
+                              <span className="truncate">{p}</span>
+                              {selectedProject === p && <CheckCircle2 size={12} />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 <button 
                   onClick={() => saveSettings({ displayMode: settings.displayMode === 'card' ? 'list' : 'card' })}
                   className="w-9 h-9 rounded-xl flex items-center justify-center bg-white border border-slate-200 text-slate-400 shadow-sm"
@@ -2444,9 +2485,13 @@ export default function App() {
                 </div>
                 
                 <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
-                  <AnimatePresence mode="popLayout">
-                    {filteredTasks
-                      .filter(t => t.category === 'Urgent')
+                  <div className={cn(
+                    "grid grid-cols-1 gap-3",
+                    !isListMode && "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1"
+                  )}>
+                    <AnimatePresence mode="popLayout">
+                      {filteredTasks
+                        .filter(t => t.category === 'Urgent')
                       .sort((a, b) => {
                         // Priority 1: Done state (lowest priority)
                         if (a.isDone && !b.isDone) return 1;
@@ -2487,6 +2532,7 @@ export default function App() {
                         />
                       ))}
                   </AnimatePresence>
+                  </div>
                   {filteredTasks.filter(t => t.category === 'Urgent').length === 0 && (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                       <Zap size={48} strokeWidth={1} />
@@ -2525,7 +2571,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-2"
+                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.expired.map(task => (
@@ -2557,7 +2603,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-2"
+                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.nearDeadline.map(task => (
@@ -2589,7 +2635,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-2"
+                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.pinned.map(task => (
@@ -2635,7 +2681,7 @@ export default function App() {
                           {!isCollapsed && (
                             <div className={cn(
                               "grid grid-cols-1 gap-2.5",
-                              !isListMode && "md:grid-cols-2"
+                              !isListMode && "md:grid-cols-3 xl:grid-cols-4"
                             )}>
                               <AnimatePresence mode="popLayout">
                                 {tasks.map(task => (
