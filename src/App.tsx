@@ -1199,6 +1199,9 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
+    // Automatic backup before import
+    await triggerEmergencyBackup();
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: 'greedy',
