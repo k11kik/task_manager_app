@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutGrid,
+  Grid2X2,
   LayoutList,
   List,
   Layout, 
@@ -143,7 +144,7 @@ export default function App() {
     criticalThreshold: 100,
     isLocalBackupEnabled: false,
     localBackupPath: '',
-    displayMode: 'card' as 'card' | 'list',
+    displayMode: 'standard' as 'compact' | 'standard' | 'large',
     language: 'en' as 'en' | 'ja',
     sections: []
   });
@@ -161,8 +162,9 @@ export default function App() {
         'Language': 'Language',
         'English': 'English',
         'Japanese': 'Japanese',
-        'CardView': 'Card View',
-        'ListView': 'List View',
+        'StandardView': 'Standard View',
+        'LargeView': 'Grand View',
+        'CompactView': 'List View',
         'InactiveMoveToTrash': 'Inactive items moved to trash after',
         'PermanentDeleteAfter': 'Items will be deleted after',
         'EmptyTrash': 'Empty Trash',
@@ -281,8 +283,9 @@ export default function App() {
         'Language': '言語設定',
         'English': '英語 (English)',
         'Japanese': '日本語 (Japanese)',
-        'CardView': 'カード表示',
-        'ListView': 'リスト表示',
+        'StandardView': 'グリッド (標準)',
+        'LargeView': 'グリッド (大きく表示)',
+        'CompactView': 'リスト表示',
         'Done': '完了',
         'Pending': '未完了',
         'Filters': 'フィルター',
@@ -489,7 +492,7 @@ export default function App() {
           criticalThreshold: data.criticalThreshold || 100,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
-          displayMode: data.displayMode || 'card',
+          displayMode: data.displayMode === 'card' ? 'standard' : (data.displayMode === 'list' ? 'compact' : (data.displayMode || 'standard')),
           language: data.language || 'en',
           sections: loadedSections
         });
@@ -513,7 +516,7 @@ export default function App() {
           criticalThreshold: 100,
           isLocalBackupEnabled: false,
           localBackupPath: '',
-          displayMode: 'card',
+          displayMode: 'standard',
           language: 'en',
           sections: ['General']
         }).catch(err => handleFirestoreError(err, OperationType.WRITE, `settings/${user.uid}`));
@@ -614,7 +617,7 @@ export default function App() {
     });
   };
 
-  const isListMode = settings.displayMode === 'list';
+  const isListMode = settings.displayMode === 'compact';
 
   const projects = useMemo(() => {
     const sectionTasks = tasks.filter(t => t.section === activeSection || (!t.section && activeSection === settings.sections[0]));
@@ -741,17 +744,12 @@ export default function App() {
         const pinB = !!b.isPinned;
         if (pinA !== pinB) return pinA ? -1 : 1;
 
-        // Universal Priority 4: Specified Deadline
-        if (a.deadline && b.deadline) return a.deadline - b.deadline;
-        if (a.deadline) return -1;
-        if (b.deadline) return 1;
-
-        // Universal Priority 5: Starred (starred first)
+        // Universal Priority 4: Starred (starred first)
         const starA = !!a.isStarred;
         const starB = !!b.isStarred;
         if (starA !== starB) return starA ? -1 : 1;
 
-        // Universal Priority 6: Recency (updatedAt descending)
+        // Universal Priority 5: Recency (updatedAt descending)
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
   }, [tasks, searchTerm, selectedProject, activeSection, settings.sections, settings.deadlineThreshold]);
@@ -763,20 +761,17 @@ export default function App() {
 
     // Separate expired tasks (top priority)
     const expired = focusTasks
-      .filter(t => t.deadline && (t.deadline - now) < 0 && !t.isDone)
-      .sort((a, b) => (a.deadline || 0) - (b.deadline || 0));
+      .filter(t => t.deadline && (t.deadline - now) < 0 && !t.isDone);
 
     // Separate near deadline tasks (excluding expired ones) and sort by date
     const nearDeadline = focusTasks
-      .filter(t => t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0 && !t.isDone)
-      .sort((a, b) => (a.deadline || 0) - (b.deadline || 0));
+      .filter(t => t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0 && !t.isDone);
     
     // Separate pinned tasks (excluding those already in expired or near deadline)
     const pinned = focusTasks
       .filter(t => t.isPinned && !t.isDone && 
                    !(t.deadline && (t.deadline - now) < 0) &&
-                   !(t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0))
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                   !(t.deadline && (t.deadline - now) <= threshold && (t.deadline - now) >= 0));
       
     // Others includes those without deadlines, far deadlines, non-pinned, or done tasks
     const others = focusTasks.filter(t => {
@@ -1901,25 +1896,35 @@ export default function App() {
               </nav>
 
               <div className="hidden md:flex items-center gap-2 mr-2">
-                {/* Card/List Toggle */}
+                {/* Display Mode Toggle */}
                 <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
                   <button 
-                    onClick={() => saveSettings({ displayMode: 'card' })}
+                    onClick={() => saveSettings({ displayMode: 'large' })}
                     className={cn(
                       "p-1.5 rounded-lg transition-all",
-                      settings.displayMode === 'card' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                      settings.displayMode === 'large' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
                     )}
-                    title={t('CardView')}
+                    title={t('LargeView')}
+                  >
+                    <Grid2X2 size={14} />
+                  </button>
+                  <button 
+                    onClick={() => saveSettings({ displayMode: 'standard' })}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all",
+                      settings.displayMode === 'standard' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                    )}
+                    title={t('StandardView')}
                   >
                     <LayoutGrid size={14} />
                   </button>
                   <button 
-                    onClick={() => saveSettings({ displayMode: 'list' })}
+                    onClick={() => saveSettings({ displayMode: 'compact' })}
                     className={cn(
                       "p-1.5 rounded-lg transition-all",
-                      settings.displayMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                      settings.displayMode === 'compact' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
                     )}
-                    title={t('ListView')}
+                    title={t('CompactView')}
                   >
                     <LayoutList size={14} />
                   </button>
@@ -2106,10 +2111,16 @@ export default function App() {
                 </div>
 
                 <button 
-                  onClick={() => saveSettings({ displayMode: settings.displayMode === 'card' ? 'list' : 'card' })}
+                  onClick={() => {
+                    const next: 'compact' | 'standard' | 'large' = 
+                      settings.displayMode === 'standard' ? 'large' : 
+                      settings.displayMode === 'large' ? 'compact' : 'standard';
+                    saveSettings({ displayMode: next });
+                  }}
                   className="w-9 h-9 rounded-xl flex items-center justify-center bg-white border border-slate-200 text-slate-400 shadow-sm"
                 >
-                  {settings.displayMode === 'card' ? <LayoutList size={16} /> : <LayoutGrid size={16} />}
+                  {settings.displayMode === 'compact' ? <LayoutList size={16} /> : 
+                   settings.displayMode === 'large' ? <Grid2X2 size={16} /> : <LayoutGrid size={16} />}
                 </button>
               </div>
             </>
@@ -2487,7 +2498,7 @@ export default function App() {
                 <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
                   <div className={cn(
                     "grid grid-cols-1 gap-3",
-                    !isListMode && "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1"
+                    !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2 lg:grid-cols-1" : "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1")
                   )}>
                     <AnimatePresence mode="popLayout">
                       {filteredTasks
@@ -2571,7 +2582,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.expired.map(task => (
@@ -2603,7 +2614,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.nearDeadline.map(task => (
@@ -2635,7 +2646,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.pinned.map(task => (
@@ -2681,7 +2692,7 @@ export default function App() {
                           {!isCollapsed && (
                             <div className={cn(
                               "grid grid-cols-1 gap-2.5",
-                              !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                              !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                             )}>
                               <AnimatePresence mode="popLayout">
                                 {tasks.map(task => (
@@ -2800,7 +2811,7 @@ export default function App() {
                       </div>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedArchiveTasks.nearingPurge.map(task => (
@@ -2835,7 +2846,7 @@ export default function App() {
                     </div>
                     <div className={cn(
                       "grid grid-cols-1 gap-2.5",
-                      !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                      !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                     )}>
                       <AnimatePresence mode="popLayout">
                         {groupedArchiveTasks.pinned.map(task => (
@@ -2886,7 +2897,7 @@ export default function App() {
                         {!isCollapsed && (
                           <div className={cn(
                             "grid grid-cols-1 gap-2.5",
-                            !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                            !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                           )}>
                             <AnimatePresence mode="popLayout">
                               {tasks.map(task => (
@@ -3001,7 +3012,7 @@ export default function App() {
                       </div>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedTrashTasks.nearingPurge.map(task => (
@@ -3052,7 +3063,7 @@ export default function App() {
                         {!isCollapsed && (
                           <div className={cn(
                             "grid grid-cols-1 gap-2.5",
-                            !isListMode && "md:grid-cols-3 xl:grid-cols-4"
+                            !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
                           )}>
                             <AnimatePresence mode="popLayout">
                               {tasks.map(task => (
@@ -3616,14 +3627,14 @@ interface TaskCardProps {
   onPin: () => void;
   t: (key: string) => string;
   variant?: 'Urgent' | 'Focus' | 'Archive' | 'Trash';
-  displayMode?: 'card' | 'list';
+  displayMode?: 'compact' | 'standard' | 'large';
   deadlineThreshold?: number;
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ 
   task, onToggle, onMove, onDelete, onEdit, onStar, onPin, t,
   variant = 'Focus',
-  displayMode = 'card',
+  displayMode = 'standard',
   deadlineThreshold = 3
 }) => {
   const [showMenu, setShowMenu] = useState(false);
@@ -3640,7 +3651,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     setShowMenu(!showMenu);
   };
 
-  if (displayMode === 'list') {
+  if (displayMode === 'compact') {
     return (
       <motion.div
         layout
@@ -3770,7 +3781,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
         onEdit();
       }}
       className={cn(
-        "bg-white rounded-xl p-3 md:p-4 shadow-sm border border-slate-200 group hover:border-indigo-300 transition-all flex flex-col cursor-pointer",
+        "bg-white rounded-xl shadow-sm border border-slate-200 group hover:border-indigo-300 transition-all flex flex-col cursor-pointer",
+        displayMode === 'large' ? "p-5 md:p-6 gap-3" : "p-3 md:p-4",
         variant === 'Urgent' && "border-l-4 border-l-red-500",
         variant === 'Archive' && "opacity-70 grayscale",
         task.isDone && "grayscale opacity-50",
@@ -3829,12 +3841,16 @@ const TaskCard: React.FC<TaskCardProps> = ({
           )}
         </div>
       </div>
-      <p className={cn("text-xs md:text-sm font-semibold text-slate-800 leading-tight mb-2 break-words", task.isDone && "line-through text-slate-400")}>
+      <p className={cn(
+        "font-semibold text-slate-800 leading-tight mb-2 break-words", 
+        displayMode === 'large' ? "text-base md:text-xl" : "text-xs md:text-sm",
+        task.isDone && "line-through text-slate-400"
+      )}>
         {task.title}
       </p>
 
       {task.urls && task.urls.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2">
+        <div className={cn("flex flex-wrap gap-2 mb-2", displayMode === 'large' && "gap-3 mb-4")}>
           {task.urls.map((url, idx) => (
             <a 
               key={idx}
@@ -3842,18 +3858,24 @@ const TaskCard: React.FC<TaskCardProps> = ({
               target="_blank" 
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors group/link bg-indigo-50/50 px-2 py-0.5 rounded border border-indigo-100/50 max-w-full"
+              className={cn(
+                "flex items-center gap-1.5 font-bold text-indigo-600 hover:text-indigo-800 transition-colors group/link bg-indigo-50/50 rounded border border-indigo-100/50 max-w-full",
+                displayMode === 'large' ? "text-xs px-3 py-1.5" : "text-[10px] px-2 py-0.5"
+              )}
             >
-              <LinkIcon size={10} className="shrink-0 group-hover/link:rotate-12 transition-transform" />
-              <span className="truncate max-w-[120px]">{url.replace(/^https?:\/\//, '')}</span>
-              <ArrowUpRight size={10} className="shrink-0 opacity-0 group-hover/link:opacity-100 transition-opacity" />
+              <LinkIcon size={displayMode === 'large' ? 14 : 10} className="shrink-0 group-hover/link:rotate-12 transition-transform" />
+              <span className={cn("truncate", displayMode === 'large' ? "max-w-[250px]" : "max-w-[120px]")}>{url.replace(/^https?:\/\//, '')}</span>
+              <ArrowUpRight size={displayMode === 'large' ? 14 : 10} className="shrink-0 opacity-0 group-hover/link:opacity-100 transition-opacity" />
             </a>
           ))}
         </div>
       )}
       
       {task.notes && (
-        <p className="text-[10px] text-slate-400 line-clamp-2 mb-3 leading-relaxed italic">
+        <p className={cn(
+          "text-slate-500 mb-3 leading-relaxed italic",
+          displayMode === 'large' ? "text-xs bg-slate-50/80 p-3 rounded-xl border border-slate-100/80 block whitespace-pre-wrap" : "text-[10px] line-clamp-2"
+        )}>
           {task.notes}
         </p>
       )}
