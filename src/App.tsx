@@ -2303,20 +2303,35 @@ export default function App() {
                   </label>
                   {newTaskUrls.map((u, i) => (
                     <div key={i} className="flex gap-1 group">
-                      <input 
-                        type="url"
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] focus:ring-2 focus:ring-indigo-500 outline-none"
-                        placeholder="https://... (Cmd/Ctrl+Enter to save)"
-                        value={u}
-                        onChange={(e) => {
-                          const next = [...newTaskUrls];
-                          next[i] = e.target.value;
-                          setNewTaskUrls(next);
-                        }}
-                        onKeyDown={(e) => {
-                          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
-                        }}
-                      />
+                      <div className="relative flex-1">
+                        <input 
+                          type="url"
+                          className={cn(
+                            "w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] focus:ring-2 focus:ring-indigo-500 outline-none",
+                            u.trim() && "pr-8"
+                          )}
+                          placeholder="https://... (Cmd/Ctrl+Enter to save)"
+                          value={u}
+                          onChange={(e) => {
+                            const next = [...newTaskUrls];
+                            next[i] = e.target.value;
+                            setNewTaskUrls(next);
+                          }}
+                          onKeyDown={(e) => {
+                            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleAddTask(e);
+                          }}
+                        />
+                        {u.trim() && (
+                          <a 
+                            href={u.startsWith('http') ? u : `https://${u}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-600 transition-colors"
+                          >
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
                       {(newTaskUrls.length > 1 || u.trim()) && (
                         <button 
                           type="button" 
@@ -2498,7 +2513,9 @@ export default function App() {
                 <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
                   <div className={cn(
                     "grid grid-cols-1 gap-3",
-                    !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2 lg:grid-cols-1" : "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1")
+                    !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2 lg:grid-cols-1" : 
+                                   settings.displayMode === 'standard' ? "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1" : 
+                                   "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1")
                   )}>
                     <AnimatePresence mode="popLayout">
                       {filteredTasks
@@ -2582,7 +2599,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.expired.map(task => (
@@ -2614,7 +2631,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.nearDeadline.map(task => (
@@ -2646,7 +2663,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.pinned.map(task => (
@@ -2692,7 +2709,7 @@ export default function App() {
                           {!isCollapsed && (
                             <div className={cn(
                               "grid grid-cols-1 gap-2.5",
-                              !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                              !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                             )}>
                               <AnimatePresence mode="popLayout">
                                 {tasks.map(task => (
@@ -2811,7 +2828,7 @@ export default function App() {
                       </div>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedArchiveTasks.nearingPurge.map(task => (
@@ -2846,7 +2863,7 @@ export default function App() {
                     </div>
                     <div className={cn(
                       "grid grid-cols-1 gap-2.5",
-                      !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                      !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                     )}>
                       <AnimatePresence mode="popLayout">
                         {groupedArchiveTasks.pinned.map(task => (
@@ -2897,7 +2914,7 @@ export default function App() {
                         {!isCollapsed && (
                           <div className={cn(
                             "grid grid-cols-1 gap-2.5",
-                            !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                            !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                           )}>
                             <AnimatePresence mode="popLayout">
                               {tasks.map(task => (
@@ -3012,7 +3029,7 @@ export default function App() {
                       </div>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedTrashTasks.nearingPurge.map(task => (
@@ -3063,7 +3080,7 @@ export default function App() {
                         {!isCollapsed && (
                           <div className={cn(
                             "grid grid-cols-1 gap-2.5",
-                            !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-3 xl:grid-cols-4")
+                            !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                           )}>
                             <AnimatePresence mode="popLayout">
                               {tasks.map(task => (
@@ -3789,27 +3806,32 @@ const TaskCard: React.FC<TaskCardProps> = ({
         showMenu && "relative z-30 shadow-xl border-indigo-200"
       )}
     >
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-2 pointer-events-none">
-          {task.isStarred && (
-            <Star size={10} className="text-amber-500 fill-amber-500" />
-          )}
+      <div className="flex items-start justify-between mb-1.5 min-w-0">
+        <div className="flex flex-col gap-0.5 min-w-0">
           {task.deadline && (
-            <div className={cn(
-              "flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border shadow-sm",
-              (task.deadline - Date.now() <= deadlineThreshold * 86400000)
-                ? "bg-red-50 text-red-600 border-red-100"
-                : "bg-slate-50 text-slate-500 border-slate-100"
-            )}>
-              <Clock size={10} />
-              {format(task.deadline, 'MM/dd')}
+            <>
+              <div className={cn(
+                "flex items-center gap-1 font-black uppercase tracking-tighter shrink-0",
+                displayMode === 'large' ? "text-[11px]" : "text-[9px]",
+                (task.deadline - Date.now()) < 0 ? "text-red-600" : 
+                (task.deadline - Date.now()) <= (deadlineThreshold * 86400000) ? "text-amber-600" : "text-slate-400"
+              )}>
+                <Clock size={displayMode === 'large' ? 12 : 10} />
+                <span>{format(task.deadline, 'MM/dd')}</span>
+              </div>
+              <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 truncate">
+                <span>({format(task.deadline, 'yyyyMMdd')})</span>
+                <span className="text-indigo-400/60">[{task.project}]</span>
+              </div>
+            </>
+          )}
+          {!task.deadline && (
+            <div className="text-[8px] font-bold text-indigo-400/60 truncate">
+              [{task.project}]
             </div>
           )}
-          <p className="text-[9px] font-bold text-slate-400 leading-none tracking-wider uppercase font-mono">
-            ({formatDate(task.createdAt)}) <span className="text-indigo-600 opacity-60">[{task.project}]</span>
-          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-0.5 shrink-0 ml-1">
           <button 
             onClick={(e) => { e.stopPropagation(); onPin(); }}
             className={cn(
@@ -3818,7 +3840,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             )}
             title={task.isPinned ? "Unpin task" : "Pin task"}
           >
-            <Pin size={12} className={cn("rotate-45", task.isPinned && "fill-indigo-600")} />
+            <Pin size={displayMode === 'large' ? 14 : 12} className={cn("rotate-45", task.isPinned && "fill-indigo-600")} />
           </button>
           <button 
             onClick={(e) => { e.stopPropagation(); onStar(); }}
@@ -3828,29 +3850,28 @@ const TaskCard: React.FC<TaskCardProps> = ({
             )}
             title={task.isStarred ? "Unstar task" : "Star task"}
           >
-            {task.isStarred ? <Star size={12} className="fill-amber-500" /> : <Star size={12} />}
+            {task.isStarred ? <Star size={displayMode === 'large' ? 14 : 12} className="fill-amber-500" /> : <Star size={displayMode === 'large' ? 14 : 12} />}
           </button>
           {(variant === 'Archive' || variant === 'Trash') && (
             <button 
               onClick={(e) => { e.stopPropagation(); onMove('Focus'); }}
-              className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-0.5"
-              title="Restore to Focus"
+              className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-0.5 ml-1"
             >
-              <RefreshCcw size={8} /> RESTORE
+              RESTORE
             </button>
           )}
         </div>
       </div>
       <p className={cn(
         "font-semibold text-slate-800 leading-tight mb-2 break-words", 
-        displayMode === 'large' ? "text-base md:text-xl" : "text-xs md:text-sm",
+        displayMode === 'large' ? "text-sm md:text-lg" : "text-xs md:text-sm",
         task.isDone && "line-through text-slate-400"
       )}>
         {task.title}
       </p>
 
       {task.urls && task.urls.length > 0 && (
-        <div className={cn("flex flex-wrap gap-2 mb-2", displayMode === 'large' && "gap-3 mb-4")}>
+        <div className={cn("flex flex-wrap gap-1.5 mb-2", displayMode === 'large' && "gap-2 mb-3")}>
           {task.urls.map((url, idx) => (
             <a 
               key={idx}
@@ -3859,13 +3880,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               className={cn(
-                "flex items-center gap-1.5 font-bold text-indigo-600 hover:text-indigo-800 transition-colors group/link bg-indigo-50/50 rounded border border-indigo-100/50 max-w-full",
-                displayMode === 'large' ? "text-xs px-3 py-1.5" : "text-[10px] px-2 py-0.5"
+                "flex items-center gap-1 font-bold text-indigo-600 hover:text-indigo-800 transition-colors group/link bg-indigo-50/50 rounded border border-indigo-100/50 max-w-full",
+                displayMode === 'large' ? "text-[10px] px-2 py-1" : "text-[9px] px-1.5 py-0.5"
               )}
             >
-              <LinkIcon size={displayMode === 'large' ? 14 : 10} className="shrink-0 group-hover/link:rotate-12 transition-transform" />
-              <span className={cn("truncate", displayMode === 'large' ? "max-w-[250px]" : "max-w-[120px]")}>{url.replace(/^https?:\/\//, '')}</span>
-              <ArrowUpRight size={displayMode === 'large' ? 14 : 10} className="shrink-0 opacity-0 group-hover/link:opacity-100 transition-opacity" />
+              <LinkIcon size={displayMode === 'large' ? 12 : 10} className="shrink-0 group-hover/link:rotate-12 transition-transform" />
+              <span className={cn("truncate", displayMode === 'large' ? "max-w-[180px]" : "max-w-[100px]")}>{url.replace(/^https?:\/\//, '')}</span>
             </a>
           ))}
         </div>
@@ -3873,8 +3893,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
       
       {task.notes && (
         <p className={cn(
-          "text-slate-500 mb-3 leading-relaxed italic",
-          displayMode === 'large' ? "text-xs bg-slate-50/80 p-3 rounded-xl border border-slate-100/80 block whitespace-pre-wrap" : "text-[10px] line-clamp-2"
+          "text-slate-500 mb-2 leading-relaxed italic",
+          displayMode === 'large' ? "text-[11px] bg-slate-50/80 p-2.5 rounded-lg border border-slate-100/80 block whitespace-pre-wrap line-clamp-3" : "text-[10px] line-clamp-2"
         )}>
           {task.notes}
         </p>
@@ -4229,13 +4249,28 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
               <div className="space-y-2">
                 {urls.map((u, idx) => (
                   <div key={idx} className="flex gap-2">
-                    <input 
-                      type="url"
-                      placeholder={t('UrlPlaceholder')}
-                      className="flex-1 px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-xl text-sm font-medium outline-none transition-all"
-                      value={u}
-                      onChange={(e) => updateUrlField(idx, e.target.value)}
-                    />
+                    <div className="relative flex-1">
+                      <input 
+                        type="url"
+                        placeholder={t('UrlPlaceholder')}
+                        className={cn(
+                          "w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-xl text-sm font-medium outline-none transition-all",
+                          u.trim() && "pr-12"
+                        )}
+                        value={u}
+                        onChange={(e) => updateUrlField(idx, e.target.value)}
+                      />
+                      {u.trim() && (
+                        <a 
+                          href={u.startsWith('http') ? u : `https://${u}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-600 transition-colors"
+                        >
+                          <ExternalLink size={18} />
+                        </a>
+                      )}
+                    </div>
                     {urls.length > 1 && (
                       <button 
                         type="button"

@@ -57,10 +57,12 @@ service cloud.firestore {
           && data.urgentLimit is number
           && data.deadlineThreshold is number
           && data.archiveThresholdDays is number
+          && data.doneToTrashThresholdDays is number
+          && data.trashCleanupThresholdDays is number
           && data.criticalThreshold is number
           && data.isLocalBackupEnabled is bool
           && data.localBackupPath is string
-          && (data.get('displayMode', 'card') in ['card', 'list'])
+          && (data.get('displayMode', 'standard') in ['compact', 'standard', 'large'])
           && (data.get('language', 'en') in ['en', 'ja'])
           && (data.get('sections', ['General']) is list);
       }
