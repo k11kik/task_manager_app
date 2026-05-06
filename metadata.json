@@ -1,6 +1,6 @@
 {
-  "name": "TriFocus",
-  "description": "A structured task management app based on daily focus and weekly review cycles, featuring automatic archiving and project-based organization.",
+  "name": "NavFOR",
+  "description": "Navigation Focus Objectives & Results (目的にフォーカスし、結果へと導くナビゲーションシステム)",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

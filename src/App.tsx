@@ -266,7 +266,9 @@ export default function App() {
         'GeneralProjectOverview': 'General Project Overview',
         'ProjectOverview': ' Project Overview',
         'NoTasks': 'No tasks found.',
-        'SyncOffUppercase': 'SYNC OFF'
+        'SyncOffUppercase': 'SYNC OFF',
+        'ContextSubtasks': 'Context Subtasks',
+        'UrlPlaceholder': 'URL Placeholder'
       },
       ja: {
         'Urgent': 'フォーカス',
@@ -342,7 +344,6 @@ export default function App() {
         'SafeCapacity': 'SAFE CAPACITY',
         'ProjectOverview': 'のプロジェクト概況',
         'Total': '件',
-        'NoProjectsTracked': 'まだ複数のプロジェクトが管理されていません。',
         'Slots': '最大枠',
         'SyncToCloud': 'クラウド同期',
         'SyncToCloudDesc': 'ログインすると、全てのデバイスでタスクをリアルタイムに同期できます。',
@@ -1290,7 +1291,7 @@ export default function App() {
   const downloadBackup = async () => {
     const csv = getCSVData();
     const userPart = user?.email?.split('@')[0] || 'local';
-    const fileName = `TriFocus_Log_${userPart}_Manual.csv`;
+    const fileName = `NavFOR_Log_${userPart}_Manual.csv`;
     const now = Date.now();
 
     try {
@@ -1370,7 +1371,7 @@ export default function App() {
     try {
       const csvContent = getCSVData();
       const userPart = user?.email?.split('@')[0] || 'local';
-      const fileName = customName || `TriFocus_Log_${userPart}.csv`;
+      const fileName = customName || `NavFOR_Log_${userPart}.csv`;
       
       const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
       const writable = await fileHandle.createWritable();
@@ -1556,7 +1557,7 @@ export default function App() {
 
   const triggerEmergencyBackup = async () => {
     const userPart = user?.email?.split('@')[0] || 'user';
-    const backupName = `TriFocus_Log_${userPart}_backup.csv`;
+    const backupName = `NavFOR_Log_${userPart}_backup.csv`;
     
     if (settings.isLocalBackupEnabled && dirHandle) {
       await syncToLocalSystem(true, backupName);
@@ -1754,7 +1755,7 @@ export default function App() {
               </div>
               <div className="flex flex-col items-start leading-none">
                 <h1 className="text-sm font-black tracking-tighter text-slate-800 uppercase">
-                  TriFocus <span className="text-indigo-600">v2.2</span>
+                  NavFOR <span className="text-indigo-600">v2.3</span>
                 </h1>
                 <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-0.5">
                   <span className="truncate max-w-[80px]">{activeSection}</span> <ChevronDown size={10} className={cn("transition-transform", showSectionMenu && "rotate-180")} />
@@ -2164,7 +2165,7 @@ export default function App() {
               </div>
               <div>
                 <h3 className="text-xl font-bold mb-2">Sync to Cloud</h3>
-                <p className="text-sm opacity-80 leading-relaxed">Sign in to securely access your TriFocus system across all devices with real-time sync.</p>
+                <p className="text-sm opacity-80 leading-relaxed">Sign in to securely access your NavFOR system across all devices with real-time sync.</p>
               </div>
               <button 
                 onClick={() => handleSignIn()}
@@ -3060,7 +3061,7 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-white p-4 rounded-2xl border border-slate-100">
                         <p className="text-xs font-bold text-slate-800 mb-1">{t('ExportData')}</p>
-                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Backup to TriFocus CSV</p>
+                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Backup to NavFOR CSV</p>
                         <button 
                           onClick={() => {
                             const blob = new Blob([getCSVData()], { type: 'text/csv' });
@@ -3078,7 +3079,7 @@ export default function App() {
 
                       <div className="bg-white p-4 rounded-2xl border border-slate-100">
                         <p className="text-xs font-bold text-slate-800 mb-1">{t('ImportData')}</p>
-                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Restore from TriFocus CSV</p>
+                        <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Restore from NavFOR CSV</p>
                         <label className="flex items-center justify-center gap-2 w-full py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all cursor-pointer">
                           <Upload size={14} /> Import CSV
                           <input type="file" accept=".csv" className="hidden" onChange={handleCSVImport} />
@@ -3524,7 +3525,7 @@ export default function App() {
           </div>
         </div>
         <div className="text-[10px] font-mono text-slate-400 font-extrabold ml-4 uppercase">
-          TriFocus V2.2
+          NavFOR V2.3
         </div>
       </footer>
 
@@ -3974,7 +3975,6 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   const [isPinned, setIsPinned] = useState(task.isPinned || false);
   const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, 'yyyy-MM-dd') : '');
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
-  const [showConfirmClose, setShowConfirmClose] = useState(false);
 
   const isDirty = title !== task.title || 
                   notes !== (task.notes || '') || 
@@ -3998,10 +3998,8 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   const handleClose = () => {
     if (isDirty) {
       handleSubmit();
-      onClose();
-    } else {
-      onClose();
     }
+    onClose();
   };
 
   useEffect(() => {
@@ -4179,17 +4177,10 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
               </div>
             </div>
 
-            {isDirty && (
-              <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-orange-600 bg-orange-50 p-2 rounded-lg animate-pulse border border-orange-100">
-                <AlertCircle size={14} />
-                <span>You have unsaved changes. Press Cmd/Ctrl+Enter or click Save to keep them.</span>
-              </div>
-            )}
-
             <div className="flex gap-3 pt-4">
               <button 
                 type="button"
-                onClick={handleClose}
+                onClick={() => onClose()}
                 className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all active:scale-95"
               >
                 {t('Cancel')}
@@ -4292,50 +4283,6 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
         </div>
       </motion.div>
 
-      {/* Dirty Confirmation Modal */}
-      <AnimatePresence>
-        {showConfirmClose && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
-              onClick={() => setShowConfirmClose(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="relative bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
-            >
-              <AlertTriangle className="mx-auto text-amber-500 mb-4" size={48} />
-              <h3 className="text-xl font-bold mb-2">Unsaved Changes</h3>
-              <p className="text-slate-500 text-sm mb-8">You have modified this task. Would you like to save your changes before closing?</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => { onClose(); setShowConfirmClose(false); }}
-                  className="py-3 px-4 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs"
-                >
-                  Discard Changes
-                </button>
-                <button 
-                  onClick={() => { handleSubmit(); onClose(); setShowConfirmClose(false); }}
-                  className="py-3 px-4 bg-indigo-600 text-white rounded-xl font-bold text-xs"
-                >
-                  Save & Close
-                </button>
-              </div>
-              <button 
-                 onClick={() => setShowConfirmClose(false)}
-                 className="mt-4 text-xs font-bold text-slate-400 hover:text-slate-600"
-              >
-                Back to Edit
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
