@@ -21,6 +21,12 @@
       "purpose": "any"
     },
     {
+      "src": "maskable-icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
       "src": "apple-touch-icon.png",
       "type": "image/png",
       "sizes": "180x180",
