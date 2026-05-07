@@ -118,6 +118,7 @@ export default function App() {
   const lastSwipeTime = React.useRef(0);
   const touchStart = React.useRef({ x: 0, y: 0 });
   const accumulatedX = React.useRef(0);
+  const swipeLocked = React.useRef(false);
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const now = Date.now();
@@ -155,14 +156,27 @@ export default function App() {
         // Try to prevent browser back/forward navigation gestures
         if (e.cancelable) e.preventDefault();
         
+        // If we've already swiped in this continuous physical scroll, wait for it to slow down
+        if (swipeLocked.current) {
+          // Reset lock if the user reverses direction significantly or slows down a LOT
+          // But usually, we just wait for the else block or the velocity to drop
+          if (Math.abs(e.deltaX) < 1) swipeLocked.current = false;
+          return;
+        }
+
         accumulatedX.current += e.deltaX;
         // High sensitivity for PC: 20px
         if (Math.abs(accumulatedX.current) > 20) {
           handleSwipe(accumulatedX.current > 0 ? 'left' : 'right');
           accumulatedX.current = 0;
+          swipeLocked.current = true; // Lock until the scroll gesture "ends" or slows down
         }
       } else {
         accumulatedX.current = 0;
+        // Release lock when not scrolling horizontally or when velocity is zero
+        if (Math.abs(e.deltaX) < 1) {
+          swipeLocked.current = false;
+        }
       }
     };
 
