@@ -110,6 +110,12 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<string>('General');
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings'>('urgent');
+  
+  // Undo/Redo state
+  const [history, setHistory] = useState<{tasks: Task[], settings: any}[]>([]);
+  const [redoStack, setRedoStack] = useState<{tasks: Task[], settings: any}[]>([]);
+  const [isUndoing, setIsUndoing] = useState(false);
+
   const [isNewTaskMemoExpanded, setIsNewTaskMemoExpanded] = useState(false);
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
   const [lastBackupTime, setLastBackupTime] = useState<number>(() => {
@@ -145,6 +151,8 @@ export default function App() {
     isLocalBackupEnabled: false,
     localBackupPath: '',
     displayMode: 'standard' as 'compact' | 'standard' | 'large',
+    displayModeFocus: 'standard' as 'compact' | 'standard' | 'large',
+    displayModeTodo: 'standard' as 'compact' | 'standard' | 'large',
     language: 'en' as 'en' | 'ja',
     sections: []
   });
@@ -493,6 +501,8 @@ export default function App() {
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
           displayMode: data.displayMode === 'card' ? 'standard' : (data.displayMode === 'list' ? 'compact' : (data.displayMode || 'standard')),
+          displayModeFocus: data.displayModeFocus || 'standard',
+          displayModeTodo: data.displayModeTodo || 'standard',
           language: data.language || 'en',
           sections: loadedSections
         });
@@ -517,6 +527,8 @@ export default function App() {
           isLocalBackupEnabled: false,
           localBackupPath: '',
           displayMode: 'standard',
+          displayModeFocus: 'standard',
+          displayModeTodo: 'standard',
           language: 'en',
           sections: ['General']
         }).catch(err => handleFirestoreError(err, OperationType.WRITE, `settings/${user.uid}`));
@@ -712,22 +724,122 @@ export default function App() {
     };
   }, [tasks, settings, activeSection]);
 
+  const pushToHistory = () => {
+    if (isUndoing) return;
+    setHistory(prev => [{ tasks: [...tasks], settings: { ...settings } }, ...prev].slice(0, 50));
+    setRedoStack([]);
+  };
+
+  const undo = async () => {
+    if (history.length === 0 || !user) return;
+    setIsUndoing(true);
+    const prevState = history[0];
+    const newHistory = history.slice(1);
+    
+    setRedoStack(prev => [{ tasks: [...tasks], settings: { ...settings } }, ...prev]);
+    
+    try {
+      const batch = writeBatch(db);
+      
+      // We need to sync tasks perfectly. 
+      // 1. Delete all current tasks (that might have been added)
+      // 2. Set all tasks from prevState
+      // This is expensive but necessary for a full state undo.
+      // Alternatively, we can just compare and sync differences.
+      // For simplicity in this demo, we'll sync by identifying changed tasks if possible,
+      // but a batch overwrite is safer for consistency.
+      
+      // To avoid massive deletes, we'll just update/create from prevState and delete those NOT in prevState
+      const currentTaskIds = tasks.map(t => t.id);
+      const prevTaskIds = prevState.tasks.map(t => t.id);
+      
+      // Delete tasks that exist now but not in prev
+      tasks.forEach(t => {
+        if (!prevTaskIds.includes(t.id)) {
+          batch.delete(doc(db, 'tasks', t.id));
+        }
+      });
+      
+      // Add/Update tasks from prev
+      prevState.tasks.forEach(t => {
+        const { id, ...data } = t;
+        batch.set(doc(db, 'tasks', id), data);
+      });
+      
+      // Sync settings
+      batch.set(doc(db, 'settings', user.uid), prevState.settings);
+      
+      await batch.commit();
+      setHistory(newHistory);
+    } catch (err) {
+      console.error("Undo failed", err);
+    } finally {
+      setIsUndoing(false);
+    }
+  };
+
+  const redo = async () => {
+    if (redoStack.length === 0 || !user) return;
+    setIsUndoing(true);
+    const nextState = redoStack[0];
+    const newRedoStack = redoStack.slice(1);
+    
+    setHistory(prev => [{ tasks: [...tasks], settings: { ...settings } }, ...prev]);
+    
+    try {
+      const batch = writeBatch(db);
+      const nextTaskIds = nextState.tasks.map(t => t.id);
+      
+      tasks.forEach(t => {
+        if (!nextTaskIds.includes(t.id)) {
+          batch.delete(doc(db, 'tasks', t.id));
+        }
+      });
+      
+      nextState.tasks.forEach(t => {
+        const { id, ...data } = t;
+        batch.set(doc(db, 'tasks', id), data);
+      });
+      
+      batch.set(doc(db, 'settings', user.uid), nextState.settings);
+      
+      await batch.commit();
+      setRedoStack(newRedoStack);
+    } catch (err) {
+      console.error("Redo failed", err);
+    } finally {
+      setIsUndoing(false);
+    }
+  };
+
   const filteredTasks = useMemo(() => {
     return tasks
       .filter(t => {
         const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                              t.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
                              (t.notes || '').toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesProject = selectedProject === 'All' || t.project === selectedProject || t.isPinned;
+        
+        // Pinned tasks should respect project filter if one is active
+        const matchesProject = selectedProject === 'All' ? true : (t.project === selectedProject);
+        
         const matchesSection = t.section === activeSection || (!t.section && activeSection === settings.sections[0]);
         return matchesSearch && matchesProject && matchesSection;
       })
       .sort((a, b) => {
-        // Universal Priority 1: Done state (Done always goes to bottom in all views for consistency)
-        if (a.isDone && !b.isDone) return 1;
-        if (!a.isDone && b.isDone) return -1;
+        // Universal Priority 1: Done state
+        if (a.isDone !== b.isDone) return a.isDone ? 1 : -1;
 
-        // Universal Priority 2: Deadline Status
+        // Universal Priority 2: Starred (starred first) - User wants star to be top priority in all folders
+        const starA = !!a.isStarred;
+        const starB = !!b.isStarred;
+        if (starA !== starB) return starA ? -1 : 1;
+
+        // Universal Priority 3: Pinned tasks
+        const pinA = !!a.isPinned;
+        const pinB = !!b.isPinned;
+        if (pinA !== pinB) return pinA ? -1 : 1;
+
+        // Universal Priority 4: Deadline Status (Expired/Approaching)
         const now = Date.now();
         const threshold = (settings.deadlineThreshold || 3) * 24 * 60 * 60 * 1000;
         
@@ -738,16 +850,6 @@ export default function App() {
         const isApproachingA = a.deadline && (a.deadline - now <= threshold);
         const isApproachingB = b.deadline && (b.deadline - now <= threshold);
         if (isApproachingA !== isApproachingB) return isApproachingA ? -1 : 1;
-
-        // Universal Priority 3: Pinned tasks
-        const pinA = !!a.isPinned;
-        const pinB = !!b.isPinned;
-        if (pinA !== pinB) return pinA ? -1 : 1;
-
-        // Universal Priority 4: Starred (starred first)
-        const starA = !!a.isStarred;
-        const starB = !!b.isStarred;
-        if (starA !== starB) return starA ? -1 : 1;
 
         // Universal Priority 5: Recency (updatedAt descending)
         return (b.updatedAt || 0) - (a.updatedAt || 0);
@@ -894,6 +996,7 @@ export default function App() {
     }
 
     try {
+      pushToHistory();
       await addDoc(collection(db, 'tasks'), newTask);
       setNewTaskTitle('');
       setNewTaskProject('');
@@ -922,6 +1025,7 @@ export default function App() {
       }
     }
     try {
+      pushToHistory();
       await updateDoc(doc(db, 'tasks', id), { 
         category: newCategory, 
         updatedAt: Date.now() 
@@ -934,11 +1038,11 @@ export default function App() {
   const updateTask = async (id: string, updates: Partial<Task>) => {
     if (!user) return;
     try {
+      pushToHistory();
       await updateDoc(doc(db, 'tasks', id), { 
         ...updates, 
         updatedAt: Date.now() 
       });
-      setEditingTask(null);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
     }
@@ -949,6 +1053,7 @@ export default function App() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     try {
+      pushToHistory();
       await updateDoc(doc(db, 'tasks', id), { 
         isDone: !task.isDone, 
         updatedAt: Date.now() 
@@ -966,6 +1071,7 @@ export default function App() {
     if (task.category === 'Trash') {
       // If already in trash, perm delete
       try {
+        pushToHistory();
         await deleteDoc(doc(db, 'tasks', id));
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, `tasks/${id}`);
@@ -973,6 +1079,7 @@ export default function App() {
     } else {
       // Move to trash
       try {
+        pushToHistory();
         await updateDoc(doc(db, 'tasks', id), { 
           category: 'Trash', 
           updatedAt: Date.now() 
@@ -988,6 +1095,7 @@ export default function App() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     try {
+      pushToHistory();
       await updateDoc(doc(db, 'tasks', id), { 
         isStarred: !task.isStarred, 
         updatedAt: Date.now() 
@@ -1002,6 +1110,7 @@ export default function App() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     try {
+      pushToHistory();
       await updateDoc(doc(db, 'tasks', id), { 
         isPinned: !task.isPinned, 
         updatedAt: Date.now() 
@@ -1896,6 +2005,32 @@ export default function App() {
               </nav>
 
               <div className="hidden md:flex items-center gap-2 mr-2">
+                {/* Undo/Redo */}
+                <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5 mr-1">
+                  <button 
+                    onClick={undo}
+                    disabled={history.length === 0 || isUndoing}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all",
+                      history.length > 0 ? "text-indigo-600 hover:bg-white hover:shadow-sm" : "text-slate-300 cursor-not-allowed"
+                    )}
+                    title="Undo"
+                  >
+                    <RefreshCcw size={14} className={cn("rotate-[270deg]", isUndoing && "animate-spin")} />
+                  </button>
+                  <button 
+                    onClick={redo}
+                    disabled={redoStack.length === 0 || isUndoing}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all",
+                      redoStack.length > 0 ? "text-indigo-600 hover:bg-white hover:shadow-sm" : "text-slate-300 cursor-not-allowed"
+                    )}
+                    title="Redo"
+                  >
+                    <RefreshCcw size={14} className="scale-x-[-1] rotate-[270deg]" />
+                  </button>
+                </div>
+
                 {/* Display Mode Toggle */}
                 <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
                   <button 
@@ -2364,8 +2499,8 @@ export default function App() {
                     )}
                   </div>
                   <input 
-                    type="date"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-400 font-medium [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                    type="datetime-local"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[11px] focus:ring-2 focus:ring-indigo-500 outline-none text-slate-400 font-medium [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                     value={newTaskDeadline}
                     onChange={(e) => setNewTaskDeadline(e.target.value)}
                   />
@@ -2499,11 +2634,34 @@ export default function App() {
                 mobileView === 'urgent' ? "flex" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <h3 className="font-bold flex items-center gap-2 text-red-700">
                       <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-red-500"></span>
                       {t('Urgent')}
                     </h3>
+                    <div className="flex bg-white/50 border border-red-100 rounded-lg p-0.5">
+                      <button 
+                        onClick={() => saveSettings({ displayModeFocus: 'large' })}
+                        className={cn("p-1 rounded transition-all", settings.displayModeFocus === 'large' ? "bg-white shadow-sm text-red-600" : "text-slate-400")}
+                        title={t('LargeView')}
+                      >
+                        <Grid2X2 size={10} />
+                      </button>
+                      <button 
+                        onClick={() => saveSettings({ displayModeFocus: 'standard' })}
+                        className={cn("p-1 rounded transition-all", settings.displayModeFocus === 'standard' ? "bg-white shadow-sm text-red-600" : "text-slate-400")}
+                        title={t('StandardView')}
+                      >
+                        <LayoutGrid size={10} />
+                      </button>
+                      <button 
+                        onClick={() => saveSettings({ displayModeFocus: 'compact' })}
+                        className={cn("p-1 rounded transition-all", settings.displayModeFocus === 'compact' ? "bg-white shadow-sm text-red-600" : "text-slate-400")}
+                        title={t('CompactView')}
+                      >
+                        <LayoutList size={10} />
+                      </button>
+                    </div>
                   </div>
                   <span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded border uppercase text-red-400 border-red-100">
                     <span className="md:inline hidden">Slots: </span> {settings.urgentLimit}
@@ -2513,8 +2671,8 @@ export default function App() {
                 <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
                   <div className={cn(
                     "grid grid-cols-1 gap-3",
-                    !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2 lg:grid-cols-1" : 
-                                   settings.displayMode === 'standard' ? "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1" : 
+                    settings.displayModeFocus !== 'compact' && (settings.displayModeFocus === 'large' ? "md:grid-cols-2 lg:grid-cols-1" : 
+                                   settings.displayModeFocus === 'standard' ? "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1" : 
                                    "md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-1")
                   )}>
                     <AnimatePresence mode="popLayout">
@@ -2555,7 +2713,7 @@ export default function App() {
                           onPin={() => togglePin(task.id)}
                           t={t}
                           variant="Urgent"
-                          displayMode={settings.displayMode}
+                          displayMode={settings.displayModeFocus}
                           deadlineThreshold={settings.deadlineThreshold}
                         />
                       ))}
@@ -2576,11 +2734,34 @@ export default function App() {
                 mobileView === 'focus' ? "flex" : "hidden lg:flex"
               )}>
                 <div className="flex items-center justify-between mb-4 px-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <h3 className="font-bold flex items-center gap-2 text-indigo-700">
                       <span className="w-2.5 h-2.5 rounded-full shadow-sm bg-indigo-500"></span>
                       {t('Focus')}
                     </h3>
+                    <div className="flex bg-white/50 border border-indigo-100 rounded-lg p-0.5">
+                      <button 
+                        onClick={() => saveSettings({ displayModeTodo: 'large' })}
+                        className={cn("p-1 rounded transition-all", settings.displayModeTodo === 'large' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400")}
+                        title={t('LargeView')}
+                      >
+                        <Grid2X2 size={10} />
+                      </button>
+                      <button 
+                        onClick={() => saveSettings({ displayModeTodo: 'standard' })}
+                        className={cn("p-1 rounded transition-all", settings.displayModeTodo === 'standard' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400")}
+                        title={t('StandardView')}
+                      >
+                        <LayoutGrid size={10} />
+                      </button>
+                      <button 
+                        onClick={() => saveSettings({ displayModeTodo: 'compact' })}
+                        className={cn("p-1 rounded transition-all", settings.displayModeTodo === 'compact' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400")}
+                        title={t('CompactView')}
+                      >
+                        <LayoutList size={10} />
+                      </button>
+                    </div>
                   </div>
                   <button 
                     onClick={() => setIsPickingDaily(true)}
@@ -2599,7 +2780,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
+                        settings.displayModeTodo !== 'compact' && (settings.displayModeTodo === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.expired.map(task => (
@@ -2614,7 +2795,7 @@ export default function App() {
                               onPin={() => togglePin(task.id)}
                               t={t}
                               variant="Focus"
-                              displayMode={settings.displayMode}
+                              displayMode={settings.displayModeTodo}
                               deadlineThreshold={settings.deadlineThreshold}
                             />
                           ))}
@@ -2631,7 +2812,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
+                        settings.displayModeTodo !== 'compact' && (settings.displayModeTodo === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.nearDeadline.map(task => (
@@ -2646,7 +2827,7 @@ export default function App() {
                               onPin={() => togglePin(task.id)}
                               t={t}
                               variant="Focus"
-                              displayMode={settings.displayMode}
+                              displayMode={settings.displayModeTodo}
                               deadlineThreshold={settings.deadlineThreshold}
                             />
                           ))}
@@ -2663,7 +2844,7 @@ export default function App() {
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
+                        settings.displayModeTodo !== 'compact' && (settings.displayModeTodo === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                       )}>
                         <AnimatePresence mode="popLayout">
                           {groupedFocusTasks.pinned.map(task => (
@@ -2678,7 +2859,7 @@ export default function App() {
                               onPin={() => togglePin(task.id)}
                               t={t}
                               variant="Focus"
-                              displayMode={settings.displayMode}
+                              displayMode={settings.displayModeTodo}
                               deadlineThreshold={settings.deadlineThreshold}
                             />
                           ))}
@@ -2709,7 +2890,7 @@ export default function App() {
                           {!isCollapsed && (
                             <div className={cn(
                               "grid grid-cols-1 gap-2.5",
-                              !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
+                              settings.displayModeTodo !== 'compact' && (settings.displayModeTodo === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
                             )}>
                               <AnimatePresence mode="popLayout">
                                 {tasks.map(task => (
@@ -2724,7 +2905,7 @@ export default function App() {
                                     onPin={() => togglePin(task.id)}
                                     t={t}
                                     variant="Focus"
-                                    displayMode={settings.displayMode}
+                                    displayMode={settings.displayModeTodo}
                                     deadlineThreshold={settings.deadlineThreshold}
                                   />
                                 ))}
@@ -3656,6 +3837,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [openUpwards, setOpenUpwards] = useState(false);
+  const [openToRight, setOpenToRight] = useState(false);
   const buttonRef = React.useRef<HTMLDivElement>(null);
 
   const toggleMenu = (e: React.MouseEvent) => {
@@ -3663,7 +3845,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
     if (!showMenu && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      setOpenUpwards(spaceBelow < 180); 
+      const spaceLeft = rect.left;
+      setOpenUpwards(spaceBelow < 250); 
+      // If there's less than 200px on the left, we should probably align to the left of the button to grow right
+      setOpenToRight(spaceLeft < 200);
     }
     setShowMenu(!showMenu);
   };
@@ -3755,7 +3940,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
               <>
                 <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
                 <div className={cn(
-                  "absolute right-0 w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                  "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                  openToRight ? "left-0" : "right-0",
                   openUpwards ? "bottom-full mb-1" : "top-full mt-1"
                 )}>
                   {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
@@ -3807,7 +3993,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
       )}
     >
       <div className="flex items-start justify-between mb-1.5 min-w-0">
-        <div className="flex flex-col gap-0.5 min-w-0">
+        <div className="flex flex-col gap-0.5 min-w-0 pr-1">
           {task.deadline && (
             <>
               <div className={cn(
@@ -3817,9 +4003,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 (task.deadline - Date.now()) <= (deadlineThreshold * 86400000) ? "text-amber-600" : "text-slate-400"
               )}>
                 <Clock size={displayMode === 'large' ? 12 : 10} />
-                <span>{format(task.deadline, 'MM/dd')}</span>
+                <span>{format(task.deadline, 'MM/dd HH:mm')}</span>
               </div>
-              <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 truncate">
+              <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 truncate opacity-70">
                 <span>({format(task.deadline, 'yyyyMMdd')})</span>
                 <span className="text-indigo-400/60">[{task.project}]</span>
               </div>
@@ -3831,7 +4017,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-0.5 shrink-0 ml-1">
+        <div className="flex items-center gap-0.5 shrink-0 ml-auto pt-0.5">
           <button 
             onClick={(e) => { e.stopPropagation(); onPin(); }}
             className={cn(
@@ -3933,7 +4119,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
               <>
                 <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
                 <div className={cn(
-                  "absolute right-0 w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                  "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                  openToRight ? "left-0" : "right-0",
                   openUpwards ? "bottom-full mb-1" : "top-full mt-1"
                 )}>
                   {variant === 'Focus' && (
@@ -4066,7 +4253,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
   const [isStarred, setIsStarred] = useState(task.isStarred || false);
   const [isPinned, setIsPinned] = useState(task.isPinned || false);
-  const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, 'yyyy-MM-dd') : '');
+  const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, "yyyy-MM-dd'T'HH:mm") : '');
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
 
   const isDirty = title !== task.title || 
@@ -4076,7 +4263,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                   isPinned !== (task.isPinned || false) ||
                   (deadline ? new Date(deadline).getTime() : '') !== (task.deadline || '');
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = (e?: React.FormEvent, shouldClose = false) => {
     if (e) e.preventDefault();
     onSave({ 
       title, 
@@ -4086,25 +4273,30 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
       isPinned,
       deadline: deadline ? new Date(deadline).getTime() : null as any // Using null to clear
     });
+    if (shouldClose) onClose();
   };
 
   const handleClose = () => {
     if (isDirty) {
-      handleSubmit();
+      handleSubmit(undefined, true);
+    } else {
+      onClose();
     }
-    onClose();
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // If MemoModal is open, we let it handle Ctrl+Enter
+      if (isMemoModalOpen) return;
+      
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        handleSubmit();
+        handleSubmit(undefined, true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [title, notes, urls, isStarred, isPinned, deadline]);
+  }, [title, notes, urls, isStarred, isPinned, deadline, isMemoModalOpen]);
 
   const addUrlField = () => setUrls([...urls, '']);
   const updateUrlField = (index: number, val: string) => {
@@ -4228,8 +4420,8 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                 )}
               </div>
               <input 
-                type="date"
-                className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-medium outline-none transition-all text-slate-400 [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                type="datetime-local"
+                className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-[11px] font-medium outline-none transition-all text-slate-400 [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
               />
@@ -4296,6 +4488,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
               <button 
                 type="submit"
                 disabled={!title.trim()}
+                onClick={(e) => { e.preventDefault(); handleSubmit(undefined, true); }}
                 className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-50 transition-all active:scale-95 shadow-xl shadow-indigo-100"
               >
                 {t('CommitChanges')}
