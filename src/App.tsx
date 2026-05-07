@@ -116,7 +116,7 @@ export default function App() {
   
   // Track swipe cooldown
   const lastSwipeTime = React.useRef(0);
-  const touchStartX = React.useRef(0);
+  const touchStart = React.useRef({ x: 0, y: 0 });
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const now = Date.now();
@@ -161,13 +161,17 @@ export default function App() {
     };
 
     const handleTouchStart = (e: TouchEvent) => {
-      touchStartX.current = e.touches[0].clientX;
+      touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
       const touchEndX = e.changedTouches[0].clientX;
-      const diffX = touchEndX - touchStartX.current;
-      if (Math.abs(diffX) > 100) {
+      const touchEndY = e.changedTouches[0].clientY;
+      const diffX = touchEndX - touchStart.current.x;
+      const diffY = Math.abs(touchEndY - touchStart.current.y);
+      
+      // Threshold 70px for mobile swipe
+      if (Math.abs(diffX) > 70 && Math.abs(diffX) > diffY * 1.5) {
         handleSwipe(diffX > 0 ? 'right' : 'left');
       }
     };
@@ -839,7 +843,10 @@ export default function App() {
       });
       
       // Restore settings
-      batch.set(doc(db, 'settings', user.uid), prevState.settings);
+      batch.set(doc(db, 'settings', user.uid), {
+        userId: user.uid,
+        ...prevState.settings
+      });
       
       await batch.commit();
       setHistory(newHistory);
@@ -878,7 +885,10 @@ export default function App() {
         batch.set(doc(db, 'tasks', id), data);
       });
       
-      batch.set(doc(db, 'settings', user.uid), nextState.settings);
+      batch.set(doc(db, 'settings', user.uid), {
+        userId: user.uid,
+        ...nextState.settings
+      });
       
       await batch.commit();
       setRedoStack(newRedoStack);
@@ -2758,7 +2768,7 @@ export default function App() {
                   </span>
                 </div>
                 
-                <div className="flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
+                <div className="flex-1 space-y-3 overflow-y-auto overflow-x-visible pr-1 custom-scrollbar pb-24 lg:pb-10">
                   <div className={cn(
                     "grid grid-cols-1 gap-3",
                     settings.displayModeFocus !== 'compact' && (settings.displayModeFocus === 'large' ? "md:grid-cols-2 lg:grid-cols-1" : 
@@ -2861,7 +2871,7 @@ export default function App() {
                   </button>
                 </div>
                 
-                <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-10">
+                <div className="flex-1 space-y-6 overflow-y-auto overflow-x-visible pr-1 custom-scrollbar pb-24 lg:pb-10">
                   {groupedFocusTasks.expired.length > 0 && (
                     <div className="space-y-2 mb-4">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600 bg-red-100/50 px-2 py-1.5 rounded-lg border border-red-200 flex items-center gap-2">
@@ -3087,7 +3097,7 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar pb-24">
+              <div className="flex-1 space-y-6 overflow-y-auto overflow-x-visible pr-1 custom-scrollbar pb-24">
                 {groupedArchiveTasks.nearingPurge.length > 0 && (
                    <div className="space-y-3 mb-8">
                       <div className="flex items-center gap-4 px-2">
@@ -3288,7 +3298,7 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-24">
+              <div className="flex-1 space-y-6 overflow-y-auto overflow-x-visible pr-2 custom-scrollbar pb-24">
                 {groupedTrashTasks.nearingPurge.length > 0 && (
                    <div className="space-y-3 mb-8">
                       <div className="flex items-center gap-4 px-2">
@@ -3936,14 +3946,23 @@ const TaskCard: React.FC<TaskCardProps> = ({
     e.stopPropagation();
     if (!showMenu && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
       const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceRight = window.innerWidth - rect.right;
+      const spaceRight = viewportWidth - rect.right;
+      
       setOpenUpwards(spaceBelow < 250); 
-      // If there's less than 200px on the right, it must open left (right-0)
-      // EXCEPT if it's the leftmost column, where we want it to open right (left-0)
-      if (rect.left < 200) setOpenToRight(true);
-      else if (spaceRight < 200) setOpenToRight(false);
-      else setOpenToRight(false);
+      
+      // Better logic for horizontal opening
+      // If we are in the left half of the screen, try to open Right
+      // If we are in the right half, try to open Left
+      // BUT if we're specifically leftmost in a dashboard column, open Right
+      if (rect.left < 300) {
+        setOpenToRight(true);
+      } else if (spaceRight < 200) {
+        setOpenToRight(false);
+      } else {
+        setOpenToRight(false);
+      }
     }
     setShowMenu(!showMenu);
   };
@@ -4034,11 +4053,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
             {showMenu && (
               <>
                 <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
-                <div className={cn(
-                  "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
-                  openToRight ? "left-0" : "right-0",
-                  openUpwards ? "bottom-full mb-1" : "top-full mt-1"
-                )}>
+                <div 
+                  className={cn(
+                    "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                    openToRight ? "ml-0" : "-ml-44"
+                  )}
+                  style={{
+                    top: openUpwards ? 'auto' : `${buttonRef.current?.getBoundingClientRect().bottom || 0}px`,
+                    bottom: openUpwards ? `${window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0)}px` : 'auto',
+                    left: `${buttonRef.current?.getBoundingClientRect().left || 0}px`,
+                    marginTop: openUpwards ? '0' : '4px',
+                    marginBottom: openUpwards ? '4px' : '0'
+                  }}
+                >
                   {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
                       <Zap size={12} className="text-red-400" /> Mark Urgent
@@ -4213,11 +4240,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
             {showMenu && (
               <>
                 <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
-                <div className={cn(
-                  "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
-                  openToRight ? "left-0" : "right-0",
-                  openUpwards ? "bottom-full mb-1" : "top-full mt-1"
-                )}>
+                <div 
+                  className={cn(
+                    "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                    openToRight ? "ml-0" : "-ml-44"
+                  )}
+                  style={{
+                    top: openUpwards ? 'auto' : `${buttonRef.current?.getBoundingClientRect().bottom || 0}px`,
+                    bottom: openUpwards ? `${window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0)}px` : 'auto',
+                    left: `${buttonRef.current?.getBoundingClientRect().left || 0}px`,
+                    marginTop: openUpwards ? '0' : '4px',
+                    marginBottom: openUpwards ? '4px' : '0'
+                  }}
+                >
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
                       <Zap size={12} className="text-red-400" /> Move to Urgent
