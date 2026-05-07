@@ -121,7 +121,7 @@ export default function App() {
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const now = Date.now();
-    if (now - lastSwipeTime.current < 600) return; // Cooldown 600ms
+    if (now - lastSwipeTime.current < 450) return; // Cooldown 450ms
     lastSwipeTime.current = now;
     accumulatedX.current = 0; // Reset acceleration for wheel events
 
@@ -156,12 +156,10 @@ export default function App() {
         if (e.cancelable) e.preventDefault();
         
         accumulatedX.current += e.deltaX;
-        // Significant sensitivity increase: 30px
-        if (Math.abs(accumulatedX.current) > 30) {
+        // High sensitivity for PC: 20px
+        if (Math.abs(accumulatedX.current) > 20) {
           handleSwipe(accumulatedX.current > 0 ? 'left' : 'right');
           accumulatedX.current = 0;
-          // Longer cooldown to prevent multiple jumps
-          lastSwipeTime.current = Date.now() + 500; 
         }
       } else {
         accumulatedX.current = 0;
