@@ -17,7 +17,8 @@ import {
   CheckCircle2,
   Circle,
   X,
-  RefreshCcw,
+  Undo2,
+  Redo2,
   ArrowRightLeft,
   ArrowUpRight,
   Trash2,
@@ -42,6 +43,7 @@ import {
   PanelTop,
   Plus,
   Minus,
+  RefreshCcw,
   Pin,
   PinOff,
   GripVertical
@@ -102,6 +104,7 @@ export default function App() {
   const [newTaskNotes, setNewTaskNotes] = useState('');
   const [newTaskUrls, setNewTaskUrls] = useState<string[]>(['']);
   const [newTaskDeadline, setNewTaskDeadline] = useState<string>('');
+  const [isTaskAllDay, setIsTaskAllDay] = useState(false);
   const [newTaskUrl, setNewTaskUrl] = useState(''); // Compatibility check if still used in layout
   const [isPickingDaily, setIsPickingDaily] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash'>('dashboard');
@@ -110,6 +113,47 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<string>('General');
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings'>('urgent');
+  
+  // Track swipe cooldown
+  const lastSwipeTime = React.useRef(0);
+
+  const handleSwipe = (direction: 'left' | 'right') => {
+    const now = Date.now();
+    if (now - lastSwipeTime.current < 400) return; // Cooldown 400ms
+    lastSwipeTime.current = now;
+
+    const modes: ('dashboard' | 'archive' | 'trash' | 'settings')[] = ['dashboard', 'archive', 'trash', 'settings'];
+    const currentIndex = modes.indexOf(viewMode);
+    
+    if (direction === 'right' && currentIndex > 0) setViewMode(modes[currentIndex - 1]);
+    if (direction === 'left' && currentIndex < modes.length - 1) setViewMode(modes[currentIndex + 1]);
+
+    // Also sync mobile view
+    if (window.innerWidth < 1024) {
+      const mobileViews: ('urgent' | 'focus' | 'archive' | 'trash' | 'settings')[] = ['urgent', 'focus', 'archive', 'trash', 'settings'];
+      const currentMobileIndex = mobileViews.indexOf(mobileView as any);
+      if (direction === 'right' && currentMobileIndex > 0) setMobileView(mobileViews[currentMobileIndex - 1] as any);
+      if (direction === 'left' && currentMobileIndex < mobileViews.length - 1) setMobileView(mobileViews[currentMobileIndex + 1] as any);
+    }
+  };
+
+  useEffect(() => {
+    let accumulatedX = 0;
+    const handleWheel = (e: WheelEvent) => {
+      // Sensitivity check: vertical scroll shouldn't trigger horizontal view change accidentally
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 5) {
+        accumulatedX += e.deltaX;
+        if (Math.abs(accumulatedX) > 100) {
+          handleSwipe(accumulatedX > 0 ? 'left' : 'right');
+          accumulatedX = 0;
+        }
+      } else {
+        accumulatedX = 0;
+      }
+    };
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [viewMode, mobileView]);
   
   // Undo/Redo state
   const [history, setHistory] = useState<{tasks: Task[], settings: any}[]>([]);
@@ -726,41 +770,38 @@ export default function App() {
 
   const pushToHistory = () => {
     if (isUndoing) return;
-    setHistory(prev => [{ tasks: [...tasks], settings: { ...settings } }, ...prev].slice(0, 50));
+    // Deep clone tasks and settings
+    const tasksSnapshot = JSON.parse(JSON.stringify(tasks));
+    const settingsSnapshot = JSON.parse(JSON.stringify(settings));
+    setHistory(prev => [{ tasks: tasksSnapshot, settings: settingsSnapshot }, ...prev].slice(0, 50));
     setRedoStack([]);
   };
 
   const undo = async () => {
-    if (history.length === 0 || !user) return;
+    if (history.length === 0 || !user || isUndoing) return;
     setIsUndoing(true);
+    
+    // Captured state from history
     const prevState = history[0];
     const newHistory = history.slice(1);
     
-    setRedoStack(prev => [{ tasks: [...tasks], settings: { ...settings } }, ...prev]);
+    // Save current state to redo stack
+    const currentTasksSnapshot = JSON.parse(JSON.stringify(tasks));
+    const currentSettingsSnapshot = JSON.parse(JSON.stringify(settings));
+    setRedoStack(prev => [{ tasks: currentTasksSnapshot, settings: currentSettingsSnapshot }, ...prev]);
     
     try {
       const batch = writeBatch(db);
       
-      // We need to sync tasks perfectly. 
-      // 1. Delete all current tasks (that might have been added)
-      // 2. Set all tasks from prevState
-      // This is expensive but necessary for a full state undo.
-      // Alternatively, we can just compare and sync differences.
-      // For simplicity in this demo, we'll sync by identifying changed tasks if possible,
-      // but a batch overwrite is safer for consistency.
-      
-      // To avoid massive deletes, we'll just update/create from prevState and delete those NOT in prevState
-      const currentTaskIds = tasks.map(t => t.id);
-      const prevTaskIds = prevState.tasks.map(t => t.id);
-      
-      // Delete tasks that exist now but not in prev
+      // Calculate tasks that need deletion (in current tasks but not in previous)
+      const prevIds = new Set(prevState.tasks.map(t => t.id));
       tasks.forEach(t => {
-        if (!prevTaskIds.includes(t.id)) {
+        if (!prevIds.has(t.id)) {
           batch.delete(doc(db, 'tasks', t.id));
         }
       });
       
-      // Add/Update tasks from prev
+      // Update/Restore all tasks from previous state
       prevState.tasks.forEach(t => {
         const { id, ...data } = t;
         batch.set(doc(db, 'tasks', id), data);
@@ -771,27 +812,33 @@ export default function App() {
       
       await batch.commit();
       setHistory(newHistory);
+      setMessage({ text: 'Undo successful', type: 'info' });
     } catch (err) {
       console.error("Undo failed", err);
+      setMessage({ text: 'Undo failed', type: 'error' });
     } finally {
-      setIsUndoing(false);
+      // Extended timeout to ensure listeners settle
+      setTimeout(() => setIsUndoing(false), 800);
     }
   };
 
   const redo = async () => {
-    if (redoStack.length === 0 || !user) return;
+    if (redoStack.length === 0 || !user || isUndoing) return;
     setIsUndoing(true);
+    
     const nextState = redoStack[0];
     const newRedoStack = redoStack.slice(1);
     
-    setHistory(prev => [{ tasks: [...tasks], settings: { ...settings } }, ...prev]);
+    const currentTasksSnapshot = JSON.parse(JSON.stringify(tasks));
+    const currentSettingsSnapshot = JSON.parse(JSON.stringify(settings));
+    setHistory(prev => [{ tasks: currentTasksSnapshot, settings: currentSettingsSnapshot }, ...prev]);
     
     try {
       const batch = writeBatch(db);
-      const nextTaskIds = nextState.tasks.map(t => t.id);
       
+      const nextIds = new Set(nextState.tasks.map(t => t.id));
       tasks.forEach(t => {
-        if (!nextTaskIds.includes(t.id)) {
+        if (!nextIds.has(t.id)) {
           batch.delete(doc(db, 'tasks', t.id));
         }
       });
@@ -805,10 +852,12 @@ export default function App() {
       
       await batch.commit();
       setRedoStack(newRedoStack);
+      setMessage({ text: 'Redo successful', type: 'info' });
     } catch (err) {
       console.error("Redo failed", err);
+      setMessage({ text: 'Redo failed', type: 'error' });
     } finally {
-      setIsUndoing(false);
+      setTimeout(() => setIsUndoing(false), 800);
     }
   };
 
@@ -829,32 +878,15 @@ export default function App() {
         // Universal Priority 1: Done state
         if (a.isDone !== b.isDone) return a.isDone ? 1 : -1;
 
-        // Universal Priority 2: Starred (starred first) - User wants star to be top priority in all folders
+        // Universal Priority 2: Starred (starred first)
         const starA = !!a.isStarred;
         const starB = !!b.isStarred;
         if (starA !== starB) return starA ? -1 : 1;
 
-        // Universal Priority 3: Pinned tasks
-        const pinA = !!a.isPinned;
-        const pinB = !!b.isPinned;
-        if (pinA !== pinB) return pinA ? -1 : 1;
-
-        // Universal Priority 4: Deadline Status (Expired/Approaching)
-        const now = Date.now();
-        const threshold = (settings.deadlineThreshold || 3) * 24 * 60 * 60 * 1000;
-        
-        const isExpiredA = a.deadline && (a.deadline < now);
-        const isExpiredB = b.deadline && (b.deadline < now);
-        if (isExpiredA !== isExpiredB) return isExpiredA ? -1 : 1;
-
-        const isApproachingA = a.deadline && (a.deadline - now <= threshold);
-        const isApproachingB = b.deadline && (b.deadline - now <= threshold);
-        if (isApproachingA !== isApproachingB) return isApproachingA ? -1 : 1;
-
-        // Universal Priority 5: Recency (updatedAt descending)
+        // Universal Priority 3: Recency (updatedAt descending)
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
-  }, [tasks, searchTerm, selectedProject, activeSection, settings.sections, settings.deadlineThreshold]);
+  }, [tasks, searchTerm, selectedProject, activeSection, settings.sections]);
 
   const groupedFocusTasks = useMemo(() => {
     const focusTasks = filteredTasks.filter(t => t.category === 'Focus');
@@ -985,11 +1017,17 @@ export default function App() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isDone: false,
-      isStarred: false
+      isStarred: false,
+      isAllDay: isTaskAllDay
     };
 
     if (newTaskDeadline) {
-      const deadlineTimestamp = new Date(newTaskDeadline).getTime();
+      let deadlineTimestamp = new Date(newTaskDeadline).getTime();
+      if (isTaskAllDay) {
+        const d = new Date(newTaskDeadline);
+        d.setHours(23, 59, 59, 999);
+        deadlineTimestamp = d.getTime();
+      }
       if (!isNaN(deadlineTimestamp)) {
         newTask.deadline = deadlineTimestamp;
       }
@@ -2016,7 +2054,7 @@ export default function App() {
                     )}
                     title="Undo"
                   >
-                    <RefreshCcw size={14} className={cn("rotate-[270deg]", isUndoing && "animate-spin")} />
+                    <Undo2 size={14} className={cn(isUndoing && "animate-spin")} />
                   </button>
                   <button 
                     onClick={redo}
@@ -2027,14 +2065,14 @@ export default function App() {
                     )}
                     title="Redo"
                   >
-                    <RefreshCcw size={14} className="scale-x-[-1] rotate-[270deg]" />
+                    <Redo2 size={14} />
                   </button>
                 </div>
 
                 {/* Display Mode Toggle */}
                 <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
                   <button 
-                    onClick={() => saveSettings({ displayMode: 'large' })}
+                    onClick={() => saveSettings({ displayMode: 'large', displayModeFocus: 'large', displayModeTodo: 'large' })}
                     className={cn(
                       "p-1.5 rounded-lg transition-all",
                       settings.displayMode === 'large' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
@@ -2044,7 +2082,7 @@ export default function App() {
                     <Grid2X2 size={14} />
                   </button>
                   <button 
-                    onClick={() => saveSettings({ displayMode: 'standard' })}
+                    onClick={() => saveSettings({ displayMode: 'standard', displayModeFocus: 'standard', displayModeTodo: 'standard' })}
                     className={cn(
                       "p-1.5 rounded-lg transition-all",
                       settings.displayMode === 'standard' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
@@ -2054,7 +2092,7 @@ export default function App() {
                     <LayoutGrid size={14} />
                   </button>
                   <button 
-                    onClick={() => saveSettings({ displayMode: 'compact' })}
+                    onClick={() => saveSettings({ displayMode: 'compact', displayModeFocus: 'compact', displayModeTodo: 'compact' })}
                     className={cn(
                       "p-1.5 rounded-lg transition-all",
                       settings.displayMode === 'compact' ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:text-slate-600"
@@ -2498,12 +2536,25 @@ export default function App() {
                       </button>
                     )}
                   </div>
-                  <input 
-                    type="datetime-local"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[11px] focus:ring-2 focus:ring-indigo-500 outline-none text-slate-400 font-medium [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                    value={newTaskDeadline}
-                    onChange={(e) => setNewTaskDeadline(e.target.value)}
-                  />
+              <div className="flex items-center gap-2">
+                <input 
+                  type={isTaskAllDay ? "date" : "datetime-local"}
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[11px] focus:ring-2 focus:ring-indigo-500 outline-none text-slate-400 font-medium [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                  value={newTaskDeadline}
+                  onChange={(e) => setNewTaskDeadline(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsTaskAllDay(!isTaskAllDay)}
+                  className={cn(
+                    "px-2.5 py-2 rounded-lg border flex items-center justify-center transition-all shrink-0",
+                    isTaskAllDay ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-400"
+                  )}
+                  title={isTaskAllDay ? "Switch to Time" : "Switch to All Day"}
+                >
+                  {isTaskAllDay ? <Clock size={14} /> : <span className="text-[10px] font-black">ALL DAY</span>}
+                </button>
+              </div>
                 </div>
                 <button 
                   type="submit"
@@ -2625,8 +2676,17 @@ export default function App() {
         </aside>
 
         {/* Task Columns */}
-        <div className="col-span-12 lg:col-span-9 h-full min-h-0 overflow-hidden">
-          {viewMode === 'dashboard' ? (
+        <div className="col-span-12 lg:col-span-9 h-full min-h-0 overflow-hidden relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={viewMode}
+              initial={{ x: 10, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -10, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="h-full"
+            >
+              {viewMode === 'dashboard' ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full lg:pb-0">
               {/* Urgent Column */}
               <section className={cn(
@@ -3767,9 +3827,11 @@ export default function App() {
                   <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest italic">System state synced successfully</p>
                 </div>
               </section>
-          )}
-        </div>
-      </main>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </main>
 
       {/* Footer Info Bar */}
       <footer className="bg-white border-t border-slate-200 px-6 py-2 flex items-center justify-between shrink-0">
@@ -3845,10 +3907,13 @@ const TaskCard: React.FC<TaskCardProps> = ({
     if (!showMenu && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceLeft = rect.left;
+      const spaceRight = window.innerWidth - rect.right;
       setOpenUpwards(spaceBelow < 250); 
-      // If there's less than 200px on the left, we should probably align to the left of the button to grow right
-      setOpenToRight(spaceLeft < 200);
+      // If there's less than 200px on the right, it must open left (right-0)
+      // If there's less than 200px on the left, it must open right (left-0)
+      if (spaceRight < 200) setOpenToRight(false);
+      else if (rect.left < 200) setOpenToRight(true);
+      else setOpenToRight(false);
     }
     setShowMenu(!showMenu);
   };
@@ -3893,7 +3958,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   : "bg-slate-100 text-slate-500"
               )}>
                 <Clock size={10} />
-                {format(task.deadline, 'MM/dd')}
+                {task.isAllDay ? format(task.deadline, 'MM/dd') : format(task.deadline, 'MM/dd HH:mm')}
               </span>
             )}
             <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded leading-none shrink-0 truncate max-w-[80px]">
@@ -4003,7 +4068,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 (task.deadline - Date.now()) <= (deadlineThreshold * 86400000) ? "text-amber-600" : "text-slate-400"
               )}>
                 <Clock size={displayMode === 'large' ? 12 : 10} />
-                <span>{format(task.deadline, 'MM/dd HH:mm')}</span>
+                <span>{task.isAllDay ? format(task.deadline, 'MM/dd') : format(task.deadline, 'MM/dd HH:mm')}</span>
               </div>
               <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 truncate opacity-70">
                 <span>({format(task.deadline, 'yyyyMMdd')})</span>
@@ -4253,7 +4318,8 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
   const [isStarred, setIsStarred] = useState(task.isStarred || false);
   const [isPinned, setIsPinned] = useState(task.isPinned || false);
-  const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, "yyyy-MM-dd'T'HH:mm") : '');
+  const [isAllDay, setIsAllDay] = useState(task.isAllDay || false);
+  const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, task.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm") : '');
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
 
   const isDirty = title !== task.title || 
@@ -4261,17 +4327,25 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                   JSON.stringify(urls.filter(u => u.trim() !== '')) !== JSON.stringify(task.urls || []) ||
                   isStarred !== (task.isStarred || false) ||
                   isPinned !== (task.isPinned || false) ||
+                  isAllDay !== (task.isAllDay || false) ||
                   (deadline ? new Date(deadline).getTime() : '') !== (task.deadline || '');
 
   const handleSubmit = (e?: React.FormEvent, shouldClose = false) => {
     if (e) e.preventDefault();
+    let finalDeadline = deadline ? new Date(deadline).getTime() : null;
+    if (finalDeadline && isAllDay) {
+        const d = new Date(deadline);
+        d.setHours(23, 59, 59, 999);
+        finalDeadline = d.getTime();
+    }
     onSave({ 
       title, 
       notes, 
       urls: urls.filter(u => u.trim() !== ''),
       isStarred,
       isPinned,
-      deadline: deadline ? new Date(deadline).getTime() : null as any // Using null to clear
+      isAllDay,
+      deadline: finalDeadline as any // Using null to clear
     });
     if (shouldClose) onClose();
   };
@@ -4409,18 +4483,39 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                   <Calendar size={12} />
                   {t('Deadline')}
                 </label>
-                {deadline && (
-                  <button 
+                <div className="flex items-center gap-3">
+                  <button
                     type="button"
-                    onClick={() => setDeadline('')}
-                    className="text-[10px] font-bold text-red-500 hover:underline"
+                    onClick={() => {
+                        const newAllDay = !isAllDay;
+                        setIsAllDay(newAllDay);
+                        if (deadline) {
+                            // Re-format existing deadline date
+                            const d = new Date(deadline);
+                            setDeadline(format(d, newAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm"));
+                        }
+                    }}
+                    className={cn(
+                        "p-1.5 rounded-lg border flex items-center justify-center transition-all",
+                        isAllDay ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-400"
+                    )}
+                    title={isAllDay ? "Switch to Time" : "Switch to All Day"}
                   >
-                    Clear
+                    {isAllDay ? <Clock size={12} /> : <span className="text-[9px] font-black leading-none">ALL DAY</span>}
                   </button>
-                )}
+                  {deadline && (
+                    <button 
+                      type="button"
+                      onClick={() => setDeadline('')}
+                      className="text-[10px] font-bold text-red-500 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
               <input 
-                type="datetime-local"
+                type={isAllDay ? "date" : "datetime-local"}
                 className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-[11px] font-medium outline-none transition-all text-slate-400 [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:invert-[0.2] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}

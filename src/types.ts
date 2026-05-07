@@ -15,6 +15,7 @@ export interface Task {
   isPinned?: boolean;
   section?: string;
   deadline?: number; // timestamp
+  isAllDay?: boolean;
 }
 
 export interface TaskHistory {
