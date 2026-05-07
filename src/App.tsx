@@ -152,11 +152,11 @@ export default function App() {
     const handleWheel = (e: WheelEvent) => {
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 5) {
         accumulatedX.current += e.deltaX;
-        if (Math.abs(accumulatedX.current) > 150) {
+        if (Math.abs(accumulatedX.current) > 70) {
           handleSwipe(accumulatedX.current > 0 ? 'left' : 'right');
           accumulatedX.current = 0;
           // Clear accumulation for a bit longer to prevent jumping
-          lastSwipeTime.current = Date.now() + 200; 
+          lastSwipeTime.current = Date.now() + 300; 
         }
       } else {
         accumulatedX.current = 0;
@@ -173,8 +173,8 @@ export default function App() {
       const diffX = touchEndX - touchStart.current.x;
       const diffY = Math.abs(touchEndY - touchStart.current.y);
       
-      // Threshold 70px for mobile swipe
-      if (Math.abs(diffX) > 70 && Math.abs(diffX) > diffY * 1.5) {
+      // Threshold 40px for mobile swipe
+      if (Math.abs(diffX) > 40 && Math.abs(diffX) > diffY * 1.5) {
         handleSwipe(diffX > 0 ? 'right' : 'left');
       }
     };
