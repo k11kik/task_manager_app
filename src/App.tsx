@@ -117,11 +117,13 @@ export default function App() {
   // Track swipe cooldown
   const lastSwipeTime = React.useRef(0);
   const touchStart = React.useRef({ x: 0, y: 0 });
+  const accumulatedX = React.useRef(0);
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const now = Date.now();
-    if (now - lastSwipeTime.current < 400) return; // Cooldown 400ms
+    if (now - lastSwipeTime.current < 600) return; // Cooldown 600ms
     lastSwipeTime.current = now;
+    accumulatedX.current = 0; // Reset acceleration for wheel events
 
     const modes: ('dashboard' | 'archive' | 'trash' | 'settings')[] = ['dashboard', 'archive', 'trash', 'settings'];
     const currentIndex = modes.indexOf(viewMode);
@@ -147,16 +149,17 @@ export default function App() {
   };
 
   useEffect(() => {
-    let accumulatedX = 0;
     const handleWheel = (e: WheelEvent) => {
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 5) {
-        accumulatedX += e.deltaX;
-        if (Math.abs(accumulatedX) > 100) {
-          handleSwipe(accumulatedX > 0 ? 'left' : 'right');
-          accumulatedX = 0;
+        accumulatedX.current += e.deltaX;
+        if (Math.abs(accumulatedX.current) > 150) {
+          handleSwipe(accumulatedX.current > 0 ? 'left' : 'right');
+          accumulatedX.current = 0;
+          // Clear accumulation for a bit longer to prevent jumping
+          lastSwipeTime.current = Date.now() + 200; 
         }
       } else {
-        accumulatedX = 0;
+        accumulatedX.current = 0;
       }
     };
 
@@ -2082,9 +2085,9 @@ export default function App() {
                 </button>
               </nav>
 
-              <div className="hidden md:flex items-center gap-2 mr-2">
-                {/* Undo/Redo */}
-                <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5 mr-1">
+              <div className="flex items-center gap-2 mr-0 md:mr-2">
+                {/* Undo/Redo - Visible on Mobile */}
+                <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5 mr-1 max-sm:scale-90">
                   <button 
                     onClick={undo}
                     disabled={history.length === 0 || isUndoing}
@@ -2109,8 +2112,10 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Display Mode Toggle */}
-                <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5">
+                {/* Other Desktop-only tools */}
+                <div className="hidden md:flex items-center gap-1">
+                  {/* Display Mode Toggle */}
+                  <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-0.5 whitespace-nowrap">
                   <button 
                     onClick={() => saveSettings({ displayMode: 'large', displayModeFocus: 'large', displayModeTodo: 'large' })}
                     className={cn(
@@ -2279,8 +2284,9 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* Mobile Tools (Simplified) */}
+            {/* Mobile Tools (Simplified) */}
               <div className="md:hidden flex items-center gap-2">
                 {/* Project Filter (Mobile) */}
                 <div className="relative">
