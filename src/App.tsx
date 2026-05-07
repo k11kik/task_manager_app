@@ -150,13 +150,18 @@ export default function App() {
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 5) {
+      // Sensitivity for PC horizontal scroll
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 2) {
+        // Try to prevent browser back/forward navigation gestures
+        if (e.cancelable) e.preventDefault();
+        
         accumulatedX.current += e.deltaX;
-        if (Math.abs(accumulatedX.current) > 70) {
+        // Significant sensitivity increase: 30px
+        if (Math.abs(accumulatedX.current) > 30) {
           handleSwipe(accumulatedX.current > 0 ? 'left' : 'right');
           accumulatedX.current = 0;
-          // Clear accumulation for a bit longer to prevent jumping
-          lastSwipeTime.current = Date.now() + 300; 
+          // Longer cooldown to prevent multiple jumps
+          lastSwipeTime.current = Date.now() + 500; 
         }
       } else {
         accumulatedX.current = 0;
@@ -173,13 +178,14 @@ export default function App() {
       const diffX = touchEndX - touchStart.current.x;
       const diffY = Math.abs(touchEndY - touchStart.current.y);
       
-      // Threshold 40px for mobile swipe
-      if (Math.abs(diffX) > 40 && Math.abs(diffX) > diffY * 1.5) {
+      // Threshold 30px for mobile swipe
+      if (Math.abs(diffX) > 30 && Math.abs(diffX) > diffY * 1.5) {
         handleSwipe(diffX > 0 ? 'right' : 'left');
       }
     };
 
-    window.addEventListener('wheel', handleWheel, { passive: true });
+    // Use passive: false to allow e.preventDefault() for horizontal wheel scroll
+    window.addEventListener('wheel', handleWheel, { passive: false });
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
     return () => {
@@ -853,7 +859,6 @@ export default function App() {
       
       await batch.commit();
       setHistory(newHistory);
-      setMessage({ text: 'Undo successful', type: 'info' });
     } catch (err) {
       console.error("Undo failed details:", err);
       setMessage({ text: `Undo failed: ${err instanceof Error ? err.message : 'Unknown error'}`, type: 'error' });
@@ -895,7 +900,6 @@ export default function App() {
       
       await batch.commit();
       setRedoStack(newRedoStack);
-      setMessage({ text: 'Redo successful', type: 'info' });
     } catch (err) {
       console.error("Redo failed details:", err);
       setMessage({ text: 'Redo failed', type: 'error' });
