@@ -119,62 +119,86 @@ export default function App() {
   const touchStart = React.useRef({ x: 0, y: 0 });
   const accumulatedX = React.useRef(0);
   const swipeLocked = React.useRef(false);
+  const lockTimer = React.useRef<NodeJS.Timeout | null>(null);
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const now = Date.now();
-    if (now - lastSwipeTime.current < 450) return; // Cooldown 450ms
+    // クールダウン時間を少し短めに設定 (PCの操作感を考慮)
+    if (now - lastSwipeTime.current < 350) return;
     lastSwipeTime.current = now;
-    accumulatedX.current = 0; // Reset acceleration for wheel events
+    accumulatedX.current = 0;
 
     const modes: ('dashboard' | 'archive' | 'trash' | 'settings')[] = ['dashboard', 'archive', 'trash', 'settings'];
     const currentIndex = modes.indexOf(viewMode);
     
-    // Also handle mobile view specifically
     const mobileViews: ('summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings')[] = ['summary', 'urgent', 'focus', 'archive', 'trash', 'settings'];
     const currentMobileIndex = mobileViews.indexOf(mobileView as any);
 
-    if (window.innerWidth >= 1024) { // Large screens
+    if (window.innerWidth >= 1024) {
       if (direction === 'right' && currentIndex > 0) setViewMode(modes[currentIndex - 1]);
       if (direction === 'left' && currentIndex < modes.length - 1) setViewMode(modes[currentIndex + 1]);
-    } else { // Mobile screens
+    } else {
       if (direction === 'right' && currentMobileIndex > 0) setMobileView(mobileViews[currentMobileIndex - 1] as any);
       if (direction === 'left' && currentMobileIndex < mobileViews.length - 1) setMobileView(mobileViews[currentMobileIndex + 1] as any);
       
-      // Auto-sync viewMode when mobileView changes
-      const mv = mobileViews[direction === 'right' ? currentMobileIndex - 1 : currentMobileIndex + 1];
-      if (mv === 'archive') setViewMode('archive');
-      else if (mv === 'trash') setViewMode('trash');
-      else if (mv === 'settings') setViewMode('settings');
-      else setViewMode('dashboard');
+      const nextIndex = direction === 'right' ? currentMobileIndex - 1 : currentMobileIndex + 1;
+      if (nextIndex >= 0 && nextIndex < mobileViews.length) {
+        const mv = mobileViews[nextIndex];
+        if (mv === 'archive') setViewMode('archive');
+        else if (mv === 'trash') setViewMode('trash');
+        else if (mv === 'settings') setViewMode('settings');
+        else setViewMode('dashboard');
+      }
     }
   };
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      // Sensitivity for PC horizontal scroll
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 2) {
-        // Try to prevent browser back/forward navigation gestures
-        if (e.cancelable) e.preventDefault();
-        
-        // If we've already swiped in this continuous physical scroll, wait for it to slow down
+      // 垂直スクロールが支配的な場合は無視
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        accumulatedX.current = 0;
+        return;
+      }
+
+      // 横スクロール検知
+      if (Math.abs(e.deltaX) > 2) {
+        // ブラウザの「戻る/進む」ジェスチャーを防止（可能な場合）
+        if (Math.abs(e.deltaX) > 10 && e.cancelable) {
+          e.preventDefault();
+        }
+
+        // ロック中の処理
         if (swipeLocked.current) {
-          // Reset lock if the user reverses direction significantly or slows down a LOT
-          // But usually, we just wait for the else block or the velocity to drop
-          if (Math.abs(e.deltaX) < 1) swipeLocked.current = false;
-          return;
+          // 逆方向に強く回された場合はロックを解除して即座に反応できるようにする
+          if ((accumulatedX.current > 0 && e.deltaX < -10) || (accumulatedX.current < 0 && e.deltaX > 10)) {
+            swipeLocked.current = false;
+            accumulatedX.current = 0;
+          } else {
+            return;
+          }
         }
 
         accumulatedX.current += e.deltaX;
-        // High sensitivity for PC: 20px
-        if (Math.abs(accumulatedX.current) > 20) {
+
+        // PCでの閾値を調整 (15-20程度でより軽く)
+        const threshold = 18;
+        if (Math.abs(accumulatedX.current) > threshold) {
           handleSwipe(accumulatedX.current > 0 ? 'left' : 'right');
-          accumulatedX.current = 0;
-          swipeLocked.current = true; // Lock until the scroll gesture "ends" or slows down
+          
+          // ロック開始
+          swipeLocked.current = true;
+          
+          // タイマーによる強制ロック解除 (慣性が止まらない場合への備え)
+          if (lockTimer.current) clearTimeout(lockTimer.current);
+          lockTimer.current = setTimeout(() => {
+            swipeLocked.current = false;
+            accumulatedX.current = 0;
+          }, 350); // 0.35秒後に自動解放
         }
       } else {
-        accumulatedX.current = 0;
-        // Release lock when not scrolling horizontally or when velocity is zero
-        if (Math.abs(e.deltaX) < 1) {
+        // 微小な動きになったら蓄積をリセットし、ロックを解除
+        if (Math.abs(e.deltaX) < 1.5) {
+          accumulatedX.current = 0;
           swipeLocked.current = false;
         }
       }
@@ -190,20 +214,20 @@ export default function App() {
       const diffX = touchEndX - touchStart.current.x;
       const diffY = Math.abs(touchEndY - touchStart.current.y);
       
-      // Threshold 30px for mobile swipe
-      if (Math.abs(diffX) > 30 && Math.abs(diffX) > diffY * 1.5) {
+      if (Math.abs(diffX) > 40 && Math.abs(diffX) > diffY * 1.5) {
         handleSwipe(diffX > 0 ? 'right' : 'left');
       }
     };
 
-    // Use passive: false to allow e.preventDefault() for horizontal wheel scroll
     window.addEventListener('wheel', handleWheel, { passive: false });
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    
     return () => {
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchend', handleTouchEnd);
+      if (lockTimer.current) clearTimeout(lockTimer.current);
     };
   }, [viewMode, mobileView]);
   
