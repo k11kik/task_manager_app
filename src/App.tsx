@@ -116,6 +116,7 @@ export default function App() {
   
   // Track swipe cooldown
   const lastSwipeTime = React.useRef(0);
+  const touchStartX = React.useRef(0);
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const now = Date.now();
@@ -125,22 +126,29 @@ export default function App() {
     const modes: ('dashboard' | 'archive' | 'trash' | 'settings')[] = ['dashboard', 'archive', 'trash', 'settings'];
     const currentIndex = modes.indexOf(viewMode);
     
-    if (direction === 'right' && currentIndex > 0) setViewMode(modes[currentIndex - 1]);
-    if (direction === 'left' && currentIndex < modes.length - 1) setViewMode(modes[currentIndex + 1]);
+    // Also handle mobile view specifically
+    const mobileViews: ('summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings')[] = ['summary', 'urgent', 'focus', 'archive', 'trash', 'settings'];
+    const currentMobileIndex = mobileViews.indexOf(mobileView as any);
 
-    // Also sync mobile view
-    if (window.innerWidth < 1024) {
-      const mobileViews: ('urgent' | 'focus' | 'archive' | 'trash' | 'settings')[] = ['urgent', 'focus', 'archive', 'trash', 'settings'];
-      const currentMobileIndex = mobileViews.indexOf(mobileView as any);
+    if (window.innerWidth >= 1024) { // Large screens
+      if (direction === 'right' && currentIndex > 0) setViewMode(modes[currentIndex - 1]);
+      if (direction === 'left' && currentIndex < modes.length - 1) setViewMode(modes[currentIndex + 1]);
+    } else { // Mobile screens
       if (direction === 'right' && currentMobileIndex > 0) setMobileView(mobileViews[currentMobileIndex - 1] as any);
       if (direction === 'left' && currentMobileIndex < mobileViews.length - 1) setMobileView(mobileViews[currentMobileIndex + 1] as any);
+      
+      // Auto-sync viewMode when mobileView changes
+      const mv = mobileViews[direction === 'right' ? currentMobileIndex - 1 : currentMobileIndex + 1];
+      if (mv === 'archive') setViewMode('archive');
+      else if (mv === 'trash') setViewMode('trash');
+      else if (mv === 'settings') setViewMode('settings');
+      else setViewMode('dashboard');
     }
   };
 
   useEffect(() => {
     let accumulatedX = 0;
     const handleWheel = (e: WheelEvent) => {
-      // Sensitivity check: vertical scroll shouldn't trigger horizontal view change accidentally
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 5) {
         accumulatedX += e.deltaX;
         if (Math.abs(accumulatedX) > 100) {
@@ -151,8 +159,27 @@ export default function App() {
         accumulatedX = 0;
       }
     };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.touches[0].clientX;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchEndX = e.changedTouches[0].clientX;
+      const diffX = touchEndX - touchStartX.current;
+      if (Math.abs(diffX) > 100) {
+        handleSwipe(diffX > 0 ? 'right' : 'left');
+      }
+    };
+
     window.addEventListener('wheel', handleWheel, { passive: true });
-    return () => window.removeEventListener('wheel', handleWheel);
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
   }, [viewMode, mobileView]);
   
   // Undo/Redo state
@@ -770,30 +797,34 @@ export default function App() {
 
   const pushToHistory = () => {
     if (isUndoing) return;
-    // Deep clone tasks and settings
-    const tasksSnapshot = JSON.parse(JSON.stringify(tasks));
-    const settingsSnapshot = JSON.parse(JSON.stringify(settings));
-    setHistory(prev => [{ tasks: tasksSnapshot, settings: settingsSnapshot }, ...prev].slice(0, 50));
-    setRedoStack([]);
+    // Deep clone tasks and settings, but wrap in try-catch to ensure consistency
+    try {
+      const tasksSnapshot = JSON.parse(JSON.stringify(tasks));
+      const settingsSnapshot = JSON.parse(JSON.stringify(settings));
+      setHistory(prev => [{ tasks: tasksSnapshot, settings: settingsSnapshot }, ...prev].slice(0, 50));
+      setRedoStack([]);
+    } catch (e) {
+      console.warn("History push failed", e);
+    }
   };
 
   const undo = async () => {
     if (history.length === 0 || !user || isUndoing) return;
     setIsUndoing(true);
     
-    // Captured state from history
-    const prevState = history[0];
-    const newHistory = history.slice(1);
-    
-    // Save current state to redo stack
-    const currentTasksSnapshot = JSON.parse(JSON.stringify(tasks));
-    const currentSettingsSnapshot = JSON.parse(JSON.stringify(settings));
-    setRedoStack(prev => [{ tasks: currentTasksSnapshot, settings: currentSettingsSnapshot }, ...prev]);
-    
     try {
+      // Captured state from history
+      const prevState = history[0];
+      const newHistory = history.slice(1);
+      
+      // Save current state to redo stack
+      const currentTasksSnapshot = JSON.parse(JSON.stringify(tasks));
+      const currentSettingsSnapshot = JSON.parse(JSON.stringify(settings));
+      setRedoStack(prev => [{ tasks: currentTasksSnapshot, settings: currentSettingsSnapshot }, ...prev]);
+      
       const batch = writeBatch(db);
       
-      // Calculate tasks that need deletion (in current tasks but not in previous)
+      // Delete tasks that exist now but not in previous state
       const prevIds = new Set(prevState.tasks.map(t => t.id));
       tasks.forEach(t => {
         if (!prevIds.has(t.id)) {
@@ -801,24 +832,23 @@ export default function App() {
         }
       });
       
-      // Update/Restore all tasks from previous state
+      // Restore previous state tasks
       prevState.tasks.forEach(t => {
         const { id, ...data } = t;
         batch.set(doc(db, 'tasks', id), data);
       });
       
-      // Sync settings
+      // Restore settings
       batch.set(doc(db, 'settings', user.uid), prevState.settings);
       
       await batch.commit();
       setHistory(newHistory);
       setMessage({ text: 'Undo successful', type: 'info' });
     } catch (err) {
-      console.error("Undo failed", err);
-      setMessage({ text: 'Undo failed', type: 'error' });
+      console.error("Undo failed details:", err);
+      setMessage({ text: `Undo failed: ${err instanceof Error ? err.message : 'Unknown error'}`, type: 'error' });
     } finally {
-      // Extended timeout to ensure listeners settle
-      setTimeout(() => setIsUndoing(false), 800);
+      setTimeout(() => setIsUndoing(false), 500);
     }
   };
 
@@ -826,14 +856,14 @@ export default function App() {
     if (redoStack.length === 0 || !user || isUndoing) return;
     setIsUndoing(true);
     
-    const nextState = redoStack[0];
-    const newRedoStack = redoStack.slice(1);
-    
-    const currentTasksSnapshot = JSON.parse(JSON.stringify(tasks));
-    const currentSettingsSnapshot = JSON.parse(JSON.stringify(settings));
-    setHistory(prev => [{ tasks: currentTasksSnapshot, settings: currentSettingsSnapshot }, ...prev]);
-    
     try {
+      const nextState = redoStack[0];
+      const newRedoStack = redoStack.slice(1);
+      
+      const currentTasksSnapshot = JSON.parse(JSON.stringify(tasks));
+      const currentSettingsSnapshot = JSON.parse(JSON.stringify(settings));
+      setHistory(prev => [{ tasks: currentTasksSnapshot, settings: currentSettingsSnapshot }, ...prev]);
+      
       const batch = writeBatch(db);
       
       const nextIds = new Set(nextState.tasks.map(t => t.id));
@@ -854,10 +884,10 @@ export default function App() {
       setRedoStack(newRedoStack);
       setMessage({ text: 'Redo successful', type: 'info' });
     } catch (err) {
-      console.error("Redo failed", err);
+      console.error("Redo failed details:", err);
       setMessage({ text: 'Redo failed', type: 'error' });
     } finally {
-      setTimeout(() => setIsUndoing(false), 800);
+      setTimeout(() => setIsUndoing(false), 500);
     }
   };
 
@@ -3910,9 +3940,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
       const spaceRight = window.innerWidth - rect.right;
       setOpenUpwards(spaceBelow < 250); 
       // If there's less than 200px on the right, it must open left (right-0)
-      // If there's less than 200px on the left, it must open right (left-0)
-      if (spaceRight < 200) setOpenToRight(false);
-      else if (rect.left < 200) setOpenToRight(true);
+      // EXCEPT if it's the leftmost column, where we want it to open right (left-0)
+      if (rect.left < 200) setOpenToRight(true);
+      else if (spaceRight < 200) setOpenToRight(false);
       else setOpenToRight(false);
     }
     setShowMenu(!showMenu);

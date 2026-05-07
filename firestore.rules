@@ -32,7 +32,9 @@ service cloud.firestore {
           && (!('deadline' in data) || (data.deadline is number || data.deadline == null))
           && (!('section' in data) || (data.section is string))
           && (!('urls' in data) || (data.urls is list))
-          && (!('isStarred' in data) || (data.isStarred is bool));
+          && (!('isStarred' in data) || (data.isStarred is bool))
+          && (!('isPinned' in data) || (data.isPinned is bool))
+          && (!('isAllDay' in data) || (data.isAllDay is bool));
       }
 
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
