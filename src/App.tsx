@@ -1985,7 +1985,7 @@ export default function App() {
               </div>
               <div className="flex flex-col items-start leading-none">
                 <h1 className="text-sm font-black tracking-tighter text-slate-800 uppercase">
-                  NavFOR <span className="text-indigo-600">v2.3</span>
+                  NavFOR <span className="text-indigo-600">v2.4</span>
                 </h1>
                 <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-0.5">
                   <span className="truncate max-w-[80px]">{activeSection}</span> <ChevronDown size={10} className={cn("transition-transform", showSectionMenu && "rotate-180")} />
@@ -2747,8 +2747,8 @@ export default function App() {
                     <div className="bg-red-200 transition-all duration-500" style={{ width: `${(counts.trash / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
                   </div>
                   <div className="flex gap-2 text-[8px] font-black uppercase tracking-tighter opacity-60 group-hover:opacity-100 transition-opacity">
-                    {counts.urgent > 0 && <span className="text-red-600">U:{counts.urgent}</span>}
-                    {counts.focus > 0 && <span className="text-indigo-600">F:{counts.focus}</span>}
+                    {counts.urgent > 0 && <span className="text-red-600">F:{counts.urgent}</span>}
+                    {counts.focus > 0 && <span className="text-indigo-600">D:{counts.focus}</span>}
                     {counts.archive > 0 && <span className="text-slate-400">A:{counts.archive}</span>}
                     {counts.trash > 0 && <span className="text-red-300">T:{counts.trash}</span>}
                   </div>
@@ -4302,6 +4302,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
                       <Zap size={12} className="text-red-400" /> Move to Urgent
+                    </button>
+                  )}
+                  {variant === 'Urgent' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-indigo-600 border-b border-slate-50 flex items-center gap-2">
+                      <Target size={12} className="text-indigo-400" /> Move to Focus
                     </button>
                   )}
                   {variant !== 'Archive' && variant !== 'Trash' && (
