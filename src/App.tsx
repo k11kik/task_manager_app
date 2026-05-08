@@ -94,6 +94,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
+  const APP_VERSION = "2.4.1";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -1985,7 +1986,7 @@ export default function App() {
               </div>
               <div className="flex flex-col items-start leading-none">
                 <h1 className="text-sm font-black tracking-tighter text-slate-800 uppercase">
-                  NavFOR <span className="text-indigo-600">v2.4</span>
+                  NavFOR <span className="text-indigo-600">v{APP_VERSION}</span>
                 </h1>
                 <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-0.5">
                   <span className="truncate max-w-[80px]">{activeSection}</span> <ChevronDown size={10} className={cn("transition-transform", showSectionMenu && "rotate-180")} />
@@ -3933,7 +3934,7 @@ export default function App() {
           </div>
         </div>
         <div className="text-[10px] font-mono text-slate-400 font-extrabold ml-4 uppercase">
-          Navigation Focus Objectives & Results V2.4
+          {`Navigation Focus Objectives & Results V${APP_VERSION}`}
         </div>
       </footer>
 
