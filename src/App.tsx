@@ -3998,10 +3998,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
       
       setOpenUpwards(spaceBelow < 250); 
       
-      // Better logic for horizontal opening
-      // If we are in the left half of the screen, try to open Right
-      // If we are in the right half, try to open Left
-      // BUT if we're specifically leftmost in a dashboard column, open Right
       if (rect.left < 300) {
         setOpenToRight(true);
       } else if (spaceRight < 200) {
@@ -4012,6 +4008,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
     }
     setShowMenu(!showMenu);
   };
+
+  React.useEffect(() => {
+    if (!showMenu) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    window.addEventListener('mousedown', handleGlobalClick);
+    return () => window.removeEventListener('mousedown', handleGlobalClick);
+  }, [showMenu]);
 
   if (displayMode === 'compact') {
     return (
@@ -4109,15 +4116,13 @@ const TaskCard: React.FC<TaskCardProps> = ({
               <MoreVertical size={14} />
             </button>
             {showMenu && (
-              <>
-                <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
-                <div 
-                  className={cn(
-                    "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
-                    openToRight ? "left-0" : "right-0 translate-x-0",
-                    openUpwards ? "bottom-full mb-1" : "top-full mt-1"
-                  )}
-                >
+              <div 
+                className={cn(
+                  "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                  openToRight ? "left-0" : "right-0 translate-x-0",
+                  openUpwards ? "bottom-full mb-1" : "top-full mt-1"
+                )}
+              >
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
                       <Zap size={12} className="text-red-400" /> {t('MoveToUrgent')}
@@ -4143,7 +4148,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </button>
                   )}
                 </div>
-              </>
             )}
           </div>
         </div>
@@ -4295,15 +4299,13 @@ const TaskCard: React.FC<TaskCardProps> = ({
               <MoreVertical size={14} className="md:w-2.5 md:h-2.5" />
             </button>
             {showMenu && (
-              <>
-                <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
-                <div 
-                  className={cn(
-                    "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
-                    openToRight ? "left-0" : "right-0 translate-x-0",
-                    openUpwards ? "bottom-full mb-1" : "top-full mt-1"
-                  )}
-                >
+              <div 
+                className={cn(
+                  "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                  openToRight ? "left-0" : "right-0 translate-x-0",
+                  openUpwards ? "bottom-full mb-1" : "top-full mt-1"
+                )}
+              >
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
                       <Zap size={12} className="text-red-400" /> {t('MoveToUrgent')}
@@ -4329,7 +4331,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </button>
                   )}
                 </div>
-              </>
             )}
           </div>
         </div>
