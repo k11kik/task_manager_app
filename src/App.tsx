@@ -4091,9 +4091,21 @@ const TaskCard: React.FC<TaskCardProps> = ({
           >
             <Star size={14} className={task.isStarred ? "fill-amber-500" : ""} />
           </button>
+
+          {/* Shortcut buttons for mobile parity */}
+          {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
+            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-1 px-1.5 hover:bg-red-50 text-red-500 rounded bg-red-50/30 md:bg-transparent" title="Level to Focus">
+              <Zap size={14} />
+            </button>
+          )}
+          {(variant === 'Archive' || variant === 'Trash' || variant === 'Urgent') && (
+            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-1 px-1.5 hover:bg-indigo-50 text-indigo-500 rounded bg-indigo-50/30 md:bg-transparent" title="Move to ToDo">
+              <Target size={14} />
+            </button>
+          )}
           
           <div className="relative" ref={buttonRef}>
-            <button onClick={toggleMenu} className="p-1 hover:bg-slate-100 text-slate-400 rounded">
+            <button onClick={toggleMenu} className="p-1 hover:bg-slate-100 text-slate-400 rounded bg-slate-50 md:bg-transparent">
               <MoreVertical size={14} />
             </button>
             {showMenu && (
@@ -4101,20 +4113,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
                 <div 
                   className={cn(
-                    "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
-                    openToRight ? "ml-0" : "-ml-44"
+                    "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                    openToRight ? "left-0" : "right-0 translate-x-0",
+                    openUpwards ? "bottom-full mb-1" : "top-full mt-1"
                   )}
-                  style={{
-                    top: openUpwards ? 'auto' : `${buttonRef.current?.getBoundingClientRect().bottom || 0}px`,
-                    bottom: openUpwards ? `${window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0)}px` : 'auto',
-                    left: `${buttonRef.current?.getBoundingClientRect().left || 0}px`,
-                    marginTop: openUpwards ? '0' : '4px',
-                    marginBottom: openUpwards ? '4px' : '0'
-                  }}
                 >
-                  {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
+                  {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
-                      <Zap size={12} className="text-red-400" /> Mark Urgent
+                      <Zap size={12} className="text-red-400" /> {t('MoveToUrgent')}
+                    </button>
+                  )}
+                  {variant === 'Urgent' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-indigo-600 border-b border-slate-50 flex items-center gap-2">
+                      <Target size={12} className="text-indigo-400" /> {t('RestoreToFocus')}
                     </button>
                   )}
                   {variant !== 'Archive' && variant !== 'Trash' && (
@@ -4288,16 +4299,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
                 <div 
                   className={cn(
-                    "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
-                    openToRight ? "ml-0" : "-ml-44"
+                    "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
+                    openToRight ? "left-0" : "right-0 translate-x-0",
+                    openUpwards ? "bottom-full mb-1" : "top-full mt-1"
                   )}
-                  style={{
-                    top: openUpwards ? 'auto' : `${buttonRef.current?.getBoundingClientRect().bottom || 0}px`,
-                    bottom: openUpwards ? `${window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0)}px` : 'auto',
-                    left: `${buttonRef.current?.getBoundingClientRect().left || 0}px`,
-                    marginTop: openUpwards ? '0' : '4px',
-                    marginBottom: openUpwards ? '4px' : '0'
-                  }}
                 >
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
