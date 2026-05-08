@@ -4076,7 +4076,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             onClick={(e) => { e.stopPropagation(); onPin(); }}
             className={cn(
               "p-1 rounded transition-colors",
-              task.isPinned ? "text-indigo-600" : "text-slate-200 hover:text-indigo-400"
+              task.isPinned ? "text-indigo-600" : "text-slate-400 md:text-slate-200 md:hover:text-indigo-400"
             )}
             title={task.isPinned ? "Unpin task" : "Pin task"}
           >
@@ -4086,7 +4086,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             onClick={(e) => { e.stopPropagation(); onStar(); }}
             className={cn(
               "p-1 rounded transition-colors",
-              task.isStarred ? "text-amber-500" : "text-slate-200 hover:text-amber-400"
+              task.isStarred ? "text-amber-500" : "text-slate-400 md:text-slate-200 md:hover:text-amber-400"
             )}
           >
             <Star size={14} className={task.isStarred ? "fill-amber-500" : ""} />
@@ -4268,20 +4268,20 @@ const TaskCard: React.FC<TaskCardProps> = ({
           <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{format(task.updatedAt, 'MMM d HH:mm')}</span>
         </div>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
           {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
-            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-1 hover:bg-red-50 text-red-500 rounded" title="Level to Urgent">
-              <Zap size={10} />
+            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-2 md:p-1 hover:bg-red-50 text-red-500 rounded bg-red-50/30 md:bg-transparent" title="Level to Focus">
+              <Zap size={14} className="md:w-2.5 md:h-2.5" />
             </button>
           )}
           {(variant === 'Archive' || variant === 'Trash' || variant === 'Urgent') && (
-            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-1 hover:bg-indigo-50 text-indigo-500 rounded" title="Move to Focus">
-              <Target size={10} />
+            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-2 md:p-1 hover:bg-indigo-50 text-indigo-500 rounded bg-indigo-50/30 md:bg-transparent" title="Move to ToDo">
+              <Target size={14} className="md:w-2.5 md:h-2.5" />
             </button>
           )}
           <div className="relative" ref={buttonRef}>
-            <button onClick={toggleMenu} className="p-1 hover:bg-slate-100 text-slate-400 rounded">
-              <MoreVertical size={10} />
+            <button onClick={toggleMenu} className="p-2 md:p-1 hover:bg-slate-100 text-slate-400 rounded bg-slate-50 md:bg-transparent">
+              <MoreVertical size={14} className="md:w-2.5 md:h-2.5" />
             </button>
             {showMenu && (
               <>
@@ -4725,6 +4725,15 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
               >
                 <Zap size={16} className="text-red-400" />
                 {t('MoveToUrgent')}
+              </button>
+            )}
+            {task.category === 'Urgent' && (
+              <button 
+                onClick={() => { onMove('Focus'); handleSubmit(); onClose(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all group"
+              >
+                <Target size={16} className="text-indigo-400" />
+                {t('RestoreToFocus')}
               </button>
             )}
             {task.category === 'Archive' && (
