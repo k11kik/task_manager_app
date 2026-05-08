@@ -383,7 +383,7 @@ export default function App() {
         'Maximize': 'Maximize',
         'SystemActions': 'System Actions',
         'MoveToUrgent': 'Move to Focus',
-        'RestoreToFocus': 'Restore to ToDo',
+        'RestoreToFocus': 'Move to ToDo',
         'ArchiveTask': 'Archive Task',
         'MoveToTrash': 'Move to Trash',
         'DeletePermanently': 'Delete Permanently',
@@ -532,7 +532,7 @@ export default function App() {
         'Maximize': '最大化',
         'SystemActions': '操作',
         'MoveToUrgent': 'フォーカスに移動',
-        'RestoreToFocus': 'ToDoに戻す',
+        'RestoreToFocus': 'ToDoに移動',
         'ArchiveTask': 'アーカイブする',
         'MoveToTrash': 'ゴミ箱に移動',
         'DeletePermanently': '完全に削除',
@@ -3933,7 +3933,7 @@ export default function App() {
           </div>
         </div>
         <div className="text-[10px] font-mono text-slate-400 font-extrabold ml-4 uppercase">
-          Navigation Focus Objectives & Results V2.3
+          Navigation Focus Objectives & Results V2.4
         </div>
       </footer>
 
@@ -4301,12 +4301,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 >
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
-                      <Zap size={12} className="text-red-400" /> Move to Urgent
+                      <Zap size={12} className="text-red-400" /> {t('MoveToUrgent')}
                     </button>
                   )}
                   {variant === 'Urgent' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-indigo-600 border-b border-slate-50 flex items-center gap-2">
-                      <Target size={12} className="text-indigo-400" /> Move to Focus
+                      <Target size={12} className="text-indigo-400" /> {t('RestoreToFocus')}
                     </button>
                   )}
                   {variant !== 'Archive' && variant !== 'Trash' && (
