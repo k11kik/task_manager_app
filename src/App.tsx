@@ -4455,31 +4455,42 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, task.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm") : '');
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
 
+  const currentDeadlineTimestamp = useMemo(() => {
+    if (!deadline) return 0;
+    try {
+      const dateObj = new Date(deadline);
+      if (isNaN(dateObj.getTime())) return 0;
+      if (isAllDay) {
+        dateObj.setHours(23, 59, 59, 999);
+      }
+      return dateObj.getTime();
+    } catch (e) {
+      return 0;
+    }
+  }, [deadline, isAllDay]);
+
   const isDirty = title !== task.title || 
                   notes !== (task.notes || '') || 
                   JSON.stringify(urls.filter(u => u.trim() !== '')) !== JSON.stringify(task.urls || []) ||
                   isStarred !== (task.isStarred || false) ||
                   isPinned !== (task.isPinned || false) ||
                   isAllDay !== (task.isAllDay || false) ||
-                  (deadline ? new Date(deadline).getTime() : '') !== (task.deadline || '');
+                  currentDeadlineTimestamp !== (task.deadline || 0);
 
   const handleSubmit = (e?: React.FormEvent, shouldClose = false) => {
     if (e) e.preventDefault();
-    let finalDeadline = deadline ? new Date(deadline).getTime() : null;
-    if (finalDeadline && isAllDay) {
-        const d = new Date(deadline);
-        d.setHours(23, 59, 59, 999);
-        finalDeadline = d.getTime();
+    if (isDirty) {
+      const finalDeadline = currentDeadlineTimestamp || null;
+      onSave({ 
+        title, 
+        notes, 
+        urls: urls.filter(u => u.trim() !== ''),
+        isStarred,
+        isPinned,
+        isAllDay,
+        deadline: finalDeadline as any // Using null to clear
+      });
     }
-    onSave({ 
-      title, 
-      notes, 
-      urls: urls.filter(u => u.trim() !== ''),
-      isStarred,
-      isPinned,
-      isAllDay,
-      deadline: finalDeadline as any // Using null to clear
-    });
     if (shouldClose) onClose();
   };
 
@@ -4541,6 +4552,11 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1 space-y-1.5">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100/50">
+                    {task.project}
+                  </span>
+                </div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Task Description</label>
                 <textarea 
                   autoFocus
