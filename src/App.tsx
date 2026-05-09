@@ -294,7 +294,7 @@ export default function App() {
         'StandardView': 'Standard View',
         'LargeView': 'Grand View',
         'CompactView': 'List View',
-        'InactiveMoveToTrash': 'Inactive items moved to trash after',
+        'InactiveMoveToTrash': 'Inactive items archived after',
         'PermanentDeleteAfter': 'Items will be deleted after',
         'EmptyTrash': 'Empty Trash',
         'Reset': 'Reset',
