@@ -421,7 +421,7 @@ export default function App() {
         'Reset': 'リセット',
         'NoTasks': 'タスクがありません',
         'NoProjectsTracked': 'まだプロジェクトが管理されていません。',
-        'InactiveMoveToTrash': '非アクティブなアイテムは自動的にゴミ箱に移動されます - 期間:',
+        'InactiveMoveToTrash': '非アクティブなアイテムは自動的にアーカイブされます - 期間:',
         'PermanentDeleteAfter': 'ゴミ箱のアイテムは自動的に消去されます - 期間:',
         'EmptyTrash': 'ゴミ箱を空にする',
         'FilterProjects': 'プロジェクトでフィルタ',
