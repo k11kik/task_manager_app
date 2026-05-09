@@ -769,11 +769,11 @@ export default function App() {
     const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
     const activeTasksCount = tasks.filter(t => (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone).length;
     
-    // Per-section metrics (Urgent + Focus)
+    // Per-section metrics (Urgent + Focus active vs Total in section)
     const sectionMetrics = settings.sections.reduce((acc, sec, idx) => {
       acc[sec] = {
         focus: tasks.filter(t => (t.section === sec || (!t.section && idx === 0)) && (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone).length,
-        total: tasks.filter(t => (t.section === sec || (!t.section && idx === 0)) && !t.isDone).length
+        total: tasks.filter(t => (t.section === sec || (!t.section && idx === 0))).length
       };
       return acc;
     }, {} as Record<string, { focus: number, total: number }>);
@@ -823,7 +823,7 @@ export default function App() {
         projectStats[t.project] = { urgent: 0, focus: 0, archive: 0, trash: 0 };
       }
       if (t.category === 'Urgent') projectStats[t.project].urgent++;
-      else if (t.category === 'Focus' && !t.isDone) projectStats[t.project].focus++;
+      else if (t.category === 'Focus') projectStats[t.project].focus++;
       else if (t.category === 'Archive') projectStats[t.project].archive++;
       else if (t.category === 'Trash') projectStats[t.project].trash++;
     });
