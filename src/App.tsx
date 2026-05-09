@@ -94,7 +94,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.4.1";
+  const APP_VERSION = "2.4.2";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -959,8 +959,13 @@ export default function App() {
         return matchesSearch && matchesProject && matchesSection;
       })
       .sort((a, b) => {
-        // Universal Priority 1: Done state
+        // Universal Priority 1: Done state (lowest priority)
         if (a.isDone !== b.isDone) return a.isDone ? 1 : -1;
+
+        // If both are done, sort UNCONDITIONALLY by recency
+        if (a.isDone && b.isDone) {
+          return (b.updatedAt || 0) - (a.updatedAt || 0);
+        }
 
         // Universal Priority 2: Starred (starred first)
         const starA = !!a.isStarred;
@@ -2829,6 +2834,11 @@ export default function App() {
                         // Priority 1: Done state (lowest priority)
                         if (a.isDone && !b.isDone) return 1;
                         if (!a.isDone && b.isDone) return -1;
+
+                        // If both are done, sort UNCONDITIONALLY by recency
+                        if (a.isDone && b.isDone) {
+                          return (b.updatedAt || 0) - (a.updatedAt || 0);
+                        }
 
                         // Priority 2: Pinned tasks (global)
                         const pinA = !!a.isPinned;
