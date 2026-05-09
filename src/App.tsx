@@ -4045,7 +4045,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
         className={cn(
           "bg-white rounded-lg p-2.5 shadow-sm border border-slate-100 group hover:border-indigo-300 transition-all flex items-center gap-3 cursor-pointer",
           variant === 'Urgent' && "border-l-4 border-l-red-500",
-          task.isDone && "grayscale opacity-50 shadow-none"
+          task.isDone && "grayscale opacity-50 shadow-none",
+          showMenu && "relative z-30 shadow-xl border-indigo-200"
         )}
       >
         <button 
@@ -4129,10 +4130,15 @@ const TaskCard: React.FC<TaskCardProps> = ({
             {showMenu && (
               <div 
                 className={cn(
-                  "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
-                  openToRight ? "left-0" : "right-0 translate-x-0",
-                  openUpwards ? "bottom-full mb-1" : "top-full mt-1"
+                  "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
                 )}
+                style={{
+                  top: openUpwards ? 'auto' : (buttonRef.current?.getBoundingClientRect().bottom || 0) + 4,
+                  bottom: openUpwards ? window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0) + 4 : 'auto',
+                  left: openToRight 
+                    ? (buttonRef.current?.getBoundingClientRect().left || 0) 
+                    : (buttonRef.current?.getBoundingClientRect().right || 0) - 176,
+                }}
               >
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
@@ -4312,10 +4318,15 @@ const TaskCard: React.FC<TaskCardProps> = ({
             {showMenu && (
               <div 
                 className={cn(
-                  "absolute w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden",
-                  openToRight ? "left-0" : "right-0 translate-x-0",
-                  openUpwards ? "bottom-full mb-1" : "top-full mt-1"
+                  "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
                 )}
+                style={{
+                  top: openUpwards ? 'auto' : (buttonRef.current?.getBoundingClientRect().bottom || 0) + 4,
+                  bottom: openUpwards ? window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0) + 4 : 'auto',
+                  left: openToRight 
+                    ? (buttonRef.current?.getBoundingClientRect().left || 0) 
+                    : (buttonRef.current?.getBoundingClientRect().right || 0) - 176,
+                }}
               >
                   {variant === 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
