@@ -1767,14 +1767,17 @@ export default function App() {
         return;
       }
 
-      if (!window.confirm(`Delete ${archiveTasks.length} archived items matching current filters?`)) return;
+      if (!window.confirm(`Move ${archiveTasks.length} archived items matching current filters to Trash?`)) return;
 
       const batch = writeBatch(db);
       archiveTasks.forEach(task => {
-        batch.delete(doc(db, 'tasks', task.id));
+        batch.update(doc(db, 'tasks', task.id), { 
+          category: 'Trash',
+          updatedAt: Date.now()
+        });
       });
       await batch.commit();
-      setMessage({ text: `Archive cleanup complete: ${archiveTasks.length} items removed.`, type: 'info' });
+      setMessage({ text: `Archive cleanup complete: ${archiveTasks.length} items moved to Trash.`, type: 'info' });
     } catch (err: any) {
       console.error("Archive cleanup error", err);
       setMessage({ text: `Archive Error: ${err.message}`, type: 'error' });
@@ -3139,7 +3142,7 @@ export default function App() {
                     className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:border-red-200 hover:text-red-500 transition-all shadow-sm"
                   >
                     <Trash2 size={12} />
-                    Purge All
+                    Trash All
                   </button>
                 </div>
               </div>
