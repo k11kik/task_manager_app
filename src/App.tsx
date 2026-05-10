@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   LayoutGrid,
   Grid2X2,
@@ -4078,10 +4079,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
             <button onClick={toggleMenu} className="p-1 hover:bg-slate-100 text-slate-400 rounded bg-slate-50 md:bg-transparent">
               <MoreVertical size={14} />
             </button>
-            {showMenu && (
+            {showMenu && createPortal(
               <div 
                 className={cn(
-                  "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
+                  "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[100] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
                 )}
                 style={{
                   top: openUpwards ? 'auto' : (buttonRef.current?.getBoundingClientRect().bottom || 0) + 4,
@@ -4115,7 +4116,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
                       <Trash2 size={12} className="text-red-400" /> Delete Permanently
                     </button>
                   )}
-                </div>
+                </div>,
+                document.body
             )}
           </div>
         </div>
@@ -4266,10 +4268,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
             <button onClick={toggleMenu} className="p-2 md:p-1 hover:bg-slate-100 text-slate-400 rounded bg-slate-50 md:bg-transparent">
               <MoreVertical size={14} className="md:w-2.5 md:h-2.5" />
             </button>
-            {showMenu && (
+            {showMenu && createPortal(
               <div 
                 className={cn(
-                  "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[70] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
+                  "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[100] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
                 )}
                 style={{
                   top: openUpwards ? 'auto' : (buttonRef.current?.getBoundingClientRect().bottom || 0) + 4,
@@ -4303,7 +4305,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
                       <Trash2 size={12} className="text-red-400" /> Delete Permanently
                     </button>
                   )}
-                </div>
+                </div>,
+                document.body
             )}
           </div>
         </div>
