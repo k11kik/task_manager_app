@@ -1129,8 +1129,10 @@ export default function App() {
       if (!isAlreadyUrgent) {
         const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
         if (urgentCount >= settings.urgentLimit) {
+          const errMsg = `Urgent Capacity Full: You have reached the ${settings.urgentLimit} task limit. Complete or archive an existing task first.`;
+          alert(errMsg); // More prominent alert
           setMessage({ 
-            text: `Urgent Capacity Full: You have reached the ${settings.urgentLimit} task limit. Complete or archive an existing task first.`,
+            text: errMsg,
             type: 'error'
           });
           return;
@@ -4065,12 +4067,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
           {/* Shortcut buttons for mobile parity */}
           {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
-            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-1 px-1.5 hover:bg-red-50 text-red-500 rounded bg-red-50/30 md:bg-transparent" title="Level to Focus">
+            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-1 px-1.5 hover:bg-red-50 text-red-500 rounded bg-red-50/30 md:bg-transparent" title={t('MoveToUrgent')}>
               <Zap size={14} />
             </button>
           )}
           {(variant === 'Archive' || variant === 'Trash' || variant === 'Urgent') && (
-            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-1 px-1.5 hover:bg-indigo-50 text-indigo-500 rounded bg-indigo-50/30 md:bg-transparent" title="Move to ToDo">
+            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-1 px-1.5 hover:bg-indigo-50 text-indigo-500 rounded bg-indigo-50/30 md:bg-transparent" title={t('RestoreToFocus')}>
               <Target size={14} />
             </button>
           )}
@@ -4092,24 +4094,24 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     : (buttonRef.current?.getBoundingClientRect().right || 0) - 176,
                 }}
               >
-                  {variant === 'Focus' && (
+                  {variant !== 'Urgent' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
                       <Zap size={12} className="text-red-400" /> {t('MoveToUrgent')}
                     </button>
                   )}
-                  {variant === 'Urgent' && (
+                  {variant !== 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-indigo-600 border-b border-slate-50 flex items-center gap-2">
                       <Target size={12} className="text-indigo-400" /> {t('RestoreToFocus')}
                     </button>
                   )}
-                  {variant !== 'Archive' && variant !== 'Trash' && (
+                  {variant !== 'Archive' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Archive'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-600 border-b border-slate-50 flex items-center gap-2">
-                      <ArchiveIcon size={12} className="text-slate-400" /> Move to Archive
+                      <ArchiveIcon size={12} className="text-slate-400" /> {t('ArchiveTask')}
                     </button>
                   )}
                   {variant !== 'Trash' ? (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Trash'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
-                       <Trash2 size={12} className="text-red-400" /> Move to Trash
+                       <Trash2 size={12} className="text-red-400" /> {t('MoveToTrash')}
                     </button>
                   ) : (
                     <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
@@ -4255,12 +4257,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
         <div className="flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
           {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
-            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-2 md:p-1 hover:bg-red-50 text-red-500 rounded bg-red-50/30 md:bg-transparent" title="Level to Focus">
+            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-2 md:p-1 hover:bg-red-50 text-red-500 rounded bg-red-50/30 md:bg-transparent" title={t('MoveToUrgent')}>
               <Zap size={14} className="md:w-2.5 md:h-2.5" />
             </button>
           )}
           {(variant === 'Archive' || variant === 'Trash' || variant === 'Urgent') && (
-            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-2 md:p-1 hover:bg-indigo-50 text-indigo-500 rounded bg-indigo-50/30 md:bg-transparent" title="Move to ToDo">
+            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-2 md:p-1 hover:bg-indigo-50 text-indigo-500 rounded bg-indigo-50/30 md:bg-transparent" title={t('RestoreToFocus')}>
               <Target size={14} className="md:w-2.5 md:h-2.5" />
             </button>
           )}
@@ -4281,24 +4283,24 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     : (buttonRef.current?.getBoundingClientRect().right || 0) - 176,
                 }}
               >
-                  {variant === 'Focus' && (
+                  {variant !== 'Urgent' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
                       <Zap size={12} className="text-red-400" /> {t('MoveToUrgent')}
                     </button>
                   )}
-                  {variant === 'Urgent' && (
+                  {variant !== 'Focus' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-indigo-600 border-b border-slate-50 flex items-center gap-2">
                       <Target size={12} className="text-indigo-400" /> {t('RestoreToFocus')}
                     </button>
                   )}
-                  {variant !== 'Archive' && variant !== 'Trash' && (
+                  {variant !== 'Archive' && (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Archive'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-600 border-b border-slate-50 flex items-center gap-2">
-                      <ArchiveIcon size={12} className="text-slate-400" /> Move to Archive
+                      <ArchiveIcon size={12} className="text-slate-400" /> {t('ArchiveTask')}
                     </button>
                   )}
                   {variant !== 'Trash' ? (
                     <button onClick={(e) => { e.stopPropagation(); onMove('Trash'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
-                       <Trash2 size={12} className="text-red-400" /> Move to Trash
+                       <Trash2 size={12} className="text-red-400" /> {t('MoveToTrash')}
                     </button>
                   ) : (
                     <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
@@ -4716,7 +4718,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
           </div>
           
           <div className="space-y-3">
-            {task.category === 'Focus' && (
+            {task.category !== 'Urgent' && (
               <button 
                 onClick={() => { onMove('Urgent'); handleSubmit(); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-xs font-bold text-red-600 hover:bg-red-100 transition-all group"
@@ -4725,7 +4727,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                 {t('MoveToUrgent')}
               </button>
             )}
-            {task.category === 'Urgent' && (
+            {task.category !== 'Focus' && (
               <button 
                 onClick={() => { onMove('Focus'); handleSubmit(); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all group"
@@ -4734,16 +4736,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                 {t('RestoreToFocus')}
               </button>
             )}
-            {task.category === 'Archive' && (
-              <button 
-                onClick={() => { onMove('Focus'); handleSubmit(); onClose(); }}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-bold text-emerald-600 hover:bg-emerald-100 transition-all group"
-              >
-                <RefreshCcw size={16} className="text-emerald-400" />
-                {t('RestoreToFocus')}
-              </button>
-            )}
-            {task.category !== 'Archive' && task.category !== 'Trash' && (
+            {task.category !== 'Archive' && (
               <button 
                 onClick={() => { onMove('Archive'); handleSubmit(); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all group"
@@ -4761,14 +4754,6 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                 {t('MoveToTrash')}
               </button>
             ) : (
-              <div className="space-y-2">
-                <button 
-                  onClick={() => { onMove('Focus'); handleSubmit(); onClose(); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all"
-                >
-                  <RefreshCcw size={16} className="text-indigo-400" />
-                  {t('RestoreToFocus')}
-                </button>
                 <button 
                   onClick={() => { if(confirm(t('DeleteConfirm'))) { onDelete(); onClose(); } }}
                   className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-lg shadow-red-100"
@@ -4776,7 +4761,6 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                   <Trash2 size={16} />
                   {t('DeletePermanently')}
                 </button>
-              </div>
             )}
           </div>
 
