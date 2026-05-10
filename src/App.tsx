@@ -252,6 +252,7 @@ export default function App() {
   const [showCleanupMenu, setShowCleanupMenu] = useState(false);
   const [showSectionMenu, setShowSectionMenu] = useState(false);
   const [showSyncDetails, setShowSyncDetails] = useState(false);
+  const [showTrashMenu, setShowTrashMenu] = useState(false);
   const [showProjectFilter, setShowProjectFilter] = useState(false);
 
   useEffect(() => {
@@ -3254,7 +3255,7 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <div className="relative">
                       <button 
-                        onClick={() => setShowSyncDetails(!showSyncDetails)}
+                        onClick={() => setShowTrashMenu(!showTrashMenu)}
                         className={cn(
                           "flex items-center gap-1 px-2 py-1 rounded-lg border transition-all text-[9px] font-black uppercase tracking-tighter",
                           trashFilter !== 'all' ? "bg-red-200 border-red-300 text-red-800" : "bg-white border-red-100 text-red-300"
@@ -3263,9 +3264,9 @@ export default function App() {
                         <Clock size={10} />
                         {trashFilter === 'all' ? 'Time Filter' : trashFilter}
                       </button>
-                      {showSyncDetails && (
+                      {showTrashMenu && (
                         <>
-                          <div className="fixed inset-0 z-[80]" onClick={() => setShowSyncDetails(false)} />
+                          <div className="fixed inset-0 z-[80]" onClick={() => setShowTrashMenu(false)} />
                           <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
                             {[
                               { id: 'all', label: 'All Items' },
@@ -3276,7 +3277,7 @@ export default function App() {
                                 key={f.id}
                                 onClick={() => {
                                   setTrashFilter(f.id as any);
-                                  setShowSyncDetails(false);
+                                  setShowTrashMenu(false);
                                 }}
                                 className={cn(
                                   "w-full text-left px-3 py-2 text-[10px] font-bold transition-all flex items-center justify-between",
