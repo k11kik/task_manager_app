@@ -3443,7 +3443,7 @@ export default function App() {
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = `trifocus-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+                            a.download = `NavFOR_Log_${userPart}_Manual.csv`;
                             a.click();
                           }}
                           className="w-full py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
