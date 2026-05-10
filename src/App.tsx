@@ -3439,6 +3439,7 @@ export default function App() {
                         <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-tighter">Backup to NavFOR CSV</p>
                         <button 
                           onClick={() => {
+                            const userPart = user?.email?.split('@')[0] || 'local';
                             const blob = new Blob([getCSVData()], { type: 'text/csv' });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
