@@ -1343,6 +1343,7 @@ export default function App() {
     if (!window.confirm(`Permanently delete ${trashTasksVisible.length} items matching current filters? This cannot be undone.`)) return;
 
     try {
+      pushToHistory();
       const batch = writeBatch(db);
       trashTasksVisible.forEach(t => {
         batch.delete(doc(db, 'tasks', t.id));
@@ -1768,6 +1769,8 @@ export default function App() {
       }
 
       if (!window.confirm(`Move ${archiveTasks.length} archived items matching current filters to Trash?`)) return;
+      
+      pushToHistory();
 
       const batch = writeBatch(db);
       archiveTasks.forEach(task => {
@@ -1801,6 +1804,7 @@ export default function App() {
     if (!window.confirm("CRITICAL: FULL CLOUD PURGE. This will delete EVERY task and reset your workspaces to default. A backup will be attempted first. Proceed?")) return;
 
     try {
+      pushToHistory();
       await triggerEmergencyBackup();
       setMessage({ text: "Purge started. Clearing cloud data and resetting workspaces...", type: 'info' });
       
@@ -1846,6 +1850,7 @@ export default function App() {
     if (!window.confirm(`Are you sure you want to delete ALL tasks in the workspace "${activeSection}"? A backup will be attempted first.`)) return;
 
     try {
+      pushToHistory();
       await triggerEmergencyBackup();
       setMessage({ text: `Purging workspace "${activeSection}"...`, type: 'info' });
 
