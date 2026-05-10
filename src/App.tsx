@@ -94,7 +94,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.4.2";
+  const APP_VERSION = "2.4.3";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -1025,34 +1025,19 @@ export default function App() {
       return true;
     });
 
-    // Special category for items nearing auto-purge (3 days)
-    const nearingPurge = archiveTasks
-      .filter(t => {
-        if (settings.archiveThresholdDays === 99999) return false;
-        const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
-        return settings.archiveThresholdDays - inactiveDays <= 3;
-      })
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
     // Separate pinned tasks
     const pinned = archiveTasks
-      .filter(t => t.isPinned && !nearingPurge.find(np => np.id === t.id))
+      .filter(t => t.isPinned)
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-    const others = archiveTasks.filter(t => {
-      if (settings.archiveThresholdDays !== 99999) {
-        const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
-        if (settings.archiveThresholdDays - inactiveDays <= 3) return false;
-      }
-      return !t.isPinned;
-    });
+    const others = archiveTasks.filter(t => !t.isPinned);
 
     const grouped: Record<string, Task[]> = {};
     others.forEach(t => {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
-    return { nearingPurge, pinned, grouped };
+    return { nearingPurge: [], pinned, grouped };
   }, [filteredTasks, settings.archiveThresholdDays, archiveFilter]);
 
   const groupedTrashTasks = useMemo(() => {
@@ -1691,7 +1676,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [tasks, settings.doneToTrashThresholdDays, user]);
 
-  // Archive to Trash Auto-Move Effect
+  // ToDo to Archive Auto-Move Effect
   useEffect(() => {
     if (!user || settings.archiveThresholdDays === 99999) return;
 
@@ -1699,24 +1684,25 @@ export default function App() {
       const now = Date.now();
       const thresholdMs = settings.archiveThresholdDays * 24 * 60 * 60 * 1000;
       
-      const tasksToTrash = tasks.filter(t => 
-        t.category === 'Archive' && 
+      const tasksToArchive = tasks.filter(t => 
+        t.category !== 'Archive' && 
+        t.category !== 'Trash' && 
         (t.updatedAt || t.createdAt) < (now - thresholdMs)
       );
 
-      if (tasksToTrash.length > 0) {
-        console.log(`Auto-moving ${tasksToTrash.length} archived tasks to trash`);
+      if (tasksToArchive.length > 0) {
+        console.log(`Auto-archiving ${tasksToArchive.length} inactive tasks`);
         try {
           const batch = writeBatch(db);
-          tasksToTrash.forEach(t => {
+          tasksToArchive.forEach(t => {
             batch.update(doc(db, 'tasks', t.id), { 
-              category: 'Trash',
+              category: 'Archive',
               updatedAt: now 
             });
           });
           await batch.commit();
         } catch (err) {
-          console.error("Auto-archive-trash error", err);
+          console.error("Auto-archive error", err);
         }
       }
     };
@@ -3155,41 +3141,6 @@ export default function App() {
               </div>
               
               <div className="flex-1 space-y-6 overflow-y-auto overflow-x-visible pr-1 custom-scrollbar pb-24">
-                {groupedArchiveTasks.nearingPurge.length > 0 && (
-                   <div className="space-y-3 mb-8">
-                      <div className="flex items-center gap-4 px-2">
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
-                          <AlertTriangle size={10} />
-                          {t('MovingSoon')} {"(< 3 days)"}
-                        </h4>
-                        <div className="h-px flex-1 bg-red-100"></div>
-                      </div>
-                      <div className={cn(
-                        "grid grid-cols-1 gap-2.5",
-                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
-                      )}>
-                        <AnimatePresence mode="popLayout">
-                          {groupedArchiveTasks.nearingPurge.map(task => (
-                            <TaskCard 
-                              key={task.id} 
-                              task={task} 
-                              onToggle={() => toggleDone(task.id)}
-                              onMove={(newCat) => moveTask(task.id, newCat)}
-                              onDelete={() => deleteTask(task.id)}
-                              onEdit={() => setEditingTask(task)}
-                              onStar={() => toggleStar(task.id)}
-                              onPin={() => togglePin(task.id)}
-                              t={t}
-                              variant="Archive"
-                              displayMode={settings.displayMode}
-                              deadlineThreshold={settings.deadlineThreshold}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-                )}
-
                 {groupedArchiveTasks.pinned.length > 0 && (
                   <div className="space-y-3 mb-8">
                     <div className="flex items-center gap-4 px-2">
@@ -3278,7 +3229,7 @@ export default function App() {
                     );
                   })
                 ) : (
-                  groupedArchiveTasks.nearingPurge.length === 0 && (
+                  groupedArchiveTasks.pinned.length === 0 && (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                       <ArchiveIcon size={48} strokeWidth={1} />
                       <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">{t('ArchiveEmpty')}</span>
