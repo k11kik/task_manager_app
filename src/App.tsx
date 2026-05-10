@@ -3952,6 +3952,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const [openUpwards, setOpenUpwards] = useState(false);
   const [openToRight, setOpenToRight] = useState(false);
   const buttonRef = React.useRef<HTMLDivElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
 
   const toggleMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -3977,9 +3978,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
   React.useEffect(() => {
     if (!showMenu) return;
     const handleGlobalClick = (e: MouseEvent) => {
-      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
+      const target = e.target as Node;
+      if (buttonRef.current && buttonRef.current.contains(target)) return;
+      if (menuRef.current && menuRef.current.contains(target)) return;
+      
+      setShowMenu(false);
     };
     window.addEventListener('mousedown', handleGlobalClick);
     return () => window.removeEventListener('mousedown', handleGlobalClick);
@@ -4083,6 +4086,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             </button>
             {showMenu && createPortal(
               <div 
+                ref={menuRef}
                 className={cn(
                   "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[100] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
                 )}
@@ -4272,6 +4276,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             </button>
             {showMenu && createPortal(
               <div 
+                ref={menuRef}
                 className={cn(
                   "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[100] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
                 )}
