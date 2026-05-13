@@ -116,7 +116,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.1";
+  const APP_VERSION = "2.5.2";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -161,13 +161,15 @@ export default function App() {
       if (direction === 'right' && currentIndex > 0) setViewMode(modes[currentIndex - 1]);
       if (direction === 'left' && currentIndex < modes.length - 1) setViewMode(modes[currentIndex + 1]);
     } else {
+      if (mobileView === 'calendar' || viewMode === 'calendar') return;
       if (direction === 'right' && currentMobileIndex > 0) setMobileView(mobileViews[currentMobileIndex - 1] as any);
       if (direction === 'left' && currentMobileIndex < mobileViews.length - 1) setMobileView(mobileViews[currentMobileIndex + 1] as any);
       
       const nextIndex = direction === 'right' ? currentMobileIndex - 1 : currentMobileIndex + 1;
       if (nextIndex >= 0 && nextIndex < mobileViews.length) {
         const mv = mobileViews[nextIndex];
-        if (mv === 'archive') setViewMode('archive');
+        if (mv === 'calendar') setViewMode('calendar');
+        else if (mv === 'archive') setViewMode('archive');
         else if (mv === 'trash') setViewMode('trash');
         else if (mv === 'settings') setViewMode('settings');
         else setViewMode('dashboard');
@@ -177,6 +179,9 @@ export default function App() {
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
+      // モバイル版のカレンダー表示中のみ、独自のスワイプ処理を行わずにブラウザに任せる（重さを解消）
+      if (window.innerWidth < 1024 && (viewMode === 'calendar' || mobileView === 'calendar')) return;
+
       // 垂直スクロールが支配的な場合は無視
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         accumulatedX.current = 0;
@@ -4565,10 +4570,27 @@ const TaskCard: React.FC<TaskCardProps> = ({
 function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) => void; t: (key: string) => string }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarMode, setCalendarMode] = useState<'year' | 'month' | 'week' | 'day'>('month');
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const ignoreScrollChange = useRef(true); 
+  const isTransitioning = useRef(false);
 
   const tasksWithDeadlines = useMemo(() => tasks.filter(t => t.deadline && t.category !== 'Trash'), [tasks]);
 
+  const tasksByDate = useMemo(() => {
+    const map: Record<string, Task[]> = {};
+    tasksWithDeadlines.forEach(t => {
+      if (t.deadline) {
+        const d = format(t.deadline, 'yyyy-MM-dd');
+        if (!map[d]) map[d] = [];
+        map[d].push(t);
+      }
+    });
+    return map;
+  }, [tasksWithDeadlines]);
+
   const navigate = (direction: 'prev' | 'next') => {
+    ignoreScrollChange.current = false;
+    isTransitioning.current = true;
     if (calendarMode === 'year') {
       setCurrentDate(prev => direction === 'prev' ? subYears(prev, 1) : addYears(prev, 1));
     } else if (calendarMode === 'month') {
@@ -4578,9 +4600,15 @@ function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) =
     } else {
       setCurrentDate(prev => direction === 'prev' ? subDays(prev, 1) : addDays(prev, 1));
     }
+    setTimeout(() => { isTransitioning.current = false; }, 500);
   };
 
-  const goToToday = () => setCurrentDate(new Date());
+  const goToToday = () => {
+    ignoreScrollChange.current = false;
+    isTransitioning.current = true;
+    setCurrentDate(new Date());
+    setTimeout(() => { isTransitioning.current = false; }, 500);
+  };
 
   return (
     <div className="h-full flex flex-col bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -4628,12 +4656,27 @@ function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) =
       </header>
 
       {/* Calendar Content */}
-      <div className="flex-1 overflow-auto custom-scrollbar">
+      <div ref={scrollContainerRef} className="flex-1 overflow-auto custom-scrollbar focus:outline-none relative">
         {calendarMode === 'year' && (
-          <YearView currentDate={currentDate} tasks={tasksWithDeadlines} onDateSelect={(d) => { setCurrentDate(d); setCalendarMode('month'); }} onYearChange={setCurrentDate} />
+          <YearView 
+            scrollContainerRef={scrollContainerRef} 
+            ignoreScrollChange={ignoreScrollChange}
+            currentDate={currentDate} 
+            tasksByDate={tasksByDate} 
+            onDateSelect={(d) => { setCurrentDate(d); setCalendarMode('month'); }} 
+            onYearChange={setCurrentDate} 
+          />
         )}
         {calendarMode === 'month' && (
-          <MonthView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} onDateSelect={(d) => { setCurrentDate(d); setCalendarMode('day'); }} onMonthChange={setCurrentDate} />
+          <MonthView 
+            scrollContainerRef={scrollContainerRef} 
+            ignoreScrollChange={ignoreScrollChange}
+            currentDate={currentDate} 
+            tasksByDate={tasksByDate} 
+            onEdit={onEdit} 
+            onDateSelect={(d) => { setCurrentDate(d); setCalendarMode('day'); }} 
+            onMonthChange={setCurrentDate} 
+          />
         )}
         {calendarMode === 'week' && (
           <WeekView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} />
@@ -4646,50 +4689,67 @@ function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) =
   );
 }
 
-function YearGrid({ yearDate, tasks, onDateSelect }: { yearDate: Date; tasks: Task[]; onDateSelect: (d: Date) => void; key?: any }) {
+const YearGrid = React.memo(({ yearDate, tasksByDate, onDateSelect }: { yearDate: Date; tasksByDate: Record<string, Task[]>; onDateSelect: (d: Date) => void }) => {
   const year = yearDate.getFullYear();
-  const months = eachMonthOfInterval({
-    start: startOfYear(yearDate),
-    end: endOfYear(yearDate)
-  });
+  const monthsData = useMemo(() => {
+    const months = eachMonthOfInterval({
+      start: startOfYear(yearDate),
+      end: endOfYear(yearDate)
+    });
+    const today = new Date();
+    return months.map(month => {
+      const days = eachDayOfInterval({
+        start: startOfMonth(month),
+        end: endOfMonth(month)
+      }).map(day => ({
+        date: day,
+        key: format(day, 'yyyy-MM-dd'),
+        dayNum: format(day, 'd'),
+        isToday: isSameDay(day, today)
+      }));
+      return {
+        month,
+        monthName: format(month, 'MMMM'),
+        emptyDays: startOfWeek(startOfMonth(month)).getDay(),
+        days
+      };
+    });
+  }, [yearDate]);
 
   return (
-    <div className="p-8 border-b border-slate-100" data-year={year.toString()}>
+    <div className="p-8 border-b border-slate-100" data-year={year.toString()} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 500px' } as any}>
       <h3 className="text-2xl font-black text-slate-800 mb-8 px-4">{year}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-12">
-        {months.map(month => (
-          <div key={month.toString()} className="space-y-4">
+        {monthsData.map(mData => (
+          <div key={mData.month.toString()} className="space-y-4">
             <button 
-              onClick={() => onDateSelect(month)}
+              onClick={() => onDateSelect(mData.month)}
               className="text-sm font-black text-indigo-600 uppercase tracking-widest hover:underline"
             >
-              {format(month, 'MMMM')}
+              {mData.monthName}
             </button>
             <div className="grid grid-cols-7 gap-1 text-[8px] font-bold text-center">
               {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
                 <div key={d} className="text-slate-400">{d}</div>
               ))}
-              {Array.from({ length: startOfWeek(startOfMonth(month)).getDay() }).map((_, i) => (
+              {Array.from({ length: mData.emptyDays }).map((_, i) => (
                 <div key={`empty-${i}`} />
               ))}
-              {eachDayOfInterval({
-                start: startOfMonth(month),
-                end: endOfMonth(month)
-              }).map(day => {
-                const dayTasks = tasks.filter(t => isSameDay(t.deadline || 0, day));
+              {mData.days.map(dayInfo => {
+                const dayTasks = tasksByDate[dayInfo.key] || [];
                 return (
                   <div 
-                    key={day.toString()}
+                    key={dayInfo.key}
                     className={cn(
                       "w-6 h-6 flex items-center justify-center rounded-full transition-all cursor-pointer",
                       dayTasks.length > 5 ? "bg-red-500 text-white" :
                       dayTasks.length > 2 ? "bg-amber-400 text-slate-800" :
                       dayTasks.length > 0 ? "bg-indigo-100 text-indigo-600" :
-                      isSameDay(day, new Date()) ? "border border-indigo-500 text-indigo-500" : "text-slate-400 hover:bg-slate-100"
+                      dayInfo.isToday ? "border border-indigo-500 text-indigo-500" : "text-slate-400 hover:bg-slate-100"
                     )}
-                    onClick={() => onDateSelect(day)}
+                    onClick={() => onDateSelect(dayInfo.date)}
                   >
-                    {format(day, 'd')}
+                    {dayInfo.dayNum}
                   </div>
                 );
               })}
@@ -4699,12 +4759,11 @@ function YearGrid({ yearDate, tasks, onDateSelect }: { yearDate: Date; tasks: Ta
       </div>
     </div>
   );
-}
+});
 
-function YearView({ currentDate, tasks, onDateSelect, onYearChange }: { currentDate: Date; tasks: Task[]; onDateSelect: (d: Date) => void; onYearChange: (d: Date) => void }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const ignoreScrollChange = useRef(false);
+function YearView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksByDate, onDateSelect, onYearChange }: { scrollContainerRef: React.RefObject<HTMLDivElement>; ignoreScrollChange: React.RefObject<boolean>; currentDate: Date; tasksByDate: Record<string, Task[]>; onDateSelect: (d: Date) => void; onYearChange: (d: Date) => void }) {
   const lastReportedYear = useRef(currentDate.getFullYear().toString());
+  const isInitialScrollDone = useRef(false);
 
   const years = useMemo(() => {
     const list = [];
@@ -4717,8 +4776,9 @@ function YearView({ currentDate, tasks, onDateSelect, onYearChange }: { currentD
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
+      if (!isInitialScrollDone.current) return;
       entries.forEach(entry => {
-        if (entry.isIntersecting && entry.intersectionRatio > 0.3) {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
           const yearStr = entry.target.getAttribute('data-year');
           if (yearStr && yearStr !== lastReportedYear.current) {
             lastReportedYear.current = yearStr;
@@ -4729,45 +4789,56 @@ function YearView({ currentDate, tasks, onDateSelect, onYearChange }: { currentD
         }
       });
     }, {
-      root: containerRef.current,
-      threshold: 0.3
+      root: scrollContainerRef.current,
+      threshold: 0.5
     });
 
-    const yearElements = containerRef.current?.querySelectorAll('[data-year]');
+    const yearElements = scrollContainerRef.current?.querySelectorAll('[data-year]');
     yearElements?.forEach(el => observer.observe(el));
     return () => observer.disconnect();
-  }, [years, onYearChange]);
+  }, [years, onYearChange, scrollContainerRef]);
 
-  React.useLayoutEffect(() => {
-    const currentYear = currentDate.getFullYear().toString();
-    const target = containerRef.current?.querySelector(`[data-year="${currentYear}"]`) as HTMLElement;
-    if (target && containerRef.current) {
-        containerRef.current.scrollTop = target.offsetTop;
-    }
+  React.useEffect(() => {
+    // 確実にレンダリングが終わってからスクロールするために
+    const timer = setTimeout(() => {
+      const currentYear = currentDate.getFullYear().toString();
+      const target = scrollContainerRef.current?.querySelector(`[data-year="${currentYear}"]`) as HTMLElement;
+      if (target && scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = target.offsetTop;
+          // IntersectionObserverの誤作動を防ぐために少し待ってからフラグを立てる
+          setTimeout(() => {
+            isInitialScrollDone.current = true;
+          }, 100);
+      } else {
+        isInitialScrollDone.current = true;
+      }
+    }, 50);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
+    if (!isInitialScrollDone.current) return;
     if (ignoreScrollChange.current) {
       ignoreScrollChange.current = false;
       return;
     }
     const currentYear = currentDate.getFullYear().toString();
-    if (currentYear === lastReportedYear.current) return;
-
-    const target = containerRef.current?.querySelector(`[data-year="${currentYear}"]`);
-    if (target) {
+    const target = scrollContainerRef.current?.querySelector(`[data-year="${currentYear}"]`);
+    if (target && scrollContainerRef.current) {
         lastReportedYear.current = currentYear;
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const container = scrollContainerRef.current;
+        const targetTop = (target as HTMLElement).offsetTop;
+        container.scrollTo({ top: targetTop, behavior: 'smooth' });
     }
-  }, [currentDate]);
+  }, [currentDate, ignoreScrollChange]);
 
   return (
-    <div ref={containerRef} className="h-full overflow-y-auto custom-scrollbar bg-white">
+    <div className="bg-white relative">
       {years.map(yearDate => (
         <YearGrid 
             key={yearDate.toString()} 
             yearDate={yearDate} 
-            tasks={tasks} 
+            tasksByDate={tasksByDate} 
             onDateSelect={onDateSelect} 
         />
       ))}
@@ -4775,36 +4846,42 @@ function YearView({ currentDate, tasks, onDateSelect, onYearChange }: { currentD
   );
 }
 
-function MonthGrid({ monthDate, tasks, onEdit, onDateSelect }: { monthDate: Date; tasks: Task[]; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void; key?: any }) {
+const MonthGrid = React.memo(({ monthDate, tasksByDate, onEdit, onDateSelect }: { monthDate: Date; tasksByDate: Record<string, Task[]>; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void }) => {
   const weeks = useMemo(() => {
     const start = startOfWeek(startOfMonth(monthDate));
     const end = endOfWeek(endOfMonth(monthDate));
     const allDays = eachDayOfInterval({ start, end });
     const chunked = [];
     for (let i = 0; i < allDays.length; i += 7) {
-      chunked.push(allDays.slice(i, i + 7));
+      const week = allDays.slice(i, i + 7).map(day => ({
+        date: day,
+        key: format(day, 'yyyy-MM-dd'),
+        isCurrentMonth: isSameMonth(day, monthDate),
+        isToday: isSameDay(day, new Date()),
+        dayNum: format(day, 'd')
+      }));
+      chunked.push(week);
     }
     return chunked;
   }, [monthDate]);
 
   return (
-    <div className="flex flex-col min-w-[700px] mb-8" data-month={format(monthDate, 'yyyy-MM')}>
-      <div className="p-4 bg-slate-50/50 border-y border-slate-100 flex items-center justify-between sticky top-0 z-20 backdrop-blur-sm">
+    <div className="flex flex-col mb-8" data-month={format(monthDate, 'yyyy-MM')} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 800px' } as any}>
+      <div className="p-4 bg-slate-50 border-y border-slate-100 flex items-center justify-between sticky top-[34px] z-20">
         <h3 className="text-sm font-black text-indigo-600 uppercase tracking-widest">
           {format(monthDate, 'MMMM yyyy')}
         </h3>
       </div>
       <div className="flex flex-col border-l border-slate-50">
         {weeks.map((week, weekIdx) => (
-          <div key={weekIdx} className="grid grid-cols-7 snap-start">
-            {week.map(day => {
-              const dayTasks = tasks.filter(t => isSameDay(t.deadline || 0, day));
-              const isCurrentMonth = isSameMonth(day, monthDate);
-              const isToday = isSameDay(day, new Date());
+          <div key={weekIdx} className="grid grid-cols-7">
+            {week.map(dayInfo => {
+              const dayTasks = tasksByDate[dayInfo.key] || [];
+              const { date, isCurrentMonth, isToday, dayNum } = dayInfo;
 
               return (
                 <div 
-                  key={day.toString()} 
+                  key={dayInfo.key} 
                   className={cn(
                     "min-h-[120px] border-b border-r border-slate-50 p-2 flex flex-col gap-1 transition-colors hover:bg-slate-50/20 group",
                     !isCurrentMonth && "bg-slate-100/10 opacity-30",
@@ -4813,13 +4890,13 @@ function MonthGrid({ monthDate, tasks, onEdit, onDateSelect }: { monthDate: Date
                 >
                   <div className="flex justify-between items-center mb-1">
                     <button 
-                      onClick={() => onDateSelect(day)}
+                      onClick={() => onDateSelect(date)}
                       className={cn(
                         "text-[10px] font-black tabular-nums py-0.5 px-1.5 rounded transition-all",
                         isToday ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 group-hover:text-slate-600"
                       )}
                     >
-                      {format(day, 'd')}
+                      {dayNum}
                     </button>
                     {dayTasks.length > 0 && (
                       <span className="text-[8px] font-bold text-indigo-400 opacity-60">
@@ -4848,7 +4925,7 @@ function MonthGrid({ monthDate, tasks, onEdit, onDateSelect }: { monthDate: Date
                     ))}
                     {dayTasks.length > 5 && (
                       <button 
-                        onClick={() => onDateSelect(day)}
+                        onClick={() => onDateSelect(date)}
                         className="text-[8px] font-black text-indigo-400 hover:text-indigo-600 text-center py-0.5"
                       >
                         + {dayTasks.length - 5}
@@ -4863,17 +4940,16 @@ function MonthGrid({ monthDate, tasks, onEdit, onDateSelect }: { monthDate: Date
       </div>
     </div>
   );
-}
+});
 
-function MonthView({ currentDate, tasks, onEdit, onDateSelect, onMonthChange }: { currentDate: Date; tasks: Task[]; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void; onMonthChange: (d: Date) => void }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const ignoreScrollChange = useRef(false);
+function MonthView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksByDate, onEdit, onDateSelect, onMonthChange }: { scrollContainerRef: React.RefObject<HTMLDivElement>; ignoreScrollChange: React.RefObject<boolean>; currentDate: Date; tasksByDate: Record<string, Task[]>; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void; onMonthChange: (d: Date) => void }) {
+  const isInitialScrollDone = useRef(false);
   const lastReportedMonth = useRef(format(currentDate, 'yyyy-MM'));
 
   const months = useMemo(() => {
     const list = [];
-    const base = startOfMonth(new Date()); // Always 1 year around real today
-    for (let i = -24; i <= 24; i++) {
+    const base = startOfMonth(new Date()); 
+    for (let i = -12; i <= 24; i++) {
         list.push(addMonths(base, i));
     }
     return list;
@@ -4881,8 +4957,9 @@ function MonthView({ currentDate, tasks, onEdit, onDateSelect, onMonthChange }: 
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
+      if (!isInitialScrollDone.current) return;
       entries.forEach(entry => {
-        if (entry.isIntersecting && entry.intersectionRatio > 0.3) {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.4) {
           const monthStr = entry.target.getAttribute('data-month');
           if (monthStr && monthStr !== lastReportedMonth.current) {
             lastReportedMonth.current = monthStr;
@@ -4894,56 +4971,65 @@ function MonthView({ currentDate, tasks, onEdit, onDateSelect, onMonthChange }: 
         }
       });
     }, {
-      root: containerRef.current,
-      threshold: [0.1, 0.3, 0.5]
+      root: scrollContainerRef.current,
+      threshold: 0.4
     });
 
-    const monthElements = containerRef.current?.querySelectorAll('[data-month]');
+    const monthElements = scrollContainerRef.current?.querySelectorAll('[data-month]');
     monthElements?.forEach(el => observer.observe(el));
     return () => observer.disconnect();
-  }, [months, onMonthChange]);
+  }, [months, onMonthChange, scrollContainerRef]);
 
-  // Initial scroll to current month - use layout for instant positioning
-  React.useLayoutEffect(() => {
-    const currentMonthStr = format(currentDate, 'yyyy-MM');
-    const target = containerRef.current?.querySelector(`[data-month="${currentMonthStr}"]`) as HTMLElement;
-    if (target && containerRef.current) {
-        containerRef.current.scrollTop = target.offsetTop;
-    }
+  React.useEffect(() => {
+    // 確実にレンダリングが終わってからスクロールするために
+    const timer = setTimeout(() => {
+      const currentMonthStr = format(currentDate, 'yyyy-MM');
+      const target = scrollContainerRef.current?.querySelector(`[data-month="${currentMonthStr}"]`) as HTMLElement;
+      if (target && scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = target.offsetTop;
+          // IntersectionObserverの誤作動を防ぐために少し待ってからフラグを立てる
+          setTimeout(() => {
+            isInitialScrollDone.current = true;
+          }, 100);
+      } else {
+        isInitialScrollDone.current = true;
+      }
+    }, 50);
+    return () => clearTimeout(timer);
   }, []); 
 
-  // Sync scroll when currentDate changes from OUTSIDE (header buttons)
   useEffect(() => {
+    if (!isInitialScrollDone.current) return;
     if (ignoreScrollChange.current) {
       ignoreScrollChange.current = false;
       return;
     }
     
     const currentMonthStr = format(currentDate, 'yyyy-MM');
-    if (currentMonthStr === lastReportedMonth.current) return;
-
-    const target = containerRef.current?.querySelector(`[data-month="${currentMonthStr}"]`);
-    if (target) {
+    const target = scrollContainerRef.current?.querySelector(`[data-month="${currentMonthStr}"]`);
+    if (target && scrollContainerRef.current) {
         lastReportedMonth.current = currentMonthStr;
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const container = scrollContainerRef.current;
+        const targetTop = (target as HTMLElement).offsetTop;
+        container.scrollTo({ top: targetTop, behavior: 'smooth' });
     }
-  }, [currentDate]);
+  }, [currentDate, ignoreScrollChange]);
 
   return (
-    <div className="h-full flex flex-col min-w-[700px] bg-white">
-      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-30 backdrop-blur-md">
+    <div className="bg-white min-w-[700px] relative">
+      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50 sticky top-0 z-30">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
           <div key={day} className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center border-r border-slate-50 last:border-0">
             {day}
           </div>
         ))}
       </div>
-      <div ref={containerRef} className="flex-1 overflow-y-auto custom-scrollbar snap-y snap-proximity focus:outline-none">
+      <div className="relative">
         {months.map(month => (
           <MonthGrid 
               key={month.toString()} 
               monthDate={month} 
-              tasks={tasks} 
+              tasksByDate={tasksByDate} 
               onEdit={onEdit} 
               onDateSelect={onDateSelect} 
           />
