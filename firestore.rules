@@ -67,7 +67,7 @@ service cloud.firestore {
           && (data.get('displayMode', 'standard') in ['compact', 'standard', 'large'])
           && (data.get('displayModeFocus', 'standard') in ['compact', 'standard', 'large'])
           && (data.get('displayModeTodo', 'standard') in ['compact', 'standard', 'large'])
-          && (data.get('language', 'en') in ['en', 'ja'])
+          && (data.get('language', 'en') in ['en', 'ja', 'fr'])
           && (data.get('sections', ['General']) is list);
       }
 

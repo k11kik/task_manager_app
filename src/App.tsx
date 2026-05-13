@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   LayoutGrid,
@@ -52,7 +52,28 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { DragDropContext, Droppable, Draggable as DraggableDnd } from '@hello-pangea/dnd';
 const Draggable = DraggableDnd as any;
-import { format, differenceInDays } from 'date-fns';
+import { 
+  format, 
+  differenceInDays, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfWeek, 
+  endOfWeek, 
+  eachDayOfInterval, 
+  isSameMonth, 
+  isSameDay, 
+  addMonths, 
+  subMonths, 
+  addWeeks, 
+  subWeeks, 
+  addDays, 
+  subDays,
+  addYears,
+  subYears,
+  startOfYear,
+  endOfYear,
+  eachMonthOfInterval
+} from 'date-fns';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
 import { auth, db, signIn, logOut } from './lib/firebase';
@@ -95,7 +116,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.4.3";
+  const APP_VERSION = "2.5.1";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -109,12 +130,12 @@ export default function App() {
   const [isTaskAllDay, setIsTaskAllDay] = useState(false);
   const [newTaskUrl, setNewTaskUrl] = useState(''); // Compatibility check if still used in layout
   const [isPickingDaily, setIsPickingDaily] = useState(false);
-  const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash' | 'calendar'>('dashboard');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'error' | 'info' } | null>(null);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<string>('General');
-  const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings'>('urgent');
+  const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings'>('urgent');
   
   // Track swipe cooldown
   const lastSwipeTime = React.useRef(0);
@@ -130,10 +151,10 @@ export default function App() {
     lastSwipeTime.current = now;
     accumulatedX.current = 0;
 
-    const modes: ('dashboard' | 'archive' | 'trash' | 'settings')[] = ['dashboard', 'archive', 'trash', 'settings'];
+    const modes: ('dashboard' | 'archive' | 'trash' | 'calendar' | 'settings')[] = ['dashboard', 'calendar', 'archive', 'trash', 'settings'];
     const currentIndex = modes.indexOf(viewMode);
     
-    const mobileViews: ('summary' | 'urgent' | 'focus' | 'archive' | 'trash' | 'settings')[] = ['summary', 'urgent', 'focus', 'archive', 'trash', 'settings'];
+    const mobileViews: ('summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings')[] = ['summary', 'urgent', 'focus', 'calendar', 'archive', 'trash', 'settings'];
     const currentMobileIndex = mobileViews.indexOf(mobileView as any);
 
     if (window.innerWidth >= 1024) {
@@ -276,7 +297,7 @@ export default function App() {
     displayMode: 'standard' as 'compact' | 'standard' | 'large',
     displayModeFocus: 'standard' as 'compact' | 'standard' | 'large',
     displayModeTodo: 'standard' as 'compact' | 'standard' | 'large',
-    language: 'en' as 'en' | 'ja',
+    language: 'en' as 'en' | 'ja' | 'fr',
     sections: []
   });
 
@@ -289,10 +310,12 @@ export default function App() {
         'Trash': 'Trash Bin',
         'Settings': 'Settings',
         'Dashboard': 'Dashboard',
+        'Calendar': 'Calendar',
         'Entry': 'Entry',
         'Language': 'Language',
         'English': 'English',
         'Japanese': 'Japanese',
+        'French': 'French',
         'StandardView': 'Standard View',
         'LargeView': 'Grand View',
         'CompactView': 'List View',
@@ -410,10 +433,12 @@ export default function App() {
         'Trash': 'ゴミ箱',
         'Settings': '設定',
         'Dashboard': 'ダッシュボード',
+        'Calendar': 'カレンダー',
         'Entry': '入力',
         'Language': '言語設定',
         'English': '英語 (English)',
         'Japanese': '日本語 (Japanese)',
+        'French': 'フランス語 (Français)',
         'StandardView': 'グリッド (標準)',
         'LargeView': 'グリッド (大きく表示)',
         'CompactView': 'リスト表示',
@@ -471,6 +496,11 @@ export default function App() {
         'DoneToTrashDesc': '完了したタスクをゴミ箱に送るまでの日数。',
         'TrashAutoCleanup': 'ゴミ箱の自動整理',
         'TrashAutoCleanupDesc': 'ゴミ箱に入ったアイテムを完全に削除するまでの日数。',
+        'MoveToUrgent': 'フォーカスへ移動',
+        'RestoreToFocus': 'ToDoへ戻す',
+        'ArchiveTask': 'アーカイブする',
+        'MoveToTrash': 'ゴミ箱へ移動',
+        'DeletePermanently': '完全に削除',
         'SelectLanguageDesc': 'インターフェースの表示言語を設定します。',
         'GlobalLoad': '全体の負荷',
         'CriticalLoad': 'CRITICAL LOAD',
@@ -534,15 +564,153 @@ export default function App() {
         'Star': '重要',
         'Maximize': '最大化',
         'SystemActions': '操作',
-        'MoveToUrgent': 'フォーカスに移動',
-        'RestoreToFocus': 'ToDoに移動',
-        'ArchiveTask': 'アーカイブする',
-        'MoveToTrash': 'ゴミ箱に移動',
-        'DeletePermanently': '完全に削除',
         'Metadata': 'メタデータ',
         'Cancel': 'キャンセル',
         'CommitChanges': '変更を保存',
         'DeleteConfirm': 'このタスクを完全に削除しますか？'
+      },
+      fr: {
+        'Urgent': 'Focus',
+        'Focus': 'ToDo',
+        'Archive': 'Archives',
+        'Trash': 'Corbeille',
+        'Settings': 'Paramètres',
+        'Dashboard': 'Tableau de bord',
+        'Calendar': 'Calendrier',
+        'Entry': 'Saisie',
+        'Language': 'Langue',
+        'English': 'Anglais (English)',
+        'Japanese': 'Japonais (Japanese)',
+        'French': 'Français (French)',
+        'StandardView': 'Vue Standard',
+        'LargeView': 'Grande Vue',
+        'CompactView': 'Vue Liste',
+        'Done': 'Terminé',
+        'Pending': 'En attente',
+        'Filters': 'Filtres',
+        'Reset': 'Réinitialiser',
+        'NoTasks': 'Aucune tâche trouvée',
+        'NoProjectsTracked': 'Aucun projet suivi pour le moment.',
+        'InactiveMoveToTrash': 'Articles inactifs archivés après',
+        'PermanentDeleteAfter': 'Les articles seront supprimés après',
+        'EmptyTrash': 'Vider la corbeille',
+        'FilterProjects': 'Filtrer par projet',
+        'Days': 'jours',
+        'MovingSoon': 'Bientôt dans la corbeille',
+        'DeletingSoon': 'Suppression imminente',
+        'ArchiveEmpty': 'Archives vides',
+        'TrashEmpty': 'La corbeille est vide',
+        'NoUrgent': 'Aucune tâche prioritaire',
+        'NoFocus': 'Aucune tâche ToDo',
+        'Expired': 'Échéances dépassées',
+        'Approaching': 'Échéances proches',
+        'Extract': 'Extraire',
+        'SystemArchive': 'Archives Système',
+        'TaskEntry': 'Nouvelle tâche',
+        'WorkflowHealth': 'État d\'avancement',
+        'Status': 'Statut',
+        'DoneToday': 'Terminé aujourd\'hui',
+        'Authenticated': 'Authentifié',
+        'DataLifecycle': 'Cycle de vie des données',
+        'ExportData': 'Exporter les données',
+        'ImportData': 'Importer les données',
+        'DownloadCSV': 'Télécharger CSV',
+        'ImportCSV': 'Importer CSV',
+        'AccountInformation': 'Informations du compte',
+        'CloudSynced': 'Synchronisé avec le Cloud',
+        'LocalOnly': 'Local uniquement',
+        'UrgentCapacity': 'Capacité Focus',
+        'HealthMetrics': 'Paramètres ToDo',
+        'CriticalThreshold': 'Seuil critique',
+        'DeadlineThreshold': 'Seuil d\'échéance',
+        'DoneTrashLifecycle': 'Cycle de vie Terminé & Corbeille',
+        'PersonalAccount': 'Compte personnel',
+        'NotSignedIn': 'Non connecté',
+        'DisconnectAccount': 'Déconnecter le compte',
+        'Items': 'Articles',
+        'SystemState': 'État du système',
+        'Search': 'Recherche',
+        'All': 'Tout',
+        'UrgentSlotLimit': 'Limite de slots Focus',
+        'MaxConcurrentUrgent': 'Nombre maximum de tâches prioritaires autorisées.',
+        'CriticalAlertDesc': 'Nombre maximum de tâches ToDo avant alerte critique. Alerte à 70%.',
+        'DeadlineThresholdDesc': 'Jours avant l\'échéance pour prioriser la tâche.',
+        'DoneToTrash': 'Terminé vers Corbeille',
+        'DoneToTrashDesc': 'Temps de conservation des tâches terminées.',
+        'TrashAutoCleanup': 'Nettoyage automatique Corbeille',
+        'TrashAutoCleanupDesc': 'Suppression définitive après cette période.',
+        'MoveToUrgent': 'Déplacer vers Focus',
+        'RestoreToFocus': 'Remettre dans ToDo',
+        'ArchiveTask': 'Archiver la tâche',
+        'MoveToTrash': 'Mettre à la corbeille',
+        'DeletePermanently': 'Supprimer définitivement',
+        'SelectLanguageDesc': 'Choisissez votre langue d\'interface.',
+        'GlobalLoad': 'Charge globale',
+        'CriticalLoad': 'CHARGE CRITIQUE',
+        'WarningHighLoad': 'CHARGE ÉLEVÉE',
+        'SafeCapacity': 'CAPACITÉ SÛRE',
+        'ProjectOverview': 'Aperçu du projet',
+        'Total': 'Total',
+        'Slots': 'Slots',
+        'SyncToCloud': 'Synchro Cloud',
+        'SyncToCloudDesc': 'Connectez-vous pour synchroniser en temps réel.',
+        'ContinueWithGoogle': 'Continuer avec Google',
+        'ProjectCode': 'Code projet',
+        'TaskDetail': 'Détails de la tâche',
+        'ContextSubtasks': 'Contexte et sous-tâches...',
+        'DetailsPlaceholder': 'Saisir les détails...',
+        'ExampleProjects': 'Ex: CORE, DEV',
+        'Memos': 'Mémos',
+        'Expand': 'Agrandir',
+        'Shrink': 'Réduire',
+        'Urls': 'Liens',
+        'Add': 'Ajouter',
+        'UrlPlaceholder': 'https://...',
+        'AddToFocus': 'Ajouter à ToDo',
+        'SignIn': 'Connexion',
+        'LogOut': 'Déconnexion',
+        'Deadline': 'Échéance',
+        'Never': 'Jamais',
+        'NeverCleanup': 'Pas de nettoyage',
+        'AutoArchiveSweep': 'Balayage automatique Archive',
+        'ArchiveThreshold': 'Seuil d\'archivage',
+        'ArchiveThresholdDesc': 'Déplacer vers les archives après inactivité.',
+        'SyncAndBackup': 'Synchro & Sauvegarde',
+        'LocalFolderLog': 'Log dossier local',
+        'LocalFolderLogDesc': 'Active la sauvegarde CSV automatique.',
+        'LocalDirectoryPath': 'Chemin dossier local',
+        'NoFolderSelected': 'Aucun dossier sélectionné',
+        'AuthorizeSession': 'Autoriser la session',
+        'SelectFolder': 'Choisir dossier',
+        'ManualLocalBackup': 'Sauvegarde locale manuelle',
+        'SaveBackupToLocal': 'Enregistrer la sauvegarde',
+        'LastSaved': 'Dernière sauvegarde',
+        'DailyUpdateRecommendation': 'Recommandé : 1 mise à jour par jour',
+        'DangerZone': 'Zone de danger',
+        'ResetSettingsDesc': 'CRITICAL: Supprime TOUTES les tâches du cloud.',
+        'ForceResetSettings': 'Effacer les données cloud',
+        'PermissionNeeded': 'Autorisation requise pour continuer.',
+        'ProjectFilter': 'Filtre projet',
+        'FilterByProject': 'Filtrer par projet',
+        'Syncing': 'Synchronisation...',
+        'SyncActive': 'Synchro Active',
+        'BackupNeeded': 'Sauvegarde requise',
+        'BackedUp': 'Sauvegardé',
+        'SyncOff': 'Synchro Off',
+        'SyncOffUppercase': 'SYNCHRO OFF',
+        'AutomatedSyncStatus': 'Statut Synchro Auto',
+        'LastSuccessfulLog': 'Dernier log réussi',
+        'CommittingChanges': 'Enregistrement...',
+        'AuthorizedLocalFolder': 'Dossier local autorisé',
+        'RenameWorkspace': 'Renommer l\'espace de travail ?',
+        'ForceBackupNow': 'Forcer sauvegarde',
+        'Star': 'Important',
+        'Maximize': 'Agrandir',
+        'SystemActions': 'Actions système',
+        'Metadata': 'Métadonnées',
+        'Cancel': 'Annuler',
+        'CommitChanges': 'Enregistrer',
+        'DeleteConfirm': 'Supprimer définitivement ?'
       }
     };
     const lang = settings.language || 'en';
@@ -865,38 +1033,49 @@ export default function App() {
     setIsUndoing(true);
     
     try {
-      // Captured state from history
       const prevState = history[0];
       const newHistory = history.slice(1);
       
-      // Save current state to redo stack
       const currentTasksSnapshot = JSON.parse(JSON.stringify(tasks));
       const currentSettingsSnapshot = JSON.parse(JSON.stringify(settings));
       setRedoStack(prev => [{ tasks: currentTasksSnapshot, settings: currentSettingsSnapshot }, ...prev]);
       
-      const batch = writeBatch(db);
-      
-      // Delete tasks that exist now but not in previous state
-      const prevIds = new Set(prevState.tasks.map(t => t.id));
-      tasks.forEach(t => {
-        if (!prevIds.has(t.id)) {
-          batch.delete(doc(db, 'tasks', t.id));
+      // Handle large batches by splitting
+      const chunk = <T,>(arr: T[], size: number) => {
+        const chunks = [];
+        for (let i = 0; i < arr.length; i += size) {
+          chunks.push(arr.slice(i, i + size));
         }
-      });
+        return chunks;
+      };
+
+      // 1. Delete tasks that exist now but not in previous state
+      const prevIds = new Set(prevState.tasks.map((t: any) => t.id));
+      const tasksToDelete = tasks.filter(t => !prevIds.has(t.id));
+      const deleteChunks = chunk(tasksToDelete, 400);
+      for (const c of deleteChunks) {
+        const b = writeBatch(db);
+        c.forEach(t => b.delete(doc(db, 'tasks', t.id)));
+        await b.commit();
+      }
       
-      // Restore previous state tasks
-      prevState.tasks.forEach(t => {
-        const { id, ...data } = t;
-        batch.set(doc(db, 'tasks', id), data);
-      });
+      // 2. Restore previous state tasks
+      const restoreChunks = chunk(prevState.tasks, 400);
+      for (const c of restoreChunks) {
+        const b = writeBatch(db);
+        c.forEach((t: any) => {
+          const { id, ...data } = t;
+          b.set(doc(db, 'tasks', id), data);
+        });
+        await b.commit();
+      }
       
-      // Restore settings
-      batch.set(doc(db, 'settings', user.uid), {
+      // 3. Restore settings
+      await setDoc(doc(db, 'settings', user.uid), {
         userId: user.uid,
         ...prevState.settings
       });
       
-      await batch.commit();
       setHistory(newHistory);
     } catch (err) {
       console.error("Undo failed details:", err);
@@ -918,26 +1097,38 @@ export default function App() {
       const currentSettingsSnapshot = JSON.parse(JSON.stringify(settings));
       setHistory(prev => [{ tasks: currentTasksSnapshot, settings: currentSettingsSnapshot }, ...prev]);
       
-      const batch = writeBatch(db);
-      
-      const nextIds = new Set(nextState.tasks.map(t => t.id));
-      tasks.forEach(t => {
-        if (!nextIds.has(t.id)) {
-          batch.delete(doc(db, 'tasks', t.id));
+      const chunk = <T,>(arr: T[], size: number) => {
+        const chunks = [];
+        for (let i = 0; i < arr.length; i += size) {
+          chunks.push(arr.slice(i, i + size));
         }
-      });
+        return chunks;
+      };
+
+      const nextIds = new Set(nextState.tasks.map((t: any) => t.id));
+      const tasksToDelete = tasks.filter(t => !nextIds.has(t.id));
+      const deleteChunks = chunk(tasksToDelete, 400);
+      for (const c of deleteChunks) {
+        const b = writeBatch(db);
+        c.forEach(t => b.delete(doc(db, 'tasks', t.id)));
+        await b.commit();
+      }
       
-      nextState.tasks.forEach(t => {
-        const { id, ...data } = t;
-        batch.set(doc(db, 'tasks', id), data);
-      });
+      const restoreChunks = chunk(nextState.tasks, 400);
+      for (const c of restoreChunks) {
+        const b = writeBatch(db);
+        c.forEach((t: any) => {
+          const { id, ...data } = t;
+          b.set(doc(db, 'tasks', id), data);
+        });
+        await b.commit();
+      }
       
-      batch.set(doc(db, 'settings', user.uid), {
+      await setDoc(doc(db, 'settings', user.uid), {
         userId: user.uid,
         ...nextState.settings
       });
       
-      await batch.commit();
       setRedoStack(newRedoStack);
     } catch (err) {
       console.error("Redo failed details:", err);
@@ -2101,6 +2292,15 @@ export default function App() {
                   {t('Dashboard')}
                 </button>
                 <button 
+                  onClick={() => setViewMode('calendar')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-tighter transition-all",
+                    viewMode === 'calendar' ? "bg-white text-indigo-600 shadow-sm border border-indigo-50" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  {t('Calendar')}
+                </button>
+                <button 
                   onClick={() => setViewMode('archive')}
                   className={cn(
                     "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-tighter transition-all",
@@ -2449,6 +2649,13 @@ export default function App() {
           >
             <Target size={20} />
             <span className="text-[9px] font-bold uppercase tracking-tighter">{t('Focus')}</span>
+          </button>
+          <button 
+            onClick={() => { setViewMode('calendar'); setMobileView('calendar'); }}
+            className={cn("flex flex-col items-center gap-1 transition-colors", viewMode === 'calendar' ? "text-indigo-600" : "text-slate-400")}
+          >
+            <Calendar size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">{t('Calendar')}</span>
           </button>
           <button 
             onClick={() => { setViewMode('archive'); setMobileView('archive'); }}
@@ -3081,6 +3288,13 @@ export default function App() {
                 </div>
               </section>
             </div>
+          ) : viewMode === 'calendar' ? (
+            /* Calendar Mode */
+            <CalendarView 
+              tasks={tasks} 
+              onEdit={setEditingTask} 
+              t={t} 
+            />
           ) : viewMode === 'archive' ? (
             /* Archive Mode */
             <section className="flex flex-col rounded-2xl border p-4 min-h-0 bg-slate-50/50 border-slate-200 h-full overflow-hidden">
@@ -3448,9 +3662,13 @@ export default function App() {
                             const blob = new Blob([getCSVData()], { type: 'text/csv' });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
+                            a.style.display = 'none';
                             a.href = url;
                             a.download = `NavFOR_Log_${userPart}_Manual.csv`;
+                            document.body.appendChild(a);
                             a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
                           }}
                           className="w-full py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
                         >
@@ -3520,11 +3738,11 @@ export default function App() {
                           <p className="font-bold text-slate-900">{t('Language')}</p>
                           <p className="text-xs text-slate-500">{t('SelectLanguageDesc')}</p>
                         </div>
-                        <div className="flex bg-white border border-slate-200 rounded-xl p-1 overflow-hidden shadow-sm w-full sm:w-64 shrink-0 h-11">
+                        <div className="flex bg-white border border-slate-200 rounded-xl p-1 overflow-hidden shadow-sm w-full sm:w-80 shrink-0 h-11">
                           <button 
                             onClick={() => saveSettings({ ...settings, language: 'en' })}
                             className={cn(
-                              "flex-1 py-3 rounded-lg text-xs font-bold transition-all",
+                              "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
                               settings.language === 'en' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
                             )}
                           >
@@ -3533,11 +3751,20 @@ export default function App() {
                           <button 
                             onClick={() => saveSettings({ ...settings, language: 'ja' })}
                             className={cn(
-                              "flex-1 py-3 rounded-lg text-xs font-bold transition-all",
+                              "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
                               settings.language === 'ja' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
                             )}
                           >
                             {t('Japanese')}
+                          </button>
+                          <button 
+                            onClick={() => saveSettings({ ...settings, language: 'fr' })}
+                            className={cn(
+                              "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
+                              settings.language === 'fr' ? "bg-indigo-600 text-white shadow-mdScale" : "text-slate-400 hover:text-indigo-600"
+                            )}
+                          >
+                            {t('French')}
                           </button>
                         </div>
                       </div>
@@ -3989,13 +4216,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
     if (!showMenu) return;
     const handleGlobalClick = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (buttonRef.current && buttonRef.current.contains(target)) return;
-      if (menuRef.current && menuRef.current.contains(target)) return;
-      
+      if ((buttonRef.current && buttonRef.current.contains(target)) ||
+          (menuRef.current && menuRef.current.contains(target))) {
+        return;
+      }
       setShowMenu(false);
     };
-    window.addEventListener('mousedown', handleGlobalClick);
-    return () => window.removeEventListener('mousedown', handleGlobalClick);
+    window.addEventListener('mousedown', handleGlobalClick, true);
+    return () => window.removeEventListener('mousedown', handleGlobalClick, true);
   }, [showMenu]);
 
   if (displayMode === 'compact') {
@@ -4332,6 +4560,518 @@ const TaskCard: React.FC<TaskCardProps> = ({
   );
 };
 
+
+
+function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) => void; t: (key: string) => string }) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [calendarMode, setCalendarMode] = useState<'year' | 'month' | 'week' | 'day'>('month');
+
+  const tasksWithDeadlines = useMemo(() => tasks.filter(t => t.deadline && t.category !== 'Trash'), [tasks]);
+
+  const navigate = (direction: 'prev' | 'next') => {
+    if (calendarMode === 'year') {
+      setCurrentDate(prev => direction === 'prev' ? subYears(prev, 1) : addYears(prev, 1));
+    } else if (calendarMode === 'month') {
+      setCurrentDate(prev => direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1));
+    } else if (calendarMode === 'week') {
+      setCurrentDate(prev => direction === 'prev' ? subWeeks(prev, 1) : addWeeks(prev, 1));
+    } else {
+      setCurrentDate(prev => direction === 'prev' ? subDays(prev, 1) : addDays(prev, 1));
+    }
+  };
+
+  const goToToday = () => setCurrentDate(new Date());
+
+  return (
+    <div className="h-full flex flex-col bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      {/* Calendar Header */}
+      <header className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
+        <div className="flex items-center gap-4">
+          <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+            {(['year', 'month', 'week', 'day'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setCalendarMode(mode)}
+                className={cn(
+                  "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                  calendarMode === mode ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+          <h2 className="text-lg font-black text-slate-800 tabular-nums uppercase tracking-tighter">
+            {calendarMode === 'year' ? format(currentDate, 'yyyy') : 
+             calendarMode === 'month' ? format(currentDate, 'MMMM yyyy') :
+             calendarMode === 'week' ? `Week of ${format(startOfWeek(currentDate), 'MMM d')}` :
+             format(currentDate, 'MMMM d, yyyy')}
+          </h2>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={goToToday}
+            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all uppercase tracking-widest"
+          >
+            Today
+          </button>
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm">
+            <button onClick={() => navigate('prev')} className="p-2 hover:bg-slate-50 text-slate-400 border-r border-slate-100">
+              <ChevronRight className="rotate-180" size={16} />
+            </button>
+            <button onClick={() => navigate('next')} className="p-2 hover:bg-slate-50 text-slate-400">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Calendar Content */}
+      <div className="flex-1 overflow-auto custom-scrollbar">
+        {calendarMode === 'year' && (
+          <YearView currentDate={currentDate} tasks={tasksWithDeadlines} onDateSelect={(d) => { setCurrentDate(d); setCalendarMode('month'); }} onYearChange={setCurrentDate} />
+        )}
+        {calendarMode === 'month' && (
+          <MonthView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} onDateSelect={(d) => { setCurrentDate(d); setCalendarMode('day'); }} onMonthChange={setCurrentDate} />
+        )}
+        {calendarMode === 'week' && (
+          <WeekView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} />
+        )}
+        {calendarMode === 'day' && (
+          <DayView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function YearGrid({ yearDate, tasks, onDateSelect }: { yearDate: Date; tasks: Task[]; onDateSelect: (d: Date) => void; key?: any }) {
+  const year = yearDate.getFullYear();
+  const months = eachMonthOfInterval({
+    start: startOfYear(yearDate),
+    end: endOfYear(yearDate)
+  });
+
+  return (
+    <div className="p-8 border-b border-slate-100" data-year={year.toString()}>
+      <h3 className="text-2xl font-black text-slate-800 mb-8 px-4">{year}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-12">
+        {months.map(month => (
+          <div key={month.toString()} className="space-y-4">
+            <button 
+              onClick={() => onDateSelect(month)}
+              className="text-sm font-black text-indigo-600 uppercase tracking-widest hover:underline"
+            >
+              {format(month, 'MMMM')}
+            </button>
+            <div className="grid grid-cols-7 gap-1 text-[8px] font-bold text-center">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
+                <div key={d} className="text-slate-400">{d}</div>
+              ))}
+              {Array.from({ length: startOfWeek(startOfMonth(month)).getDay() }).map((_, i) => (
+                <div key={`empty-${i}`} />
+              ))}
+              {eachDayOfInterval({
+                start: startOfMonth(month),
+                end: endOfMonth(month)
+              }).map(day => {
+                const dayTasks = tasks.filter(t => isSameDay(t.deadline || 0, day));
+                return (
+                  <div 
+                    key={day.toString()}
+                    className={cn(
+                      "w-6 h-6 flex items-center justify-center rounded-full transition-all cursor-pointer",
+                      dayTasks.length > 5 ? "bg-red-500 text-white" :
+                      dayTasks.length > 2 ? "bg-amber-400 text-slate-800" :
+                      dayTasks.length > 0 ? "bg-indigo-100 text-indigo-600" :
+                      isSameDay(day, new Date()) ? "border border-indigo-500 text-indigo-500" : "text-slate-400 hover:bg-slate-100"
+                    )}
+                    onClick={() => onDateSelect(day)}
+                  >
+                    {format(day, 'd')}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function YearView({ currentDate, tasks, onDateSelect, onYearChange }: { currentDate: Date; tasks: Task[]; onDateSelect: (d: Date) => void; onYearChange: (d: Date) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const ignoreScrollChange = useRef(false);
+  const lastReportedYear = useRef(currentDate.getFullYear().toString());
+
+  const years = useMemo(() => {
+    const list = [];
+    const currentYear = new Date().getFullYear();
+    for (let i = -5; i <= 5; i++) {
+        list.push(new Date(currentYear + i, 0, 1));
+    }
+    return list;
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.3) {
+          const yearStr = entry.target.getAttribute('data-year');
+          if (yearStr && yearStr !== lastReportedYear.current) {
+            lastReportedYear.current = yearStr;
+            const date = new Date(parseInt(yearStr), 0, 1);
+            ignoreScrollChange.current = true;
+            onYearChange(date);
+          }
+        }
+      });
+    }, {
+      root: containerRef.current,
+      threshold: 0.3
+    });
+
+    const yearElements = containerRef.current?.querySelectorAll('[data-year]');
+    yearElements?.forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, [years, onYearChange]);
+
+  React.useLayoutEffect(() => {
+    const currentYear = currentDate.getFullYear().toString();
+    const target = containerRef.current?.querySelector(`[data-year="${currentYear}"]`) as HTMLElement;
+    if (target && containerRef.current) {
+        containerRef.current.scrollTop = target.offsetTop;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (ignoreScrollChange.current) {
+      ignoreScrollChange.current = false;
+      return;
+    }
+    const currentYear = currentDate.getFullYear().toString();
+    if (currentYear === lastReportedYear.current) return;
+
+    const target = containerRef.current?.querySelector(`[data-year="${currentYear}"]`);
+    if (target) {
+        lastReportedYear.current = currentYear;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [currentDate]);
+
+  return (
+    <div ref={containerRef} className="h-full overflow-y-auto custom-scrollbar bg-white">
+      {years.map(yearDate => (
+        <YearGrid 
+            key={yearDate.toString()} 
+            yearDate={yearDate} 
+            tasks={tasks} 
+            onDateSelect={onDateSelect} 
+        />
+      ))}
+    </div>
+  );
+}
+
+function MonthGrid({ monthDate, tasks, onEdit, onDateSelect }: { monthDate: Date; tasks: Task[]; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void; key?: any }) {
+  const weeks = useMemo(() => {
+    const start = startOfWeek(startOfMonth(monthDate));
+    const end = endOfWeek(endOfMonth(monthDate));
+    const allDays = eachDayOfInterval({ start, end });
+    const chunked = [];
+    for (let i = 0; i < allDays.length; i += 7) {
+      chunked.push(allDays.slice(i, i + 7));
+    }
+    return chunked;
+  }, [monthDate]);
+
+  return (
+    <div className="flex flex-col min-w-[700px] mb-8" data-month={format(monthDate, 'yyyy-MM')}>
+      <div className="p-4 bg-slate-50/50 border-y border-slate-100 flex items-center justify-between sticky top-0 z-20 backdrop-blur-sm">
+        <h3 className="text-sm font-black text-indigo-600 uppercase tracking-widest">
+          {format(monthDate, 'MMMM yyyy')}
+        </h3>
+      </div>
+      <div className="flex flex-col border-l border-slate-50">
+        {weeks.map((week, weekIdx) => (
+          <div key={weekIdx} className="grid grid-cols-7 snap-start">
+            {week.map(day => {
+              const dayTasks = tasks.filter(t => isSameDay(t.deadline || 0, day));
+              const isCurrentMonth = isSameMonth(day, monthDate);
+              const isToday = isSameDay(day, new Date());
+
+              return (
+                <div 
+                  key={day.toString()} 
+                  className={cn(
+                    "min-h-[120px] border-b border-r border-slate-50 p-2 flex flex-col gap-1 transition-colors hover:bg-slate-50/20 group",
+                    !isCurrentMonth && "bg-slate-100/10 opacity-30",
+                    isToday && "bg-indigo-50/20"
+                  )}
+                >
+                  <div className="flex justify-between items-center mb-1">
+                    <button 
+                      onClick={() => onDateSelect(day)}
+                      className={cn(
+                        "text-[10px] font-black tabular-nums py-0.5 px-1.5 rounded transition-all",
+                        isToday ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 group-hover:text-slate-600"
+                      )}
+                    >
+                      {format(day, 'd')}
+                    </button>
+                    {dayTasks.length > 0 && (
+                      <span className="text-[8px] font-bold text-indigo-400 opacity-60">
+                        {dayTasks.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
+                    {dayTasks.slice(0, 5).map(task => (
+                      <button
+                        key={task.id}
+                        onClick={(e) => { e.stopPropagation(); onEdit(task); }}
+                        className={cn(
+                          "text-[8px] font-bold text-left px-1.5 py-0.5 rounded border truncate transition-all",
+                          task.isDone ? "opacity-30 line-through bg-slate-100" : 
+                          task.category === 'Urgent' ? "bg-red-50 border-red-100 text-red-700 hover:bg-red-100" :
+                          "bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-white"
+                        )}
+                      >
+                        <span className="opacity-40 font-mono mr-0.5">[{task.project}]</span>
+                        {!task.isAllDay && task.deadline && (
+                          <span className="opacity-60 font-mono mr-1 text-[7px]">{format(task.deadline, 'HH:mm')}</span>
+                        )}
+                        {task.title}
+                      </button>
+                    ))}
+                    {dayTasks.length > 5 && (
+                      <button 
+                        onClick={() => onDateSelect(day)}
+                        className="text-[8px] font-black text-indigo-400 hover:text-indigo-600 text-center py-0.5"
+                      >
+                        + {dayTasks.length - 5}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MonthView({ currentDate, tasks, onEdit, onDateSelect, onMonthChange }: { currentDate: Date; tasks: Task[]; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void; onMonthChange: (d: Date) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const ignoreScrollChange = useRef(false);
+  const lastReportedMonth = useRef(format(currentDate, 'yyyy-MM'));
+
+  const months = useMemo(() => {
+    const list = [];
+    const base = startOfMonth(new Date()); // Always 1 year around real today
+    for (let i = -24; i <= 24; i++) {
+        list.push(addMonths(base, i));
+    }
+    return list;
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.3) {
+          const monthStr = entry.target.getAttribute('data-month');
+          if (monthStr && monthStr !== lastReportedMonth.current) {
+            lastReportedMonth.current = monthStr;
+            const [y, m] = monthStr.split('-').map(Number);
+            const date = new Date(y, m - 1, 1);
+            ignoreScrollChange.current = true;
+            onMonthChange(date);
+          }
+        }
+      });
+    }, {
+      root: containerRef.current,
+      threshold: [0.1, 0.3, 0.5]
+    });
+
+    const monthElements = containerRef.current?.querySelectorAll('[data-month]');
+    monthElements?.forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, [months, onMonthChange]);
+
+  // Initial scroll to current month - use layout for instant positioning
+  React.useLayoutEffect(() => {
+    const currentMonthStr = format(currentDate, 'yyyy-MM');
+    const target = containerRef.current?.querySelector(`[data-month="${currentMonthStr}"]`) as HTMLElement;
+    if (target && containerRef.current) {
+        containerRef.current.scrollTop = target.offsetTop;
+    }
+  }, []); 
+
+  // Sync scroll when currentDate changes from OUTSIDE (header buttons)
+  useEffect(() => {
+    if (ignoreScrollChange.current) {
+      ignoreScrollChange.current = false;
+      return;
+    }
+    
+    const currentMonthStr = format(currentDate, 'yyyy-MM');
+    if (currentMonthStr === lastReportedMonth.current) return;
+
+    const target = containerRef.current?.querySelector(`[data-month="${currentMonthStr}"]`);
+    if (target) {
+        lastReportedMonth.current = currentMonthStr;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [currentDate]);
+
+  return (
+    <div className="h-full flex flex-col min-w-[700px] bg-white">
+      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-30 backdrop-blur-md">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+          <div key={day} className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center border-r border-slate-50 last:border-0">
+            {day}
+          </div>
+        ))}
+      </div>
+      <div ref={containerRef} className="flex-1 overflow-y-auto custom-scrollbar snap-y snap-proximity focus:outline-none">
+        {months.map(month => (
+          <MonthGrid 
+              key={month.toString()} 
+              monthDate={month} 
+              tasks={tasks} 
+              onEdit={onEdit} 
+              onDateSelect={onDateSelect} 
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WeekView({ currentDate, tasks, onEdit }: { currentDate: Date; tasks: Task[]; onEdit: (t: Task) => void }) {
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(currentDate);
+    const end = endOfWeek(currentDate);
+    return eachDayOfInterval({ start, end });
+  }, [currentDate]);
+
+  return (
+    <div className="h-full flex flex-col min-w-[700px]">
+      <div className="grid grid-cols-7 h-full">
+        {weekDays.map(day => {
+          const dayTasks = tasks.filter(t => isSameDay(t.deadline || 0, day));
+          const isToday = isSameDay(day, new Date());
+
+          return (
+            <div key={day.toString()} className={cn(
+              "flex flex-col border-r border-slate-100 last:border-0",
+              isToday && "bg-indigo-50/10"
+            )}>
+              <div className="p-4 border-b border-slate-50 flex flex-col items-center gap-1 bg-slate-50/30">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{format(day, 'EEE')}</span>
+                <span className={cn(
+                  "w-8 h-8 flex items-center justify-center rounded-full text-sm font-black tabular-nums transition-all",
+                  isToday ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "text-slate-800"
+                )}>
+                  {format(day, 'd')}
+                </span>
+              </div>
+              <div className="flex-1 p-3 flex flex-col gap-2 overflow-y-auto custom-scrollbar">
+                {dayTasks.map(task => (
+                  <button
+                    key={task.id}
+                    onClick={() => onEdit(task)}
+                    className={cn(
+                      "p-3 rounded-xl border text-[10px] font-bold text-left transition-all hover:translate-y-[-1px] hover:shadow-md",
+                      task.isDone ? "grayscale opacity-40 bg-slate-100 border-slate-200" : 
+                      task.category === 'Urgent' ? "bg-red-50 border-red-100 text-red-700 shadow-sm shadow-red-100" :
+                      "bg-white border-slate-200 text-slate-700 shadow-sm"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-1 opacity-50 font-mono text-[8px]">
+                      <span>{task.project}</span>
+                      {!task.isAllDay && format(task.deadline!, 'HH:mm')}
+                    </div>
+                    <div className={cn(task.isDone && "line-through")}>
+                      {task.title}
+                    </div>
+                  </button>
+                ))}
+                {dayTasks.length === 0 && (
+                  <div className="flex-1 flex items-center justify-center border-2 border-dashed border-slate-100 rounded-2xl opacity-20">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 rotate-90">Empty</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DayView({ currentDate, tasks, onEdit }: { currentDate: Date; tasks: Task[]; onEdit: (t: Task) => void }) {
+  const dayTasks = tasks.filter(t => isSameDay(t.deadline || 0, currentDate));
+  
+  return (
+    <div className="max-w-4xl mx-auto p-8 lg:p-12">
+      <div className="flex items-center gap-6 mb-12">
+        <div className="w-24 h-24 flex flex-col items-center justify-center bg-indigo-600 text-white rounded-3xl shadow-2xl shadow-indigo-200">
+          <span className="text-xs font-black uppercase tracking-[0.2em] opacity-80">{format(currentDate, 'MMM')}</span>
+          <span className="text-4xl font-black tabular-nums">{format(currentDate, 'd')}</span>
+        </div>
+        <div>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">{format(currentDate, 'EEEE')}</h2>
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">{dayTasks.length} items scheduled</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {dayTasks.sort((a,b) => (a.deadline || 0) - (b.deadline || 0)).map(task => (
+          <button
+            key={task.id}
+            onClick={() => onEdit(task)}
+            className={cn(
+              "w-full flex items-center gap-6 p-6 rounded-3xl border transition-all text-left group",
+              task.isDone ? "grayscale opacity-50 bg-slate-50 border-slate-100 shadow-none" : 
+              "bg-white border-slate-100 hover:border-indigo-300 shadow-sm hover:shadow-xl hover:shadow-indigo-100 hover:translate-x-2"
+            )}
+          >
+            <div className={cn(
+              "w-16 text-xs font-black tabular-nums text-slate-400 py-2 border-r flex items-center justify-center shrink-0",
+              !task.isAllDay && "text-indigo-600"
+            )}>
+              {task.isAllDay ? 'All Day' : format(task.deadline!, 'HH:mm')}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-extrabold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded leading-none shrink-0 truncate max-w-[100px]">
+                  [{task.project}]
+                </span>
+                {task.isStarred && <Star size={12} className="text-amber-500 fill-amber-500" />}
+              </div>
+              <h3 className={cn("text-lg font-bold text-slate-800 leading-tight", task.isDone && "line-through text-slate-400")}>{task.title}</h3>
+              {task.notes && <p className="text-sm text-slate-500 mt-2 line-clamp-1 italic">{task.notes}</p>}
+            </div>
+            <ChevronRight className="text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" size={24} />
+          </button>
+        ))}
+        {dayTasks.length === 0 && (
+          <div className="py-32 flex flex-col items-center justify-center text-slate-200 border-4 border-dashed border-slate-50 rounded-[3rem]">
+            <Calendar size={64} strokeWidth={1} />
+            <p className="mt-4 text-xs font-black uppercase tracking-widest text-slate-400">Clear Schedule</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }: { tasks: Task[]; onClose: () => void; onPick: (ids: string[]) => void; t: (key: string) => string; currentUrgentCount: number; limit: number }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
