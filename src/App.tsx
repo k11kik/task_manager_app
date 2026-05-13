@@ -12,6 +12,7 @@ import {
   Zap, 
   Target, 
   Clock, 
+  ChevronLeft,
   ChevronRight,
   Filter,
   MoreVertical,
@@ -4565,8 +4566,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
   );
 };
 
-
-
 function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) => void; t: (key: string) => string }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarMode, setCalendarMode] = useState<'year' | 'month' | 'week' | 'day'>('month');
@@ -4613,15 +4612,15 @@ function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) =
   return (
     <div className="h-full flex flex-col bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       {/* Calendar Header */}
-      <header className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
-        <div className="flex items-center gap-4">
-          <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+      <header className="p-3 md:p-4 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4 bg-white sticky top-0 z-[60] landscape:flex-row landscape:p-2">
+        <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto landscape:flex-row landscape:gap-2">
+          <div className="flex bg-slate-50 border border-slate-200 rounded-xl p-0.5 md:p-1 shadow-sm w-full sm:w-auto overflow-x-auto no-scrollbar landscape:w-auto">
             {(['year', 'month', 'week', 'day'] as const).map(mode => (
               <button
                 key={mode}
                 onClick={() => setCalendarMode(mode)}
                 className={cn(
-                  "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                  "flex-1 sm:flex-initial px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all",
                   calendarMode === mode ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-400 hover:text-slate-600"
                 )}
               >
@@ -4629,28 +4628,36 @@ function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) =
               </button>
             ))}
           </div>
-          <h2 className="text-lg font-black text-slate-800 tabular-nums uppercase tracking-tighter">
+          <h2 className="hidden md:block text-lg font-black text-slate-800 tabular-nums uppercase tracking-tighter shrink-0 landscape:hidden">
             {calendarMode === 'year' ? format(currentDate, 'yyyy') : 
              calendarMode === 'month' ? format(currentDate, 'MMMM yyyy') :
              calendarMode === 'week' ? `Week of ${format(startOfWeek(currentDate), 'MMM d')}` :
-             format(currentDate, 'MMMM d, yyyy')}
+             format(currentDate, 'MMM d, yyyy')}
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={goToToday}
-            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all uppercase tracking-widest"
-          >
-            Today
-          </button>
-          <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm">
-            <button onClick={() => navigate('prev')} className="p-2 hover:bg-slate-50 text-slate-400 border-r border-slate-100">
-              <ChevronRight className="rotate-180" size={16} />
+        <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-3 landscape:w-auto landscape:gap-2">
+          <h2 className="text-[10px] md:hidden md:text-xs font-black text-slate-800 tabular-nums uppercase tracking-tighter landscape:text-[10px]">
+            {calendarMode === 'year' ? format(currentDate, 'yyyy') : 
+             calendarMode === 'month' ? format(currentDate, 'MMM yyyy') :
+             calendarMode === 'week' ? `W${format(startOfWeek(currentDate), 'w')} ${format(startOfWeek(currentDate), 'MMM d')}` :
+             format(currentDate, 'MMM d, yyyy')}
+          </h2>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={goToToday}
+              className="px-2 md:px-3 py-1 md:py-1.5 bg-white border border-slate-200 rounded-lg text-[9px] md:text-[10px] font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all uppercase tracking-widest"
+            >
+              Today
             </button>
-            <button onClick={() => navigate('next')} className="p-2 hover:bg-slate-50 text-slate-400">
-              <ChevronRight size={16} />
-            </button>
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm">
+              <button onClick={() => navigate('prev')} className="p-1.5 md:p-2 hover:bg-slate-50 text-slate-400 border-r border-slate-100">
+                <ChevronLeft size={14} className="md:w-4 md:h-4" />
+              </button>
+              <button onClick={() => navigate('next')} className="p-1.5 md:p-2 hover:bg-slate-50 text-slate-400">
+                <ChevronRight size={14} className="md:w-4 md:h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -4717,7 +4724,7 @@ const YearGrid = React.memo(({ yearDate, tasksByDate, onDateSelect }: { yearDate
   }, [yearDate]);
 
   return (
-    <div className="p-8 border-b border-slate-100" data-year={year.toString()} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 500px' } as any}>
+    <div className="p-8 border-b border-slate-100" data-year={year.toString()}>
       <h3 className="text-2xl font-black text-slate-800 mb-8 px-4">{year}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-12">
         {monthsData.map(mData => (
@@ -4799,21 +4806,25 @@ function YearView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksBy
   }, [years, onYearChange, scrollContainerRef]);
 
   React.useEffect(() => {
-    // 確実にレンダリングが終わってからスクロールするために
-    const timer = setTimeout(() => {
+    const scrollToTarget = () => {
       const currentYear = currentDate.getFullYear().toString();
       const target = scrollContainerRef.current?.querySelector(`[data-year="${currentYear}"]`) as HTMLElement;
       if (target && scrollContainerRef.current) {
           scrollContainerRef.current.scrollTop = target.offsetTop;
-          // IntersectionObserverの誤作動を防ぐために少し待ってからフラグを立てる
           setTimeout(() => {
             isInitialScrollDone.current = true;
-          }, 100);
-      } else {
-        isInitialScrollDone.current = true;
+          }, 200);
+          return true;
       }
-    }, 50);
-    return () => clearTimeout(timer);
+      return false;
+    };
+
+    // Try immediately after layout
+    if (!scrollToTarget()) {
+      // If failed, try with delay
+      const timer = setTimeout(scrollToTarget, 100);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   useEffect(() => {
@@ -4866,9 +4877,9 @@ const MonthGrid = React.memo(({ monthDate, tasksByDate, onEdit, onDateSelect }: 
   }, [monthDate]);
 
   return (
-    <div className="flex flex-col mb-8" data-month={format(monthDate, 'yyyy-MM')} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 800px' } as any}>
-      <div className="p-4 bg-slate-50 border-y border-slate-100 flex items-center justify-between sticky top-[34px] z-20">
-        <h3 className="text-sm font-black text-indigo-600 uppercase tracking-widest">
+    <div className="flex flex-col mb-8" data-month={format(monthDate, 'yyyy-MM')}>
+      <div className="p-4 bg-slate-50 border-y border-slate-100 flex items-center justify-between sticky top-[34px] z-20 landscape:top-[28px] landscape:p-2">
+        <h3 className="text-sm font-black text-indigo-600 uppercase tracking-widest landscape:text-xs">
           {format(monthDate, 'MMMM yyyy')}
         </h3>
       </div>
@@ -4981,21 +4992,23 @@ function MonthView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksB
   }, [months, onMonthChange, scrollContainerRef]);
 
   React.useEffect(() => {
-    // 確実にレンダリングが終わってからスクロールするために
-    const timer = setTimeout(() => {
+    const scrollToTarget = () => {
       const currentMonthStr = format(currentDate, 'yyyy-MM');
       const target = scrollContainerRef.current?.querySelector(`[data-month="${currentMonthStr}"]`) as HTMLElement;
       if (target && scrollContainerRef.current) {
           scrollContainerRef.current.scrollTop = target.offsetTop;
-          // IntersectionObserverの誤作動を防ぐために少し待ってからフラグを立てる
           setTimeout(() => {
             isInitialScrollDone.current = true;
-          }, 100);
-      } else {
-        isInitialScrollDone.current = true;
+          }, 200);
+          return true;
       }
-    }, 50);
-    return () => clearTimeout(timer);
+      return false;
+    };
+
+    if (!scrollToTarget()) {
+      const timer = setTimeout(scrollToTarget, 100);
+      return () => clearTimeout(timer);
+    }
   }, []); 
 
   useEffect(() => {
@@ -5017,7 +5030,7 @@ function MonthView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksB
 
   return (
     <div className="bg-white min-w-[700px] relative">
-      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50 sticky top-0 z-30">
+      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50 sticky top-0 z-30 landscape:top-0 md:landscape:top-0">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
           <div key={day} className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center border-r border-slate-50 last:border-0">
             {day}
