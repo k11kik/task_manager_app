@@ -118,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.3";
+  const APP_VERSION = "2.5.4";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -445,7 +445,12 @@ export default function App() {
         'SetDailyFocus': "Set Today's Focus",
         'Slots': 'slots',
         'ContextSubtasks': 'Context Subtasks',
-        'UrlPlaceholder': 'URL Placeholder'
+        'UrlPlaceholder': 'URL Placeholder',
+        'TaskDetail': 'Task Detail',
+        'DetailsPlaceholder': 'Task detail... (Cmd/Ctrl+Enter to save)',
+        'Clear': 'Clear',
+        'Pin': 'Pin',
+        'TaskDescription': 'Task Description',
       },
       ja: {
         'Urgent': 'フォーカス',
@@ -547,7 +552,11 @@ export default function App() {
         'Urls': 'リンク',
         'Add': '追加',
         'UrlPlaceholder': 'https://... (Ctrl+Enterで保存)',
+        'TaskDetail': 'タスク内容',
         'AddToFocus': 'ToDoに追加',
+        'TaskDescription': 'タスク内容',
+        'Clear': 'クリア',
+        'Pin': 'ピン留め',
         'SignIn': 'ログイン',
         'LogOut': 'ログアウト',
         'Deadline': '締切',
@@ -704,6 +713,10 @@ export default function App() {
         'Urls': 'Liens',
         'Add': 'Ajouter',
         'UrlPlaceholder': 'https://...',
+        'DetailsPlaceholder': 'Détails de la tâche... (Ctrl+Entrée pour sauver)',
+        'Clear': 'Effacer',
+        'Pin': 'Épingler',
+        'TaskDescription': 'Description de la tâche',
         'AddToFocus': 'Ajouter à ToDo',
         'SignIn': 'Connexion',
         'LogOut': 'Déconnexion',
@@ -5263,7 +5276,7 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 md:p-6">
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -5275,9 +5288,9 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-lg h-full md:h-auto bg-white rounded-none md:rounded-3xl shadow-2xl overflow-hidden"
       >
-        <div className="p-8">
+        <div className="p-6 md:p-8 flex flex-col h-full">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-bold tracking-tight text-orange-600">{t('DailyChoice')}</h2>
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
@@ -5286,7 +5299,7 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
           </div>
           <p className="text-sm text-slate-500 mb-6">{t('ExtractDesc', { n: Math.max(0, remainingSlots) })}</p>
           
-          <div className="max-h-96 overflow-y-auto space-y-2 mb-8 pr-2 custom-scrollbar">
+          <div className="flex-1 md:max-h-96 overflow-y-auto space-y-2 mb-8 pr-2 custom-scrollbar">
             {tasks.map(task => (
               <button
                 key={task.id}
@@ -5350,6 +5363,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   const [isAllDay, setIsAllDay] = useState(task.isAllDay || false);
   const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, task.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm") : '');
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
+  const [showActionsMobile, setShowActionsMobile] = useState(false);
 
   const currentDeadlineTimestamp = useMemo(() => {
     if (!deadline) return 0;
@@ -5423,7 +5437,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 md:p-6">
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -5435,14 +5449,28 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="relative w-full max-w-2xl max-h-[90vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row"
+        className="relative w-full max-w-2xl h-full md:h-auto md:max-h-[90vh] bg-white rounded-none md:rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row"
       >
-        <div className="p-4 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="p-6 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold tracking-tight">Modify Task</h2>
-            <button onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 md:hidden">
-              <X size={20} />
-            </button>
+            <h2 className="text-xl font-bold tracking-tight">{t('TaskDetail')}</h2>
+            <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={() => setShowActionsMobile(true)} 
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 md:hidden"
+                title="System Actions"
+              >
+                <MoreVertical size={20} />
+              </button>
+              <button 
+                type="button"
+                onClick={handleClose} 
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 md:hidden"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -5453,18 +5481,18 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                     {task.project}
                   </span>
                 </div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Task Description</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">{t('TaskDescription')}</label>
                 <textarea 
                   autoFocus
                   className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-lg font-medium outline-none transition-all resize-none h-24"
-                  placeholder="Task detail... (Cmd/Ctrl+Enter to save)"
+                  placeholder={t('DetailsPlaceholder')}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </div>
               <div className="shrink-0 flex items-center gap-2">
                 <div className="flex flex-col items-center gap-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pin</label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Pin')}</label>
                   <button 
                     type="button"
                     onClick={() => setIsPinned(!isPinned)}
@@ -5554,7 +5582,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
                       onClick={() => setDeadline('')}
                       className="text-[10px] font-bold text-red-500 hover:underline"
                     >
-                      Clear
+                      {t('Clear')}
                     </button>
                   )}
                 </div>
@@ -5638,10 +5666,25 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
         </div>
 
         {/* Sidebar Actions */}
-        <div className="bg-slate-50 p-6 md:p-8 w-full md:w-64 border-l border-slate-100 flex flex-col overflow-y-auto custom-scrollbar pb-24 md:pb-8">
+        <div className={cn(
+          "bg-slate-50 p-6 md:p-8 w-full md:w-64 border-l border-slate-100 flex flex-col overflow-y-auto custom-scrollbar pb-24 md:pb-8 transition-transform duration-300",
+          "fixed inset-x-0 bottom-0 top-[60px] z-20 md:relative md:inset-auto md:top-auto md:z-auto",
+          showActionsMobile ? "translate-y-0" : "translate-y-full md:translate-y-0"
+        )}>
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t('SystemActions')}</h3>
-            <button onClick={handleClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hidden md:flex">
+            <button 
+              type="button"
+              onClick={() => setShowActionsMobile(false)} 
+              className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 md:hidden"
+            >
+              <X size={20} />
+            </button>
+            <button 
+              type="button"
+              onClick={handleClose} 
+              className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hidden md:flex"
+            >
               <X size={20} />
             </button>
           </div>
@@ -5733,7 +5776,7 @@ function MemoModal({ value, onChange, onSave, onClose }: { value: string; onChan
   }, [onSave, onClose]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-0 md:p-4">
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -5749,7 +5792,7 @@ function MemoModal({ value, onChange, onSave, onClose }: { value: string; onChan
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-4xl h-[85vh] sm:h-[80vh] bg-white rounded-3xl overflow-hidden flex flex-col shadow-2xl"
+        className="relative w-full max-w-4xl h-full md:h-[85vh] sm:md:h-[80vh] bg-white rounded-none md:rounded-3xl overflow-hidden flex flex-col shadow-2xl"
       >
         <div className="flex items-center justify-between p-6 bg-slate-50 border-b border-slate-100">
           <div className="flex items-center gap-3">
