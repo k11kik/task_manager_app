@@ -75,6 +75,7 @@ import {
   endOfYear,
   eachMonthOfInterval
 } from 'date-fns';
+import { ja, fr, enUS } from 'date-fns/locale';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
 import { auth, db, signIn, logOut } from './lib/firebase';
@@ -117,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.2";
+  const APP_VERSION = "2.5.3";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -396,6 +397,12 @@ export default function App() {
         'ProjectFilter': 'Project Filter',
         'SyncActive': 'Sync Active',
         'SyncOff': 'Sync Off',
+        'Today': 'Today',
+        'WeekOf': 'Week of',
+        'year': 'Year',
+        'month': 'Month',
+        'week': 'Week',
+        'day': 'Day',
         'AddToFocus': 'Add ToDo',
         'SyncAndBackup': 'Sync & Backup',
         'LocalFolderLog': 'Local Folder Log',
@@ -558,9 +565,15 @@ export default function App() {
         'Syncing': '同期中...',
         'SyncActive': '同期有効',
         'BackupNeeded': '要バックアップ',
+        'Today': '今日',
+        'WeekOf': '週:',
         'BackedUp': 'バックアップ済み',
         'SyncOff': '同期オフ',
         'SyncOffUppercase': '同期オフ',
+        'year': '年',
+        'month': '月',
+        'week': '週',
+        'day': '日',
         'AutomatedSyncStatus': '自動同期ステータス',
         'LastSuccessfulLog': '最終ログ保存',
         'CommittingChanges': '保存中...',
@@ -613,7 +626,7 @@ export default function App() {
         'Extract': 'Extraire',
         'SystemArchive': 'Archives Système',
         'TaskEntry': 'Nouvelle tâche',
-        'WorkflowHealth': 'État d\'avancement',
+        'WorkflowHealth': 'État de travail',
         'Status': 'Statut',
         'DoneToday': 'Terminé aujourd\'hui',
         'Authenticated': 'Authentifié',
@@ -701,9 +714,15 @@ export default function App() {
         'Syncing': 'Synchronisation...',
         'SyncActive': 'Synchro Active',
         'BackupNeeded': 'Sauvegarde requise',
+        'Today': "Aujourd'hui",
+        'WeekOf': 'Semaine du',
         'BackedUp': 'Sauvegardé',
         'SyncOff': 'Synchro Off',
         'SyncOffUppercase': 'SYNCHRO OFF',
+        'year': 'Année',
+        'month': 'Mois',
+        'week': 'Semaine',
+        'day': 'Jour',
         'AutomatedSyncStatus': 'Statut Synchro Auto',
         'LastSuccessfulLog': 'Dernier log réussi',
         'CommittingChanges': 'Enregistrement...',
@@ -1143,6 +1162,22 @@ export default function App() {
       setTimeout(() => setIsUndoing(false), 500);
     }
   };
+
+  const dateLocale = useMemo(() => {
+    if (settings.language === 'ja') return ja;
+    if (settings.language === 'fr') return fr;
+    return enUS;
+  }, [settings.language]);
+
+  const searchAndProjectFilteredTasks = useMemo(() => {
+    return tasks.filter(t => {
+      const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           t.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (t.notes || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesProject = selectedProject === 'All' ? true : (t.project === selectedProject);
+      return matchesSearch && matchesProject;
+    });
+  }, [tasks, searchTerm, selectedProject]);
 
   const filteredTasks = useMemo(() => {
     return tasks
@@ -2414,8 +2449,8 @@ export default function App() {
                   </button>
                   {showProjectFilter && (
                     <>
-                      <div className="fixed inset-0 z-[55]" onClick={() => setShowProjectFilter(false)} />
-                      <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
+                      <div className="fixed inset-0 z-[65]" onClick={() => setShowProjectFilter(false)} />
+                      <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[70] py-2 overflow-hidden">
                         <div className="px-4 py-1.5 border-b border-slate-50 mb-1">
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">{t('FilterByProject')}</p>
                         </div>
@@ -2551,8 +2586,8 @@ export default function App() {
                   </button>
                   {showProjectFilter && (
                     <>
-                      <div className="fixed inset-0 z-[55]" onClick={() => setShowProjectFilter(false)} />
-                      <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] py-2 overflow-hidden">
+                      <div className="fixed inset-0 z-[65]" onClick={() => setShowProjectFilter(false)} />
+                      <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[70] py-2 overflow-hidden">
                         <div className="px-4 py-1.5 border-b border-slate-50 mb-1">
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">{t('FilterByProject')}</p>
                         </div>
@@ -3297,9 +3332,10 @@ export default function App() {
           ) : viewMode === 'calendar' ? (
             /* Calendar Mode */
             <CalendarView 
-              tasks={tasks} 
+              tasks={searchAndProjectFilteredTasks} 
               onEdit={setEditingTask} 
               t={t} 
+              locale={dateLocale}
             />
           ) : viewMode === 'archive' ? (
             /* Archive Mode */
@@ -4207,10 +4243,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
       
       setOpenUpwards(spaceBelow < 250); 
       
-      if (rect.left < 300) {
+      if (spaceRight >= 180) { // w-44 is 176px, adding a small buffer
         setOpenToRight(true);
-      } else if (spaceRight < 200) {
-        setOpenToRight(false);
       } else {
         setOpenToRight(false);
       }
@@ -4566,7 +4600,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   );
 };
 
-function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) => void; t: (key: string) => string }) {
+function CalendarView({ tasks, onEdit, t, locale }: { tasks: Task[]; onEdit: (t: Task) => void; t: (key: string) => string; locale: any }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarMode, setCalendarMode] = useState<'year' | 'month' | 'week' | 'day'>('month');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -4624,31 +4658,31 @@ function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) =
                   calendarMode === mode ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-400 hover:text-slate-600"
                 )}
               >
-                {mode}
+                {t(mode)}
               </button>
             ))}
           </div>
           <h2 className="hidden md:block text-lg font-black text-slate-800 tabular-nums uppercase tracking-tighter shrink-0 landscape:hidden">
-            {calendarMode === 'year' ? format(currentDate, 'yyyy') : 
-             calendarMode === 'month' ? format(currentDate, 'MMMM yyyy') :
-             calendarMode === 'week' ? `Week of ${format(startOfWeek(currentDate), 'MMM d')}` :
-             format(currentDate, 'MMM d, yyyy')}
+            {calendarMode === 'year' ? format(currentDate, 'yyyy', { locale }) : 
+             calendarMode === 'month' ? format(currentDate, 'MMMM yyyy', { locale }) :
+             calendarMode === 'week' ? `${t('WeekOf')} ${format(startOfWeek(currentDate, { locale }), 'MMM d', { locale })}` :
+             format(currentDate, 'PPP', { locale })}
           </h2>
         </div>
 
         <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-3 landscape:w-auto landscape:gap-2">
           <h2 className="text-[10px] md:hidden md:text-xs font-black text-slate-800 tabular-nums uppercase tracking-tighter landscape:text-[10px]">
-            {calendarMode === 'year' ? format(currentDate, 'yyyy') : 
-             calendarMode === 'month' ? format(currentDate, 'MMM yyyy') :
-             calendarMode === 'week' ? `W${format(startOfWeek(currentDate), 'w')} ${format(startOfWeek(currentDate), 'MMM d')}` :
-             format(currentDate, 'MMM d, yyyy')}
+            {calendarMode === 'year' ? format(currentDate, 'yyyy', { locale }) : 
+             calendarMode === 'month' ? format(currentDate, 'MMM yyyy', { locale }) :
+             calendarMode === 'week' ? `W${format(startOfWeek(currentDate, { locale }), 'w', { locale })} ${format(startOfWeek(currentDate, { locale }), 'MMM d', { locale })}` :
+             format(currentDate, 'MMM d, yyyy', { locale })}
           </h2>
           <div className="flex items-center gap-2">
             <button 
               onClick={goToToday}
               className="px-2 md:px-3 py-1 md:py-1.5 bg-white border border-slate-200 rounded-lg text-[9px] md:text-[10px] font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all uppercase tracking-widest"
             >
-              Today
+              {t('Today')}
             </button>
             <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm">
               <button onClick={() => navigate('prev')} className="p-1.5 md:p-2 hover:bg-slate-50 text-slate-400 border-r border-slate-100">
@@ -4672,6 +4706,7 @@ function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) =
             tasksByDate={tasksByDate} 
             onDateSelect={(d) => { setCurrentDate(d); setCalendarMode('month'); }} 
             onYearChange={setCurrentDate} 
+            locale={locale}
           />
         )}
         {calendarMode === 'month' && (
@@ -4683,20 +4718,21 @@ function CalendarView({ tasks, onEdit, t }: { tasks: Task[]; onEdit: (t: Task) =
             onEdit={onEdit} 
             onDateSelect={(d) => { setCurrentDate(d); setCalendarMode('day'); }} 
             onMonthChange={setCurrentDate} 
+            locale={locale}
           />
         )}
         {calendarMode === 'week' && (
-          <WeekView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} />
+          <WeekView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} locale={locale} />
         )}
         {calendarMode === 'day' && (
-          <DayView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} />
+          <DayView currentDate={currentDate} tasks={tasksWithDeadlines} onEdit={onEdit} locale={locale} />
         )}
       </div>
     </div>
   );
 }
 
-const YearGrid = React.memo(({ yearDate, tasksByDate, onDateSelect }: { yearDate: Date; tasksByDate: Record<string, Task[]>; onDateSelect: (d: Date) => void }) => {
+const YearGrid = React.memo(({ yearDate, tasksByDate, onDateSelect, locale }: { yearDate: Date; tasksByDate: Record<string, Task[]>; onDateSelect: (d: Date) => void; locale: any }) => {
   const year = yearDate.getFullYear();
   const monthsData = useMemo(() => {
     const months = eachMonthOfInterval({
@@ -4716,12 +4752,17 @@ const YearGrid = React.memo(({ yearDate, tasksByDate, onDateSelect }: { yearDate
       }));
       return {
         month,
-        monthName: format(month, 'MMMM'),
-        emptyDays: startOfWeek(startOfMonth(month)).getDay(),
+        monthName: format(month, 'MMMM', { locale }),
+        emptyDays: startOfWeek(startOfMonth(month), { locale }).getDay(),
         days
       };
     });
-  }, [yearDate]);
+  }, [yearDate, locale]);
+
+  const weekdays = useMemo(() => {
+    const start = startOfWeek(new Date(), { locale });
+    return Array.from({ length: 7 }).map((_, i) => format(addDays(start, i), 'EEEEE', { locale }));
+  }, [locale]);
 
   return (
     <div className="p-8 border-b border-slate-100" data-year={year.toString()}>
@@ -4736,8 +4777,8 @@ const YearGrid = React.memo(({ yearDate, tasksByDate, onDateSelect }: { yearDate
               {mData.monthName}
             </button>
             <div className="grid grid-cols-7 gap-1 text-[8px] font-bold text-center">
-              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
-                <div key={d} className="text-slate-400">{d}</div>
+              {weekdays.map((d, idx) => (
+                <div key={`${d}-${idx}`} className="text-slate-400">{d}</div>
               ))}
               {Array.from({ length: mData.emptyDays }).map((_, i) => (
                 <div key={`empty-${i}`} />
@@ -4768,7 +4809,7 @@ const YearGrid = React.memo(({ yearDate, tasksByDate, onDateSelect }: { yearDate
   );
 });
 
-function YearView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksByDate, onDateSelect, onYearChange }: { scrollContainerRef: React.RefObject<HTMLDivElement>; ignoreScrollChange: React.RefObject<boolean>; currentDate: Date; tasksByDate: Record<string, Task[]>; onDateSelect: (d: Date) => void; onYearChange: (d: Date) => void }) {
+function YearView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksByDate, onDateSelect, onYearChange, locale }: { scrollContainerRef: React.RefObject<HTMLDivElement>; ignoreScrollChange: React.RefObject<boolean>; currentDate: Date; tasksByDate: Record<string, Task[]>; onDateSelect: (d: Date) => void; onYearChange: (d: Date) => void; locale: any }) {
   const lastReportedYear = useRef(currentDate.getFullYear().toString());
   const isInitialScrollDone = useRef(false);
 
@@ -4851,16 +4892,17 @@ function YearView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksBy
             yearDate={yearDate} 
             tasksByDate={tasksByDate} 
             onDateSelect={onDateSelect} 
+            locale={locale}
         />
       ))}
     </div>
   );
 }
 
-const MonthGrid = React.memo(({ monthDate, tasksByDate, onEdit, onDateSelect }: { monthDate: Date; tasksByDate: Record<string, Task[]>; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void }) => {
+const MonthGrid = React.memo(({ monthDate, tasksByDate, onEdit, onDateSelect, locale }: { monthDate: Date; tasksByDate: Record<string, Task[]>; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void; locale: any }) => {
   const weeks = useMemo(() => {
-    const start = startOfWeek(startOfMonth(monthDate));
-    const end = endOfWeek(endOfMonth(monthDate));
+    const start = startOfWeek(startOfMonth(monthDate), { locale });
+    const end = endOfWeek(endOfMonth(monthDate), { locale });
     const allDays = eachDayOfInterval({ start, end });
     const chunked = [];
     for (let i = 0; i < allDays.length; i += 7) {
@@ -4874,13 +4916,13 @@ const MonthGrid = React.memo(({ monthDate, tasksByDate, onEdit, onDateSelect }: 
       chunked.push(week);
     }
     return chunked;
-  }, [monthDate]);
+  }, [monthDate, locale]);
 
   return (
     <div className="flex flex-col mb-8" data-month={format(monthDate, 'yyyy-MM')}>
       <div className="p-4 bg-slate-50 border-y border-slate-100 flex items-center justify-between sticky top-[34px] z-20 landscape:top-[28px] landscape:p-2">
         <h3 className="text-sm font-black text-indigo-600 uppercase tracking-widest landscape:text-xs">
-          {format(monthDate, 'MMMM yyyy')}
+          {format(monthDate, 'MMMM yyyy', { locale })}
         </h3>
       </div>
       <div className="flex flex-col border-l border-slate-50">
@@ -4953,7 +4995,7 @@ const MonthGrid = React.memo(({ monthDate, tasksByDate, onEdit, onDateSelect }: 
   );
 });
 
-function MonthView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksByDate, onEdit, onDateSelect, onMonthChange }: { scrollContainerRef: React.RefObject<HTMLDivElement>; ignoreScrollChange: React.RefObject<boolean>; currentDate: Date; tasksByDate: Record<string, Task[]>; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void; onMonthChange: (d: Date) => void }) {
+function MonthView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksByDate, onEdit, onDateSelect, onMonthChange, locale }: { scrollContainerRef: React.RefObject<HTMLDivElement>; ignoreScrollChange: React.RefObject<boolean>; currentDate: Date; tasksByDate: Record<string, Task[]>; onEdit: (t: Task) => void; onDateSelect: (d: Date) => void; onMonthChange: (d: Date) => void; locale: any }) {
   const isInitialScrollDone = useRef(false);
   const lastReportedMonth = useRef(format(currentDate, 'yyyy-MM'));
 
@@ -5031,11 +5073,14 @@ function MonthView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksB
   return (
     <div className="bg-white min-w-[700px] relative">
       <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50 sticky top-0 z-30 landscape:top-0 md:landscape:top-0">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center border-r border-slate-50 last:border-0">
-            {day}
-          </div>
-        ))}
+        {Array.from({ length: 7 }).map((_, i) => {
+          const dayName = format(addDays(startOfWeek(new Date(), { locale }), i), 'eee', { locale });
+          return (
+            <div key={i} className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center border-r border-slate-50 last:border-0">
+              {dayName}
+            </div>
+          );
+        })}
       </div>
       <div className="relative">
         {months.map(month => (
@@ -5045,6 +5090,7 @@ function MonthView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksB
               tasksByDate={tasksByDate} 
               onEdit={onEdit} 
               onDateSelect={onDateSelect} 
+              locale={locale}
           />
         ))}
       </div>
@@ -5052,12 +5098,12 @@ function MonthView({ scrollContainerRef, ignoreScrollChange, currentDate, tasksB
   );
 }
 
-function WeekView({ currentDate, tasks, onEdit }: { currentDate: Date; tasks: Task[]; onEdit: (t: Task) => void }) {
+function WeekView({ currentDate, tasks, onEdit, locale }: { currentDate: Date; tasks: Task[]; onEdit: (t: Task) => void; locale: any }) {
   const weekDays = useMemo(() => {
-    const start = startOfWeek(currentDate);
-    const end = endOfWeek(currentDate);
+    const start = startOfWeek(currentDate, { locale });
+    const end = endOfWeek(currentDate, { locale });
     return eachDayOfInterval({ start, end });
-  }, [currentDate]);
+  }, [currentDate, locale]);
 
   return (
     <div className="h-full flex flex-col min-w-[700px]">
@@ -5072,7 +5118,7 @@ function WeekView({ currentDate, tasks, onEdit }: { currentDate: Date; tasks: Ta
               isToday && "bg-indigo-50/10"
             )}>
               <div className="p-4 border-b border-slate-50 flex flex-col items-center gap-1 bg-slate-50/30">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{format(day, 'EEE')}</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{format(day, 'EEE', { locale })}</span>
                 <span className={cn(
                   "w-8 h-8 flex items-center justify-center rounded-full text-sm font-black tabular-nums transition-all",
                   isToday ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "text-slate-800"
@@ -5115,18 +5161,18 @@ function WeekView({ currentDate, tasks, onEdit }: { currentDate: Date; tasks: Ta
   );
 }
 
-function DayView({ currentDate, tasks, onEdit }: { currentDate: Date; tasks: Task[]; onEdit: (t: Task) => void }) {
+function DayView({ currentDate, tasks, onEdit, locale }: { currentDate: Date; tasks: Task[]; onEdit: (t: Task) => void; locale: any }) {
   const dayTasks = tasks.filter(t => isSameDay(t.deadline || 0, currentDate));
   
   return (
     <div className="max-w-4xl mx-auto p-8 lg:p-12">
       <div className="flex items-center gap-6 mb-12">
         <div className="w-24 h-24 flex flex-col items-center justify-center bg-indigo-600 text-white rounded-3xl shadow-2xl shadow-indigo-200">
-          <span className="text-xs font-black uppercase tracking-[0.2em] opacity-80">{format(currentDate, 'MMM')}</span>
+          <span className="text-xs font-black uppercase tracking-[0.2em] opacity-80">{format(currentDate, 'MMM', { locale })}</span>
           <span className="text-4xl font-black tabular-nums">{format(currentDate, 'd')}</span>
         </div>
         <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">{format(currentDate, 'EEEE')}</h2>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">{format(currentDate, 'EEEE', { locale })}</h2>
           <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">{dayTasks.length} items scheduled</p>
         </div>
       </div>
