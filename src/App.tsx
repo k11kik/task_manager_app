@@ -308,7 +308,7 @@ export default function App() {
     sections: []
   });
 
-  const t = (key: string) => {
+  const t = (key: string, data?: Record<string, string | number>) => {
     const translations: Record<string, Record<string, string>> = {
       en: {
         'Urgent': 'Focus',
@@ -426,6 +426,8 @@ export default function App() {
         'ArchiveTask': 'Archive Task',
         'MoveToTrash': 'Move to Trash',
         'DeletePermanently': 'Delete Permanently',
+        'General': 'General',
+        'WorkspaceLabel': 'workspace',
         'Metadata': 'Metadata',
         'Cancel': 'Cancel',
         'CommitChanges': 'Commit Changes',
@@ -433,9 +435,15 @@ export default function App() {
         'ProjectCode': 'Project Code',
         'SafeCapacityUppercase': 'SAFE CAPACITY',
         'GeneralProjectOverview': 'General Project Overview',
-        'ProjectOverview': ' Project Overview',
+        'ProjectOverview': 'Project Overview',
         'NoTasks': 'No tasks found.',
         'SyncOffUppercase': 'SYNC OFF',
+        'DailyChoice': 'Daily Choice',
+        'ExtractDesc': 'Select up to {n} priority tasks from ToDo to move to Focus.',
+        'ExtractLimitAlert': 'You can only add {n} more task(s) to Focus.',
+        'NoFocusTasks': 'No tasks in ToDo list.',
+        'SetDailyFocus': "Set Today's Focus",
+        'Slots': 'slots',
         'ContextSubtasks': 'Context Subtasks',
         'UrlPlaceholder': 'URL Placeholder'
       },
@@ -514,11 +522,14 @@ export default function App() {
         'ArchiveTask': 'アーカイブする',
         'MoveToTrash': 'ゴミ箱へ移動',
         'DeletePermanently': '完全に削除',
+        'General': '一般',
+        'WorkspaceLabel': 'ワークスペース',
         'SelectLanguageDesc': 'インターフェースの表示言語を設定します。',
         'GlobalLoad': '全体の負荷',
         'CriticalLoad': 'CRITICAL LOAD',
         'WarningHighLoad': 'HIGH LOAD',
         'SafeCapacity': 'SAFE CAPACITY',
+        'GeneralProjectOverview': 'プロジェクト概況',
         'ProjectOverview': 'のプロジェクト概況',
         'Total': '件',
         'Slots': '最大枠',
@@ -586,7 +597,12 @@ export default function App() {
         'Metadata': 'メタデータ',
         'Cancel': 'キャンセル',
         'CommitChanges': '変更を保存',
-        'DeleteConfirm': 'このタスクを完全に削除しますか？'
+        'DeleteConfirm': 'このタスクを完全に削除しますか？',
+        'DailyChoice': '本日の抽出',
+        'ExtractDesc': 'ToDoから最大 {n} 件の優先タスクを選択して、フォーカスに移動します。',
+        'ExtractLimitAlert': 'フォーカスにはあと {n} 件しか追加できません。',
+        'NoFocusTasks': 'ToDoリストにタスクがありません。',
+        'SetDailyFocus': '本日のフォーカスを設定',
       },
       fr: {
         'Urgent': 'Focus',
@@ -663,12 +679,15 @@ export default function App() {
         'ArchiveTask': 'Archiver la tâche',
         'MoveToTrash': 'Mettre à la corbeille',
         'DeletePermanently': 'Supprimer définitivement',
+        'General': 'Général',
+        'WorkspaceLabel': 'workspace',
         'SelectLanguageDesc': 'Choisissez votre langue d\'interface.',
         'GlobalLoad': 'Charge globale',
         'CriticalLoad': 'CHARGE CRITIQUE',
         'WarningHighLoad': 'CHARGE ÉLEVÉE',
         'SafeCapacity': 'CAPACITÉ SÛRE',
-        'ProjectOverview': ' Aperçu du projet',
+        'GeneralProjectOverview': 'Aperçu général du projet',
+        'ProjectOverview': 'Aperçu du projet',
         'Total': 'Total',
         'Slots': 'Slots',
         'SyncToCloud': 'Synchro Cloud',
@@ -735,11 +754,22 @@ export default function App() {
         'Metadata': 'Métadonnées',
         'Cancel': 'Annuler',
         'CommitChanges': 'Enregistrer',
-        'DeleteConfirm': 'Supprimer définitivement ?'
+        'DeleteConfirm': 'Supprimer définitivement ?',
+        'DailyChoice': 'Choix quotidien',
+        'ExtractDesc': 'Sélectionnez jusqu\'à {n} tâches prioritaires de ToDo pour les déplacer vers Focus.',
+        'ExtractLimitAlert': 'Vous ne pouvez ajouter que {n} tâche(s) supplémentaire(s) à Focus.',
+        'NoFocusTasks': 'Aucune tâche dans la liste ToDo.',
+        'SetDailyFocus': 'Fixer le Focus du jour',
       }
     };
     const lang = settings.language || 'en';
-    return translations[lang]?.[key] || key;
+    let text = translations[lang]?.[key] || key;
+    if (data) {
+      Object.entries(data).forEach(([k, v]) => {
+        text = text.replace(`{${k}}`, String(v));
+      });
+    }
+    return text;
   };
 
   const handleFirestoreError = (err: unknown, operationType: OperationType, path: string | null) => {
@@ -2208,7 +2238,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header Navigation */}
-      <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex justify-between items-center shrink-0">
+      <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex justify-between items-center shrink-0 relative z-[100]">
         {/* Left Side: Logo & Workspace Menu */}
         <div className="flex items-center gap-4 md:gap-8">
           <div className="relative">
@@ -2979,7 +3009,7 @@ export default function App() {
           {/* Project Distribution Analysis */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 shrink-0 overflow-hidden">
             <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <Activity size={12} /> {activeSection}{t('ProjectOverview')}
+              <Activity size={12} /> {t('GeneralProjectOverview')} ({activeSection} {t('WorkspaceLabel')})
             </h2>
             <div className="space-y-3">
               {(Object.entries(stats.projectStats) as [string, { urgent: number, focus: number, archive: number, trash: number }][])
@@ -4370,8 +4400,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   top: openUpwards ? 'auto' : (buttonRef.current?.getBoundingClientRect().bottom || 0) + 4,
                   bottom: openUpwards ? window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0) + 4 : 'auto',
                   left: openToRight 
-                    ? (buttonRef.current?.getBoundingClientRect().left || 0) 
-                    : (buttonRef.current?.getBoundingClientRect().right || 0) - 176,
+                    ? Math.max(8, (buttonRef.current?.getBoundingClientRect().left || 0)) 
+                    : Math.min(window.innerWidth - 184, (buttonRef.current?.getBoundingClientRect().right || 0) - 176),
                 }}
               >
                   {variant !== 'Urgent' && (
@@ -4395,7 +4425,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </button>
                   ) : (
                     <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
-                      <Trash2 size={12} className="text-red-400" /> Delete Permanently
+                      <Trash2 size={12} className="text-red-400" /> {t('DeletePermanently')}
                     </button>
                   )}
                 </div>,
@@ -4560,8 +4590,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   top: openUpwards ? 'auto' : (buttonRef.current?.getBoundingClientRect().bottom || 0) + 4,
                   bottom: openUpwards ? window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0) + 4 : 'auto',
                   left: openToRight 
-                    ? (buttonRef.current?.getBoundingClientRect().left || 0) 
-                    : (buttonRef.current?.getBoundingClientRect().right || 0) - 176,
+                    ? Math.max(8, (buttonRef.current?.getBoundingClientRect().left || 0)) 
+                    : Math.min(window.innerWidth - 184, (buttonRef.current?.getBoundingClientRect().right || 0) - 176),
                 }}
               >
                   {variant !== 'Urgent' && (
@@ -4585,7 +4615,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </button>
                   ) : (
                     <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
-                      <Trash2 size={12} className="text-red-400" /> Delete Permanently
+                      <Trash2 size={12} className="text-red-400" /> {t('DeletePermanently')}
                     </button>
                   )}
                 </div>,
@@ -4644,15 +4674,15 @@ function CalendarView({ tasks, onEdit, t, locale }: { tasks: Task[]; onEdit: (t:
   return (
     <div className="h-full flex flex-col bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       {/* Calendar Header */}
-      <header className="p-3 md:p-4 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4 bg-white sticky top-0 z-[60] landscape:flex-row landscape:p-2">
-        <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto landscape:flex-row landscape:gap-2">
-          <div className="flex bg-slate-50 border border-slate-200 rounded-xl p-0.5 md:p-1 shadow-sm w-full sm:w-auto overflow-x-auto no-scrollbar landscape:w-auto">
+      <header className="p-2 md:p-4 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-2 md:gap-4 bg-white sticky top-0 z-[60] landscape:flex-row landscape:p-1.5 landscape:gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-2 md:gap-4 w-full md:w-auto landscape:flex-row landscape:gap-2">
+          <div className="flex bg-slate-50 border border-slate-200 rounded-xl p-0.5 md:p-1 shadow-sm w-full sm:w-auto overflow-x-auto no-scrollbar landscape:w-auto landscape:p-0.5">
             {(['year', 'month', 'week', 'day'] as const).map(mode => (
               <button
                 key={mode}
                 onClick={() => setCalendarMode(mode)}
                 className={cn(
-                  "flex-1 sm:flex-initial px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all",
+                  "flex-1 sm:flex-initial px-2 md:px-4 py-1 md:py-1.5 rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all landscape:px-3 landscape:py-1",
                   calendarMode === mode ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-400 hover:text-slate-600"
                 )}
               >
@@ -4660,7 +4690,7 @@ function CalendarView({ tasks, onEdit, t, locale }: { tasks: Task[]; onEdit: (t:
               </button>
             ))}
           </div>
-          <h2 className="hidden md:block text-lg font-black text-slate-800 tabular-nums uppercase tracking-tighter shrink-0 landscape:hidden">
+          <h2 className="hidden md:block text-lg font-black text-slate-800 tabular-nums uppercase tracking-tighter shrink-0 landscape:block landscape:text-sm">
             {calendarMode === 'year' ? format(currentDate, 'yyyy', { locale }) : 
              calendarMode === 'month' ? format(currentDate, 'MMMM yyyy', { locale }) :
              calendarMode === 'week' ? `${t('WeekOf')} ${format(startOfWeek(currentDate, { locale }), 'MMM d', { locale })}` :
@@ -4668,26 +4698,26 @@ function CalendarView({ tasks, onEdit, t, locale }: { tasks: Task[]; onEdit: (t:
           </h2>
         </div>
 
-        <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-3 landscape:w-auto landscape:gap-2">
-          <h2 className="text-[10px] md:hidden md:text-xs font-black text-slate-800 tabular-nums uppercase tracking-tighter landscape:text-[10px]">
+        <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-2 md:gap-3 landscape:w-auto landscape:gap-2">
+          <h2 className="text-[9px] md:hidden md:text-sm font-black text-slate-800 tabular-nums uppercase tracking-tighter landscape:hidden">
             {calendarMode === 'year' ? format(currentDate, 'yyyy', { locale }) : 
              calendarMode === 'month' ? format(currentDate, 'MMM yyyy', { locale }) :
              calendarMode === 'week' ? `W${format(startOfWeek(currentDate, { locale }), 'w', { locale })} ${format(startOfWeek(currentDate, { locale }), 'MMM d', { locale })}` :
              format(currentDate, 'MMM d, yyyy', { locale })}
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2">
             <button 
               onClick={goToToday}
-              className="px-2 md:px-3 py-1 md:py-1.5 bg-white border border-slate-200 rounded-lg text-[9px] md:text-[10px] font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all uppercase tracking-widest"
+              className="px-1.5 md:px-3 py-1 md:py-1.5 bg-white border border-slate-200 rounded-lg text-[8px] md:text-[10px] font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all uppercase tracking-widest landscape:px-2 landscape:py-1"
             >
               {t('Today')}
             </button>
             <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm">
-              <button onClick={() => navigate('prev')} className="p-1.5 md:p-2 hover:bg-slate-50 text-slate-400 border-r border-slate-100">
-                <ChevronLeft size={14} className="md:w-4 md:h-4" />
+              <button onClick={() => navigate('prev')} className="p-1 md:p-2 hover:bg-slate-50 text-slate-400 border-r border-slate-100 landscape:p-1">
+                <ChevronLeft size={12} className="md:w-4 md:h-4" />
               </button>
-              <button onClick={() => navigate('next')} className="p-1.5 md:p-2 hover:bg-slate-50 text-slate-400">
-                <ChevronRight size={14} className="md:w-4 md:h-4" />
+              <button onClick={() => navigate('next')} className="p-1 md:p-2 hover:bg-slate-50 text-slate-400 landscape:p-1">
+                <ChevronRight size={12} className="md:w-4 md:h-4" />
               </button>
             </div>
           </div>
@@ -5216,7 +5246,7 @@ function DayView({ currentDate, tasks, onEdit, locale }: { currentDate: Date; ta
   );
 }
 
-function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }: { tasks: Task[]; onClose: () => void; onPick: (ids: string[]) => void; t: (key: string) => string; currentUrgentCount: number; limit: number }) {
+function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }: { tasks: Task[]; onClose: () => void; onPick: (ids: string[]) => void; t: (key: string, data?: any) => string; currentUrgentCount: number; limit: number }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const remainingSlots = limit - currentUrgentCount;
 
@@ -5225,7 +5255,7 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
       setSelectedIds(selectedIds.filter(i => i !== id));
     } else {
       if (selectedIds.length >= remainingSlots) {
-        alert(`You can only add ${remainingSlots} more task(s) to Urgent.`);
+        alert(t('ExtractLimitAlert', { n: remainingSlots }));
         return;
       }; 
       setSelectedIds([...selectedIds, id]);
@@ -5249,12 +5279,12 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
       >
         <div className="p-8">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-bold tracking-tight text-orange-600">Daily Choice</h2>
+            <h2 className="text-xl font-bold tracking-tight text-orange-600">{t('DailyChoice')}</h2>
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
               <X size={20} />
             </button>
           </div>
-          <p className="text-sm text-slate-500 mb-6">Select <span className="font-bold text-orange-600">up to {Math.max(0, remainingSlots)}</span> priority tasks from Focus to move to Urgent.</p>
+          <p className="text-sm text-slate-500 mb-6">{t('ExtractDesc', { n: Math.max(0, remainingSlots) })}</p>
           
           <div className="max-h-96 overflow-y-auto space-y-2 mb-8 pr-2 custom-scrollbar">
             {tasks.map(task => (
@@ -5286,14 +5316,14 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
             {tasks.length === 0 && (
               <div className="text-center py-12 text-slate-400">
                 <Target size={40} className="mx-auto mb-4 opacity-20" />
-                <p className="text-sm font-medium">No tasks in Focus list.</p>
+                <p className="text-sm font-medium">{t('NoFocusTasks')}</p>
               </div>
             )}
           </div>
 
           <div className="flex items-center justify-between gap-4">
             <div className="text-sm font-medium text-slate-500">
-              <span className="text-orange-600 font-bold">{selectedIds.length}</span> / {remainingSlots} slots
+              <span className="text-orange-600 font-bold">{selectedIds.length}</span> / {remainingSlots} {t('Slots')}
             </div>
             <button 
               onClick={() => onPick(selectedIds)}
@@ -5301,7 +5331,7 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
               className="px-6 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 disabled:opacity-50 transition-all active:scale-95 shadow-xl shadow-orange-100 flex items-center gap-2"
             >
               <Zap size={18} />
-              Set Today's Focus
+              {t('SetDailyFocus')}
             </button>
           </div>
         </div>
@@ -5309,6 +5339,7 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
     </div>
   );
 }
+
 
 function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: Task; onClose: () => void; onSave: (updates: Partial<Task>) => void; onMove: (cat: Category) => void; onDelete: () => void; t: (key: string) => string }) {
   const [title, setTitle] = useState(task.title);
