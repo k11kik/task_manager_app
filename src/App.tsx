@@ -668,7 +668,7 @@ export default function App() {
         'CriticalLoad': 'CHARGE CRITIQUE',
         'WarningHighLoad': 'CHARGE ÉLEVÉE',
         'SafeCapacity': 'CAPACITÉ SÛRE',
-        'ProjectOverview': 'Aperçu du projet',
+        'ProjectOverview': ' Aperçu du projet',
         'Total': 'Total',
         'Slots': 'Slots',
         'SyncToCloud': 'Synchro Cloud',
@@ -688,7 +688,7 @@ export default function App() {
         'AddToFocus': 'Ajouter à ToDo',
         'SignIn': 'Connexion',
         'LogOut': 'Déconnexion',
-        'Deadline': 'Échéance',
+        'Deadline': 'Date limite',
         'Never': 'Jamais',
         'NeverCleanup': 'Pas de nettoyage',
         'AutoArchiveSweep': 'Balayage automatique Archive',
@@ -4153,9 +4153,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mt-8 border-t border-slate-100 flex items-center py-4">
-                  <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest italic">System state synced successfully</p>
-                </div>
+
               </section>
             )}
           </motion.div>
