@@ -118,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.4";
+  const APP_VERSION = "2.5.5";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -446,7 +446,6 @@ export default function App() {
         'Slots': 'slots',
         'ContextSubtasks': 'Context Subtasks',
         'UrlPlaceholder': 'URL Placeholder',
-        'TaskDetail': 'Task Detail',
         'DetailsPlaceholder': 'Task detail... (Cmd/Ctrl+Enter to save)',
         'Clear': 'Clear',
         'Pin': 'Pin',
@@ -552,7 +551,6 @@ export default function App() {
         'Urls': 'リンク',
         'Add': '追加',
         'UrlPlaceholder': 'https://... (Ctrl+Enterで保存)',
-        'TaskDetail': 'タスク内容',
         'AddToFocus': 'ToDoに追加',
         'TaskDescription': 'タスク内容',
         'Clear': 'クリア',
@@ -713,7 +711,6 @@ export default function App() {
         'Urls': 'Liens',
         'Add': 'Ajouter',
         'UrlPlaceholder': 'https://...',
-        'DetailsPlaceholder': 'Détails de la tâche... (Ctrl+Entrée pour sauver)',
         'Clear': 'Effacer',
         'Pin': 'Épingler',
         'TaskDescription': 'Description de la tâche',
@@ -1445,10 +1442,18 @@ export default function App() {
     if (!task) return;
     try {
       pushToHistory();
-      await updateDoc(doc(db, 'tasks', id), { 
-        isDone: !task.isDone, 
+      const isBecomingDone = !task.isDone;
+      const updates: any = { 
+        isDone: isBecomingDone, 
         updatedAt: Date.now() 
-      });
+      };
+
+      // Auto-move from Focus (Urgent) to ToDo (Focus) if checked
+      if (isBecomingDone && task.category === 'Urgent') {
+        updates.category = 'Focus';
+      }
+
+      await updateDoc(doc(db, 'tasks', id), updates);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `tasks/${id}`);
     }
