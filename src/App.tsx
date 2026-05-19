@@ -118,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.5";
+  const APP_VERSION = "2.5.6";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -997,21 +997,24 @@ export default function App() {
     // Current workspace filter
     const isInActiveSection = (t: Task) => t.section === activeSection || (!t.section && activeSection === settings.sections[0]);
     
-    // Global metrics (Urgent + Focus)
-    const priorityTasks = tasks.filter(t => (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone);
+    // Global metrics (Urgent + Focus) - include done tasks as requested to match overview total counts
+    const priorityTasks = tasks.filter(t => (t.category === 'Focus' || t.category === 'Urgent'));
     const combinedCount = priorityTasks.length;
     
-    const urgentCount = tasks.filter(t => t.category === 'Urgent').length;
+    const urgentCount = tasks.filter(t => t.category === 'Urgent' && !t.isDone).length;
     const activeTasksCount = tasks.filter(t => (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone).length;
     
-    // Per-section metrics (Urgent + Focus active vs Total in section)
+    // Per-section metrics (Urgent, Focus, Archive and Total in section)
     const sectionMetrics = settings.sections.reduce((acc, sec, idx) => {
+      const sectionTasks = tasks.filter(t => (t.section === sec || (!t.section && idx === 0)));
       acc[sec] = {
-        focus: tasks.filter(t => (t.section === sec || (!t.section && idx === 0)) && (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone).length,
-        total: tasks.filter(t => (t.section === sec || (!t.section && idx === 0))).length
+        urgent: sectionTasks.filter(t => t.category === 'Urgent').length,
+        focus: sectionTasks.filter(t => t.category === 'Focus').length,
+        archive: sectionTasks.filter(t => t.category === 'Archive').length,
+        total: sectionTasks.length
       };
       return acc;
-    }, {} as Record<string, { focus: number, total: number }>);
+    }, {} as Record<string, { urgent: number, focus: number, archive: number, total: number }>);
     
     const warningThreshold = Math.floor(settings.criticalThreshold * 0.7);
     let gaugeColor = 'bg-indigo-400';
@@ -1040,7 +1043,7 @@ export default function App() {
     let approachingCount = 0;
     
     priorityTasks.forEach(t => {
-      if (t.deadline) {
+      if (t.deadline && !t.isDone) {
         if (t.deadline < now) {
           expiredCount++;
         } else if (t.deadline - now <= settings.deadlineThreshold * 86400000) {
@@ -2982,10 +2985,23 @@ export default function App() {
                       )}>
                         {sec}
                       </span>
-                      <div className="flex gap-2 font-mono">
-                        <span className="text-white">{stats.sectionMetrics[sec]?.focus || 0}</span>
-                        <span className="opacity-30">/</span>
-                        <span className="opacity-40">{stats.sectionMetrics[sec]?.total || 0}</span>
+                      <div className="flex items-center gap-2 font-mono text-[9px]">
+                        <div className="flex items-center gap-1 bg-rose-500/20 px-1.5 py-0.5 rounded" title="Focus">
+                          <span className="text-rose-300/80">Focus:</span>
+                          <span className="font-bold text-white">{stats.sectionMetrics[sec]?.urgent || 0}</span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-cyan-500/20 px-1.5 py-0.5 rounded" title="ToDo">
+                          <span className="text-cyan-300/80">ToDo:</span>
+                          <span className="font-bold text-white">{stats.sectionMetrics[sec]?.focus || 0}</span>
+                        </div>
+                        <span className="opacity-20 ml-0.5">|</span>
+                        <div className="flex items-center gap-1 ml-0.5" title="Active / Total">
+                          <div className="bg-slate-700/60 px-1.5 py-0.5 rounded">
+                            <span className="text-white font-bold">{(stats.sectionMetrics[sec]?.urgent || 0) + (stats.sectionMetrics[sec]?.focus || 0)}</span>
+                          </div>
+                          <span className="opacity-40">/</span>
+                          <span className="opacity-40">{stats.sectionMetrics[sec]?.total || 0}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
