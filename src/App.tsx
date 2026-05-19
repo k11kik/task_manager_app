@@ -997,9 +997,9 @@ export default function App() {
     // Current workspace filter
     const isInActiveSection = (t: Task) => t.section === activeSection || (!t.section && activeSection === settings.sections[0]);
     
-    // Global metrics (Urgent + Focus) - include done tasks as requested to match overview total counts
+    // Global metrics (Urgent + Focus) - include all for threshold comparison but count active for load
     const priorityTasks = tasks.filter(t => (t.category === 'Focus' || t.category === 'Urgent'));
-    const combinedCount = priorityTasks.length;
+    const combinedCount = priorityTasks.filter(t => !t.isDone).length;
     
     const urgentCount = tasks.filter(t => t.category === 'Urgent' && !t.isDone).length;
     const activeTasksCount = tasks.filter(t => (t.category === 'Focus' || t.category === 'Urgent') && !t.isDone).length;
@@ -1008,9 +1008,9 @@ export default function App() {
     const sectionMetrics = settings.sections.reduce((acc, sec, idx) => {
       const sectionTasks = tasks.filter(t => (t.section === sec || (!t.section && idx === 0)));
       acc[sec] = {
-        urgent: sectionTasks.filter(t => t.category === 'Urgent').length,
-        focus: sectionTasks.filter(t => t.category === 'Focus').length,
-        archive: sectionTasks.filter(t => t.category === 'Archive').length,
+        urgent: sectionTasks.filter(t => t.category === 'Urgent' && !t.isDone).length,
+        focus: sectionTasks.filter(t => t.category === 'Focus' && !t.isDone).length,
+        archive: sectionTasks.filter(t => t.category === 'Archive' && !t.isDone).length,
         total: sectionTasks.length
       };
       return acc;
@@ -1060,10 +1060,10 @@ export default function App() {
       if (!projectStats[t.project]) {
         projectStats[t.project] = { urgent: 0, focus: 0, archive: 0, trash: 0 };
       }
-      if (t.category === 'Urgent') projectStats[t.project].urgent++;
-      else if (t.category === 'Focus') projectStats[t.project].focus++;
-      else if (t.category === 'Archive') projectStats[t.project].archive++;
-      else if (t.category === 'Trash') projectStats[t.project].trash++;
+      if (t.category === 'Urgent' && !t.isDone) projectStats[t.project].urgent++;
+      else if (t.category === 'Focus' && !t.isDone) projectStats[t.project].focus++;
+      else if (t.category === 'Archive' && !t.isDone) projectStats[t.project].archive++;
+      else if (t.category === 'Trash' && !t.isDone) projectStats[t.project].trash++;
     });
 
     return {
