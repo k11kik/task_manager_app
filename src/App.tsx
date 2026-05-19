@@ -2978,29 +2978,33 @@ export default function App() {
               <div className="space-y-2.5">
                 {settings.sections.map(sec => (
                   <div key={sec} className="flex flex-col gap-1">
-                    <div className="flex justify-between items-center text-[10px]">
-                      <span className={cn(
-                        "font-bold uppercase tracking-tight",
-                        activeSection === sec ? "text-indigo-400" : "text-slate-500"
-                      )}>
-                        {sec}
-                      </span>
-                      <div className="flex items-center gap-2 font-mono text-[9px]">
-                        <div className="flex items-center gap-1 bg-rose-500/20 px-1.5 py-0.5 rounded" title="Focus">
-                          <span className="text-rose-300/80">Focus:</span>
-                          <span className="font-bold text-white">{stats.sectionMetrics[sec]?.urgent || 0}</span>
+                    <div className="flex items-center text-[10px] h-7 gap-2">
+                      <div className="flex-1 min-w-0">
+                        <span className={cn(
+                          "font-bold uppercase tracking-tight truncate block",
+                          activeSection === sec ? "text-indigo-400" : "text-slate-500"
+                        )}>
+                          {sec}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 font-mono text-[8.5px] ml-auto shrink-0">
+                        <div className="flex items-center gap-1 bg-rose-500/15 px-1.5 py-0.5 rounded w-[62px]" title="Focus">
+                          <span className="text-rose-300/80 font-medium font-sans">Focus</span>
+                          <span className="font-bold text-white ml-auto">{stats.sectionMetrics[sec]?.urgent || 0}</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-cyan-500/20 px-1.5 py-0.5 rounded" title="ToDo">
-                          <span className="text-cyan-300/80">ToDo:</span>
-                          <span className="font-bold text-white">{stats.sectionMetrics[sec]?.focus || 0}</span>
+                        <div className="flex items-center gap-1 bg-cyan-500/15 px-1.5 py-0.5 rounded w-[62px]" title="ToDo">
+                          <span className="text-cyan-300/80 font-medium font-sans">ToDo</span>
+                          <span className="font-bold text-white ml-auto">{stats.sectionMetrics[sec]?.focus || 0}</span>
                         </div>
-                        <span className="opacity-20 ml-0.5">|</span>
-                        <div className="flex items-center gap-1 ml-0.5" title="Active / Total">
-                          <div className="bg-slate-700/60 px-1.5 py-0.5 rounded">
+                        <span className="opacity-10">|</span>
+                        <div className="flex items-center gap-1.5" title="Active / Total">
+                          <div className="bg-slate-700/60 px-1.5 py-0.5 rounded w-[38px] flex justify-center">
                             <span className="text-white font-bold">{(stats.sectionMetrics[sec]?.urgent || 0) + (stats.sectionMetrics[sec]?.focus || 0)}</span>
                           </div>
-                          <span className="opacity-40">/</span>
-                          <span className="opacity-40">{stats.sectionMetrics[sec]?.total || 0}</span>
+                          <div className="flex items-center gap-0.5 text-slate-500 min-w-[22px] justify-end">
+                             <span className="opacity-30">/</span>
+                             <span>{stats.sectionMetrics[sec]?.total || 0}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3342,14 +3346,14 @@ export default function App() {
                         <div key={project} className="space-y-2">
                           <button 
                             onClick={() => toggleProjectCollapse(project)}
-                            className="w-full flex items-center gap-4 px-2 hover:opacity-70 transition-opacity"
+                            className="sticky top-0 z-20 w-full flex items-center gap-4 px-2 py-2.5 hover:opacity-90 transition-opacity bg-indigo-50/90 backdrop-blur-md border-b border-indigo-200/50"
                           >
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 bg-white/50 px-2 py-0.5 rounded border border-slate-100 flex items-center gap-1.5">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 bg-white shadow-sm px-2.5 py-1 rounded-lg border border-slate-200 flex items-center gap-1.5">
                               {isCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
                               {project}
                             </h4>
-                            <div className="h-px flex-1 bg-slate-200"></div>
-                            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
+                            <div className="h-px flex-1 bg-indigo-300/30"></div>
+                            <span className="text-[9px] font-bold text-indigo-400 bg-indigo-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
                               {tasks.length} item{tasks.length > 1 ? 's' : ''}
                             </span>
                           </button>
@@ -3513,21 +3517,21 @@ export default function App() {
                     const isCollapsed = collapsedProjects.has(`archive-${project}`);
                     return (
                       <div key={project} className="space-y-3">
-                        <button 
-                          onClick={() => {
-                            const next = new Set(collapsedProjects);
-                            if (next.has(`archive-${project}`)) next.delete(`archive-${project}`);
-                            else next.add(`archive-${project}`);
-                            setCollapsedProjects(next);
-                          }}
-                          className="w-full flex items-center gap-4 px-2 hover:opacity-70 transition-opacity"
-                        >
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 bg-white/50 px-2 py-0.5 rounded border border-slate-100 flex items-center gap-1.5">
+                          <button 
+                            onClick={() => {
+                              const next = new Set(collapsedProjects);
+                              if (next.has(`archive-${project}`)) next.delete(`archive-${project}`);
+                              else next.add(`archive-${project}`);
+                              setCollapsedProjects(next);
+                            }}
+                            className="sticky top-0 z-20 w-full flex items-center gap-4 px-2 py-2.5 hover:opacity-90 transition-opacity bg-slate-50/90 backdrop-blur-md border-b border-slate-200/50"
+                          >
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 bg-white shadow-sm px-2.5 py-1 rounded-lg border border-slate-200 flex items-center gap-1.5">
                             {isCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
                             {project}
                           </h4>
-                          <div className="h-px flex-1 bg-slate-200"></div>
-                          <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">
+                          <div className="h-px flex-1 bg-slate-300/50"></div>
+                          <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
                             {tasks.length} item{tasks.length > 1 ? 's' : ''}
                           </span>
                         </button>
@@ -3686,14 +3690,14 @@ export default function App() {
                             else next.add(`trash-${project}`);
                             setCollapsedProjects(next);
                           }}
-                          className="w-full flex items-center gap-4 px-2 hover:opacity-70 transition-opacity"
+                          className="sticky top-0 z-20 w-full flex items-center gap-4 px-2 py-2.5 hover:opacity-90 transition-opacity bg-red-50/90 backdrop-blur-md border-b border-red-200/50"
                         >
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400 bg-white/50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1.5">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 bg-white shadow-sm px-2.5 py-1 rounded-lg border border-red-200 flex items-center gap-1.5">
                             {isCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
                             {project}
                           </h4>
-                          <div className="h-px flex-1 bg-red-100"></div>
-                          <span className="text-[9px] font-bold text-red-300 uppercase tracking-tighter">
+                          <div className="h-px flex-1 bg-red-300/30"></div>
+                          <span className="text-[9px] font-bold text-red-400 bg-red-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
                             {tasks.length} item{tasks.length > 1 ? 's' : ''}
                           </span>
                         </button>
@@ -4262,6 +4266,7 @@ export default function App() {
             onMove={(newCat) => moveTask(editingTask.id, newCat)}
             onDelete={() => deleteTask(editingTask.id)}
             t={t}
+            projects={projects}
           />
         )}
       </AnimatePresence>
@@ -5375,8 +5380,9 @@ function DailyPickModal({ tasks, onClose, onPick, t, currentUrgentCount, limit }
 }
 
 
-function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: Task; onClose: () => void; onSave: (updates: Partial<Task>) => void; onMove: (cat: Category) => void; onDelete: () => void; t: (key: string) => string }) {
+function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }: { task: Task; onClose: () => void; onSave: (updates: Partial<Task>) => void; onMove: (cat: Category) => void; onDelete: () => void; t: (key: string) => string; projects: string[] }) {
   const [title, setTitle] = useState(task.title);
+  const [project, setProject] = useState(task.project);
   const [notes, setNotes] = useState(task.notes || '');
   const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
   const [isStarred, setIsStarred] = useState(task.isStarred || false);
@@ -5385,6 +5391,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, task.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm") : '');
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
   const [showActionsMobile, setShowActionsMobile] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
 
   const currentDeadlineTimestamp = useMemo(() => {
     if (!deadline) return 0;
@@ -5401,6 +5408,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
   }, [deadline, isAllDay]);
 
   const isDirty = title !== task.title || 
+                  project !== task.project ||
                   notes !== (task.notes || '') || 
                   JSON.stringify(urls.filter(u => u.trim() !== '')) !== JSON.stringify(task.urls || []) ||
                   isStarred !== (task.isStarred || false) ||
@@ -5414,6 +5422,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
       const finalDeadline = currentDeadlineTimestamp || null;
       onSave({ 
         title, 
+        project,
         notes, 
         urls: urls.filter(u => u.trim() !== ''),
         isStarred,
@@ -5497,10 +5506,52 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t }: { task: T
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1 space-y-1.5">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100/50">
-                    {task.project}
-                  </span>
+                <div className="flex items-center gap-2 mb-1 relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowProjectPicker(!showProjectPicker)}
+                    className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100/50 hover:bg-indigo-100 transition-colors flex items-center gap-1"
+                  >
+                    {project}
+                    <ChevronDown size={10} />
+                  </button>
+                  
+                  <AnimatePresence>
+                    {showProjectPicker && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-10" 
+                          onClick={() => setShowProjectPicker(false)}
+                        />
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-xl py-1 z-20 overflow-hidden"
+                        >
+                          <div className="max-h-40 overflow-y-auto custom-scrollbar">
+                            {projects.map(p => (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => {
+                                  setProject(p);
+                                  setShowProjectPicker(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 text-[11px] font-bold hover:bg-slate-50 transition-colors flex items-center justify-between",
+                                  project === p ? "text-indigo-600 bg-indigo-50/50" : "text-slate-600"
+                                )}
+                              >
+                                {p}
+                                {project === p && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
                 </div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">{t('TaskDescription')}</label>
                 <textarea 
