@@ -311,6 +311,8 @@ export default function App() {
   const t = (key: string, data?: Record<string, string | number>) => {
     const translations: Record<string, Record<string, string>> = {
       en: {
+        'Done': 'Done',
+        'TotalLabel': 'Total',
         'Urgent': 'Focus',
         'Focus': 'ToDo',
         'Archive': 'Archive',
@@ -450,8 +452,11 @@ export default function App() {
         'Clear': 'Clear',
         'Pin': 'Pin',
         'TaskDescription': 'Task Description',
+        'LastUpdatedLabel': 'Last updated',
+        'StatusNever': 'Never',
       },
       ja: {
+        'TotalLabel': '計',
         'Urgent': 'フォーカス',
         'Focus': 'ToDo',
         'Archive': 'アーカイブ',
@@ -610,8 +615,11 @@ export default function App() {
         'ExtractLimitAlert': 'フォーカスにはあと {n} 件しか追加できません。',
         'NoFocusTasks': 'ToDoリストにタスクがありません。',
         'SetDailyFocus': '本日のフォーカスを設定',
+        'LastUpdatedLabel': '最終更新',
+        'StatusNever': '未更新',
       },
       fr: {
+        'TotalLabel': 'Total',
         'Urgent': 'Focus',
         'Focus': 'ToDo',
         'Archive': 'Archives',
@@ -770,6 +778,8 @@ export default function App() {
         'ExtractLimitAlert': 'Vous ne pouvez ajouter que {n} tâche(s) supplémentaire(s) à Focus.',
         'NoFocusTasks': 'Aucune tâche dans la liste ToDo.',
         'SetDailyFocus': 'Fixer le Focus du jour',
+        'LastUpdatedLabel': 'Dernière mise à jour',
+        'StatusNever': 'Jamais',
       }
     };
     const lang = settings.language || 'en';
@@ -1055,15 +1065,40 @@ export default function App() {
     const loadPercentage = Math.round(Math.min((combinedCount / settings.criticalThreshold) * 100, 100));
 
     // Project distribution (filtered by active workspace)
-    const projectStats: Record<string, { urgent: number, focus: number, archive: number, trash: number }> = {};
+    const projectStats: Record<string, { 
+      urgent: { todo: number, done: number }, 
+      focus: { todo: number, done: number }, 
+      archive: { todo: number, done: number }, 
+      trash: { todo: number, done: number },
+      total: number,
+      lastUpdated: number
+    }> = {};
+
     tasks.filter(t => isInActiveSection(t)).forEach(t => {
       if (!projectStats[t.project]) {
-        projectStats[t.project] = { urgent: 0, focus: 0, archive: 0, trash: 0 };
+        projectStats[t.project] = { 
+          urgent: { todo: 0, done: 0 }, 
+          focus: { todo: 0, done: 0 }, 
+          archive: { todo: 0, done: 0 }, 
+          trash: { todo: 0, done: 0 },
+          total: 0,
+          lastUpdated: 0
+        };
       }
-      if (t.category === 'Urgent' && !t.isDone) projectStats[t.project].urgent++;
-      else if (t.category === 'Focus' && !t.isDone) projectStats[t.project].focus++;
-      else if (t.category === 'Archive' && !t.isDone) projectStats[t.project].archive++;
-      else if (t.category === 'Trash' && !t.isDone) projectStats[t.project].trash++;
+      
+      const s = projectStats[t.project];
+      s.total++;
+      if ((t.updatedAt || 0) > s.lastUpdated) s.lastUpdated = t.updatedAt || 0;
+
+      if (t.category === 'Urgent') {
+        if (t.isDone) s.urgent.done++; else s.urgent.todo++;
+      } else if (t.category === 'Focus') {
+        if (t.isDone) s.focus.done++; else s.focus.todo++;
+      } else if (t.category === 'Archive') {
+        if (t.isDone) s.archive.done++; else s.archive.todo++;
+      } else if (t.category === 'Trash') {
+        if (t.isDone) s.trash.done++; else s.trash.todo++;
+      }
     });
 
     return {
@@ -2996,13 +3031,13 @@ export default function App() {
                           <span className="text-cyan-300/80 font-medium font-sans">ToDo</span>
                           <span className="font-bold text-white ml-auto">{stats.sectionMetrics[sec]?.focus || 0}</span>
                         </div>
-                        <span className="opacity-10">|</span>
-                        <div className="flex items-center gap-1.5" title="Active / Total">
-                          <div className="bg-slate-700/60 px-1.5 py-0.5 rounded w-[38px] flex justify-center">
+                        <span className="text-slate-500 font-bold ml-1">|</span>
+                        <div className="flex items-center gap-1.5 ml-1" title="Active / Total">
+                          <div className="w-[20px] flex justify-center">
                             <span className="text-white font-bold">{(stats.sectionMetrics[sec]?.urgent || 0) + (stats.sectionMetrics[sec]?.focus || 0)}</span>
                           </div>
-                          <div className="flex items-center gap-0.5 text-slate-500 min-w-[22px] justify-end">
-                             <span className="opacity-30">/</span>
+                          <div className="flex items-center gap-0.5 text-slate-500 min-w-[28px] justify-end">
+                             <span className="font-bold">/</span>
                              <span>{stats.sectionMetrics[sec]?.total || 0}</span>
                           </div>
                         </div>
@@ -3049,28 +3084,57 @@ export default function App() {
             <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <Activity size={12} /> {t('GeneralProjectOverview')} ({activeSection} {t('WorkspaceLabel')})
             </h2>
-            <div className="space-y-3">
-              {(Object.entries(stats.projectStats) as [string, { urgent: number, focus: number, archive: number, trash: number }][])
+            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+              {(Object.entries(stats.projectStats) as [string, any][])
                 .filter(([proj]) => proj !== 'All' && proj.trim() !== '')
-                .sort((a, b) => (b[1].urgent + b[1].focus) - (a[1].urgent + a[1].focus))
-                .slice(0, 10)
-                .map(([proj, counts]) => (
-                <div key={proj} className="space-y-1 group">
-                  <div className="flex justify-between items-center text-[10px] font-bold">
-                    <span className="text-slate-700 truncate max-w-[120px] group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{proj}</span>
-                    <span className="text-slate-400 font-mono text-[9px]">{counts.urgent + counts.focus + counts.archive + counts.trash} {t('Total')}</span>
+                .sort((a, b) => (b[1].urgent.todo + b[1].focus.todo) - (a[1].urgent.todo + a[1].focus.todo))
+                .slice(0, 15)
+                .map(([proj, s]) => (
+                <div key={proj} className="p-3 rounded-xl border border-slate-100 bg-slate-50/30 group hover:border-indigo-100 hover:bg-indigo-50/10 transition-all flex flex-col gap-2">
+                  <div className="flex justify-between items-start">
+                    <div className="min-w-0 pr-2">
+                      <h3 className="text-[11px] font-black uppercase tracking-tight text-slate-700 truncate group-hover:text-indigo-600 transition-colors leading-tight">{proj}</h3>
+                      <p className="text-[8px] text-slate-400 font-medium mt-0.5">{t('LastUpdatedLabel')}: {s.lastUpdated > 0 ? format(s.lastUpdated, 'MM/dd HH:mm') : t('StatusNever')}</p>
+                    </div>
+                    <div className="bg-white px-2 py-0.5 rounded shadow-sm border border-slate-100 shrink-0">
+                      <span className="text-[10px] font-mono font-bold text-slate-500">{s.total} <span className="text-[8px] font-sans font-black opacity-30">{t('TotalLabel')}</span></span>
+                    </div>
                   </div>
-                  <div className="flex h-1 rounded-full overflow-hidden bg-slate-100 shadow-inner">
-                    <div className="bg-red-500 transition-all duration-500" style={{ width: `${(counts.urgent / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
-                    <div className="bg-indigo-500 transition-all duration-500" style={{ width: `${(counts.focus / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
-                    <div className="bg-slate-300 transition-all duration-500" style={{ width: `${(counts.archive / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
-                    <div className="bg-red-200 transition-all duration-500" style={{ width: `${(counts.trash / (counts.urgent + counts.focus + counts.archive + counts.trash || 1)) * 100}%` }} />
+
+                  <div className="grid grid-cols-4 gap-1">
+                    {[
+                      { key: 'Urgent', color: 'rose', data: s.urgent },
+                      { key: 'Focus', color: 'indigo', data: s.focus },
+                      { key: 'Archive', color: 'slate', data: s.archive },
+                      { key: 'Trash', color: 'red', data: s.trash }
+                    ].map(cat => (
+                      <div key={cat.key} className="bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)] p-1.5 rounded-lg border border-slate-100/50 flex flex-col items-center">
+                        <span className={cn("text-[7px] font-black uppercase tracking-[0.05em] mb-1 truncate w-full text-center", 
+                          cat.key === 'Urgent' ? 'text-rose-500' : 
+                          cat.key === 'Focus' ? 'text-indigo-500' : 
+                          cat.key === 'Archive' ? 'text-slate-400' : 'text-red-400'
+                        )}>{t(cat.key)}</span>
+                        <div className="flex flex-col items-center leading-none">
+                          <span className={cn("font-bold text-[10px]", 
+                            cat.data.todo > 0 ? (
+                              cat.key === 'Urgent' ? 'text-rose-600' : 
+                              cat.key === 'Focus' ? 'text-indigo-600' : 
+                              cat.key === 'Archive' ? 'text-slate-500' : 'text-red-600'
+                            ) : "text-slate-200"
+                          )}>{cat.data.todo}</span>
+                          <span className="text-[7px] text-slate-400 mt-0.5 whitespace-nowrap">
+                            ({t('Done')}: {cat.data.done})
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex gap-2 text-[8px] font-black uppercase tracking-tighter opacity-60 group-hover:opacity-100 transition-opacity">
-                    {counts.urgent > 0 && <span className="text-red-600">F:{counts.urgent}</span>}
-                    {counts.focus > 0 && <span className="text-indigo-600">D:{counts.focus}</span>}
-                    {counts.archive > 0 && <span className="text-slate-400">A:{counts.archive}</span>}
-                    {counts.trash > 0 && <span className="text-red-300">T:{counts.trash}</span>}
+
+                  <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                    <div className="bg-rose-500 transition-all duration-700" style={{ width: `${((s.urgent.todo + s.urgent.done) / s.total) * 100}%` }} />
+                    <div className="bg-indigo-500 transition-all duration-700" style={{ width: `${((s.focus.todo + s.focus.done) / s.total) * 100}%` }} />
+                    <div className="bg-slate-300 transition-all duration-700" style={{ width: `${((s.archive.todo + s.archive.done) / s.total) * 100}%` }} />
+                    <div className="bg-red-200 transition-all duration-700" style={{ width: `${((s.trash.todo + s.trash.done) / s.total) * 100}%` }} />
                   </div>
                 </div>
               ))}
