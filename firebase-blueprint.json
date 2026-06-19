@@ -33,7 +33,9 @@
         "criticalThreshold": { "type": "number" },
         "isLocalBackupEnabled": { "type": "boolean" },
         "localBackupPath": { "type": "string" },
-        "language": { "type": "string", "enum": ["en", "ja"] }
+        "language": { "type": "string", "enum": ["en", "ja"] },
+        "archiveDoneToTrashDays": { "type": "number" },
+        "archiveInactiveToTrashDays": { "type": "number" }
       },
       "required": ["userId", "urgentLimit", "archiveThresholdDays", "warningThreshold", "criticalThreshold", "isLocalBackupEnabled", "localBackupPath", "language"]
     }

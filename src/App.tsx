@@ -298,6 +298,8 @@ export default function App() {
     archiveThresholdDays: 30,
     doneToTrashThresholdDays: 7,
     trashCleanupThresholdDays: 30,
+    archiveDoneToTrashDays: 7,
+    archiveInactiveToTrashDays: 90,
     criticalThreshold: 100,
     isLocalBackupEnabled: false,
     localBackupPath: '',
@@ -386,6 +388,11 @@ export default function App() {
         'AutoArchiveSweep': 'Auto Archive Sweep',
         'ArchiveThreshold': 'Archive Threshold',
         'ArchiveThresholdDesc': 'Move items to archive after specified inactivity period.',
+        'ArchiveDoneToTrash': 'Auto-trash completed archive items',
+        'ArchiveDoneToTrashDesc': 'Move completed tasks in archive to trash after specified period.',
+        'ArchiveInactiveToTrash': 'Auto-trash inactive archive items',
+        'ArchiveInactiveToTrashDesc': 'Move inactive tasks in archive to trash after specified period.',
+        'MovingToTrashSoon': 'Moving soon to Trash',
         'SyncToCloud': 'Sync to Cloud',
         'SyncToCloudDesc': 'Sign in to sync across all devices in real-time.',
         'ContinueWithGoogle': 'Continue with Google',
@@ -454,6 +461,8 @@ export default function App() {
         'TaskDescription': 'Task Description',
         'LastUpdatedLabel': 'Last updated',
         'StatusNever': 'Never',
+        'MarkDone': 'Mark as Done',
+        'MarkUndone': 'Mark as ToDo',
       },
       ja: {
         'TotalLabel': '計',
@@ -568,6 +577,11 @@ export default function App() {
         'AutoArchiveSweep': 'アーカイブの自動整理',
         'ArchiveThreshold': 'アーカイブへの移動',
         'ArchiveThresholdDesc': '最後に操作してからアーカイブに移動するまでの期間を設定します。',
+        'ArchiveDoneToTrash': 'アーカイブ内完了タスクのごみ箱移動',
+        'ArchiveDoneToTrashDesc': 'アーカイブ内で完了(Done)にしたタスクを自動でゴミ箱へ移動する期間を設定します。',
+        'ArchiveInactiveToTrash': 'アーカイブ内非アクティブタスクのごみ箱移動',
+        'ArchiveInactiveToTrashDesc': 'アーカイブ内の未完了かつ非アクティブなタスクを自動でゴミ箱へ移動する期間を設定します。',
+        'MovingToTrashSoon': 'もうすぐゴミ箱へ移動',
         'SyncAndBackup': '同期とバックアップ',
         'LocalFolderLog': 'ローカル保存ログ',
         'LocalFolderLogDesc': 'PCへの自動CSVバックアップを有効にします。',
@@ -617,6 +631,8 @@ export default function App() {
         'SetDailyFocus': '本日のフォーカスを設定',
         'LastUpdatedLabel': '最終更新',
         'StatusNever': '未更新',
+        'MarkDone': '完了にする',
+        'MarkUndone': '未完了に戻す',
       },
       fr: {
         'TotalLabel': 'Total',
@@ -731,6 +747,11 @@ export default function App() {
         'AutoArchiveSweep': 'Balayage automatique Archive',
         'ArchiveThreshold': 'Seuil d\'archivage',
         'ArchiveThresholdDesc': 'Déplacer vers les archives après inactivité.',
+        'ArchiveDoneToTrash': 'Mise à la corbeille auto (terminées)',
+        'ArchiveDoneToTrashDesc': 'Déplacer les tâches terminées de l\'archive vers la corbeille après la période spécifiée.',
+        'ArchiveInactiveToTrash': 'Mise à la corbeille auto (inactives)',
+        'ArchiveInactiveToTrashDesc': 'Déplacer les tâches inactives de l\'archive vers la corbeille après la période spécifiée.',
+        'MovingToTrashSoon': 'Bientôt à la corbeille',
         'SyncAndBackup': 'Synchro & Sauvegarde',
         'LocalFolderLog': 'Log dossier local',
         'LocalFolderLogDesc': 'Active la sauvegarde CSV automatique.',
@@ -780,6 +801,8 @@ export default function App() {
         'SetDailyFocus': 'Fixer le Focus du jour',
         'LastUpdatedLabel': 'Dernière mise à jour',
         'StatusNever': 'Jamais',
+        'MarkDone': 'Marquer comme terminé',
+        'MarkUndone': 'Remettre en attente',
       }
     };
     const lang = settings.language || 'en';
@@ -863,6 +886,8 @@ export default function App() {
           archiveThresholdDays: data.archiveThresholdDays || 30,
           doneToTrashThresholdDays: data.doneToTrashThresholdDays || 7,
           trashCleanupThresholdDays: data.trashCleanupThresholdDays || 30,
+          archiveDoneToTrashDays: data.archiveDoneToTrashDays !== undefined ? data.archiveDoneToTrashDays : 7,
+          archiveInactiveToTrashDays: data.archiveInactiveToTrashDays !== undefined ? data.archiveInactiveToTrashDays : 90,
           criticalThreshold: data.criticalThreshold || 100,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
@@ -889,6 +914,8 @@ export default function App() {
           archiveThresholdDays: 30,
           doneToTrashThresholdDays: 7,
           trashCleanupThresholdDays: 30,
+          archiveDoneToTrashDays: 7,
+          archiveInactiveToTrashDays: 90,
           criticalThreshold: 100,
           isLocalBackupEnabled: false,
           localBackupPath: '',
@@ -1337,20 +1364,34 @@ export default function App() {
       return true;
     });
 
+    const isNearingTrash = (t: Task) => {
+      const inactiveDays = differenceInDays(now, t.updatedAt || t.createdAt);
+      const isDoneNearing = t.isDone && settings.archiveDoneToTrashDays !== 99999 && (settings.archiveDoneToTrashDays - inactiveDays <= 3);
+      const isInactiveNearing = settings.archiveInactiveToTrashDays !== 99999 && (settings.archiveInactiveToTrashDays - inactiveDays <= 3);
+      return isDoneNearing || isInactiveNearing;
+    };
+
+    // Special category for items nearing auto-move to trash (3 days)
+    const nearingPurge = archiveTasks
+      .filter(isNearingTrash)
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    const nonNearing = archiveTasks.filter(t => !isNearingTrash(t));
+
     // Separate pinned tasks
-    const pinned = archiveTasks
+    const pinned = nonNearing
       .filter(t => t.isPinned)
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-    const others = archiveTasks.filter(t => !t.isPinned);
+    const others = nonNearing.filter(t => !t.isPinned);
 
     const grouped: Record<string, Task[]> = {};
     others.forEach(t => {
       if (!grouped[t.project]) grouped[t.project] = [];
       grouped[t.project].push(t);
     });
-    return { nearingPurge: [], pinned, grouped };
-  }, [filteredTasks, settings.archiveThresholdDays, archiveFilter]);
+    return { nearingPurge, pinned, grouped };
+  }, [filteredTasks, settings.archiveDoneToTrashDays, settings.archiveInactiveToTrashDays, archiveFilter]);
 
   const groupedTrashTasks = useMemo(() => {
     const now = Date.now();
@@ -2061,6 +2102,75 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [user, tasks, settings.trashCleanupThresholdDays]);
 
+  // Archive Done to Trash Auto-Move Effect
+  useEffect(() => {
+    if (!user || settings.archiveDoneToTrashDays === 99999) return;
+
+    const cleanup = async () => {
+      const now = Date.now();
+      const thresholdMs = settings.archiveDoneToTrashDays * 24 * 60 * 60 * 1000;
+      
+      const tasksToTrash = tasks.filter(t => 
+        t.category === 'Archive' &&
+        t.isDone && 
+        (t.updatedAt || t.createdAt) < (now - thresholdMs)
+      );
+
+      if (tasksToTrash.length > 0) {
+        console.log(`Auto-moving ${tasksToTrash.length} done archive tasks to trash`);
+        try {
+          const batch = writeBatch(db);
+          tasksToTrash.forEach(t => {
+            batch.update(doc(db, 'tasks', t.id), { 
+              category: 'Trash',
+              updatedAt: now 
+            });
+          });
+          await batch.commit();
+        } catch (err) {
+          console.error("Auto-trash archive error", err);
+        }
+      }
+    };
+
+    const timer = setTimeout(cleanup, 11000); // Staggered timer
+    return () => clearTimeout(timer);
+  }, [tasks, settings.archiveDoneToTrashDays, user]);
+
+  // Archive Inactive to Trash Auto-Move Effect
+  useEffect(() => {
+    if (!user || settings.archiveInactiveToTrashDays === 99999) return;
+
+    const cleanup = async () => {
+      const now = Date.now();
+      const thresholdMs = settings.archiveInactiveToTrashDays * 24 * 60 * 60 * 1000;
+      
+      const tasksToTrash = tasks.filter(t => 
+        t.category === 'Archive' &&
+        (t.updatedAt || t.createdAt) < (now - thresholdMs)
+      );
+
+      if (tasksToTrash.length > 0) {
+        console.log(`Auto-moving ${tasksToTrash.length} inactive archive tasks to trash`);
+        try {
+          const batch = writeBatch(db);
+          tasksToTrash.forEach(t => {
+            batch.update(doc(db, 'tasks', t.id), { 
+              category: 'Trash',
+              updatedAt: now 
+            });
+          });
+          await batch.commit();
+        } catch (err) {
+          console.error("Auto-trash inactive archive error", err);
+        }
+      }
+    };
+
+    const timer = setTimeout(cleanup, 13000); // Staggered timer
+    return () => clearTimeout(timer);
+  }, [tasks, settings.archiveInactiveToTrashDays, user]);
+
   const cleanupArchive = async (thresholdDays?: number) => {
     if (!user) return;
     try {
@@ -2207,6 +2317,8 @@ export default function App() {
         archiveThresholdDays: 30,
         doneToTrashThresholdDays: 7,
         trashCleanupThresholdDays: 30,
+        archiveDoneToTrashDays: 7,
+        archiveInactiveToTrashDays: 90,
         criticalThreshold: 100
       };
 
@@ -3541,6 +3653,41 @@ export default function App() {
               </div>
               
               <div className="flex-1 space-y-6 overflow-y-auto overflow-x-visible pr-1 custom-scrollbar pb-24">
+                {groupedArchiveTasks.nearingPurge.length > 0 && (
+                   <div className="space-y-3 mb-8">
+                      <div className="flex items-center gap-4 px-2">
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 bg-orange-50 px-2 py-0.5 rounded border border-orange-100 flex items-center gap-1.5">
+                          <AlertTriangle size={10} />
+                          {t('MovingToTrashSoon')} {"(< 3 days)"}
+                        </h4>
+                        <div className="h-px flex-1 bg-orange-100"></div>
+                      </div>
+                      <div className={cn(
+                        "grid grid-cols-1 gap-2.5",
+                        !isListMode && (settings.displayMode === 'large' ? "md:grid-cols-2" : "md:grid-cols-4")
+                      )}>
+                        <AnimatePresence mode="popLayout">
+                          {groupedArchiveTasks.nearingPurge.map(task => (
+                            <TaskCard 
+                              key={task.id} 
+                              task={task} 
+                              onToggle={() => toggleDone(task.id)}
+                              onMove={(newCat) => moveTask(task.id, newCat)}
+                              onDelete={() => deleteTask(task.id)}
+                              onEdit={() => setEditingTask(task)}
+                              onStar={() => toggleStar(task.id)}
+                              onPin={() => togglePin(task.id)}
+                              t={t}
+                              variant="Archive"
+                              displayMode={settings.displayMode}
+                              deadlineThreshold={settings.deadlineThreshold}
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                )}
+
                 {groupedArchiveTasks.pinned.length > 0 && (
                   <div className="space-y-3 mb-8">
                     <div className="flex items-center gap-4 px-2">
@@ -3629,7 +3776,7 @@ export default function App() {
                     );
                   })
                 ) : (
-                  groupedArchiveTasks.pinned.length === 0 && (
+                  groupedArchiveTasks.pinned.length === 0 && groupedArchiveTasks.nearingPurge.length === 0 && (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300 opacity-40">
                       <ArchiveIcon size={48} strokeWidth={1} />
                       <span className="text-[10px] font-bold mt-2 uppercase tracking-tighter italic">{t('ArchiveEmpty')}</span>
@@ -4097,22 +4244,63 @@ export default function App() {
                       <ArchiveIcon size={18} />
                       <h3 className="font-bold text-sm uppercase tracking-wider">{t('AutoArchiveSweep')}</h3>
                     </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="font-bold text-slate-900">{t('ArchiveThreshold')}</p>
-                        <p className="text-xs text-slate-500">{t('ArchiveThresholdDesc')}</p>
+                    <div className="space-y-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-bold text-slate-900">{t('ArchiveThreshold')}</p>
+                          <p className="text-xs text-slate-500">{t('ArchiveThresholdDesc')}</p>
+                        </div>
+                        <select 
+                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm w-full sm:w-48 shrink-0 h-11"
+                          value={settings.archiveThresholdDays}
+                          onChange={(e) => saveSettings({ archiveThresholdDays: parseInt(e.target.value) })}
+                        >
+                          <option value={7}>7 {t('Days')}</option>
+                          <option value={14}>14 {t('Days')}</option>
+                          <option value={30}>30 {t('Days')}</option>
+                          <option value={90}>90 {t('Days')}</option>
+                          <option value={99999}>{t('Never')}</option>
+                        </select>
                       </div>
-                      <select 
-                        className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm w-full sm:w-48 shrink-0 h-11"
-                        value={settings.archiveThresholdDays}
-                        onChange={(e) => saveSettings({ archiveThresholdDays: parseInt(e.target.value) })}
-                      >
-                        <option value={7}>7 {t('Days')}</option>
-                        <option value={14}>14 {t('Days')}</option>
-                        <option value={30}>30 {t('Days')}</option>
-                        <option value={90}>90 {t('Days')}</option>
-                        <option value={99999}>{t('Never')}</option>
-                      </select>
+
+                      <div className="pt-6 border-t border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-bold text-slate-900">{t('ArchiveDoneToTrash')}</p>
+                          <p className="text-xs text-slate-500">{t('ArchiveDoneToTrashDesc')}</p>
+                        </div>
+                        <select 
+                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm w-full sm:w-48 shrink-0 h-11"
+                          value={settings.archiveDoneToTrashDays !== undefined ? settings.archiveDoneToTrashDays : 7}
+                          onChange={(e) => saveSettings({ archiveDoneToTrashDays: parseInt(e.target.value) })}
+                        >
+                          <option value={1}>1 {t('Days')}</option>
+                          <option value={3}>3 {t('Days')}</option>
+                          <option value={7}>7 {t('Days')}</option>
+                          <option value={14}>14 {t('Days')}</option>
+                          <option value={30}>30 {t('Days')}</option>
+                          <option value={99999}>{t('Never')}</option>
+                        </select>
+                      </div>
+
+                      <div className="pt-6 border-t border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-bold text-slate-900">{t('ArchiveInactiveToTrash')}</p>
+                          <p className="text-xs text-slate-500">{t('ArchiveInactiveToTrashDesc')}</p>
+                        </div>
+                        <select 
+                          className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm w-full sm:w-48 shrink-0 h-11"
+                          value={settings.archiveInactiveToTrashDays !== undefined ? settings.archiveInactiveToTrashDays : 90}
+                          onChange={(e) => saveSettings({ archiveInactiveToTrashDays: parseInt(e.target.value) })}
+                        >
+                          <option value={7}>7 {t('Days')}</option>
+                          <option value={14}>14 {t('Days')}</option>
+                          <option value={30}>30 {t('Days')}</option>
+                          <option value={90}>90 {t('Days')} (3 {t('month')})</option>
+                          <option value={180}>180 {t('Days')}</option>
+                          <option value={365}>365 {t('Days')}</option>
+                          <option value={99999}>{t('Never')}</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -5451,6 +5639,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
   const [urls, setUrls] = useState<string[]>(task.urls && task.urls.length > 0 ? task.urls : ['']);
   const [isStarred, setIsStarred] = useState(task.isStarred || false);
   const [isPinned, setIsPinned] = useState(task.isPinned || false);
+  const [isDone, setIsDone] = useState(task.isDone || false);
   const [isAllDay, setIsAllDay] = useState(task.isAllDay || false);
   const [deadline, setDeadline] = useState(task.deadline ? format(task.deadline, task.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm") : '');
   const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
@@ -5477,6 +5666,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
                   JSON.stringify(urls.filter(u => u.trim() !== '')) !== JSON.stringify(task.urls || []) ||
                   isStarred !== (task.isStarred || false) ||
                   isPinned !== (task.isPinned || false) ||
+                  isDone !== (task.isDone || false) ||
                   isAllDay !== (task.isAllDay || false) ||
                   currentDeadlineTimestamp !== (task.deadline || 0);
 
@@ -5491,6 +5681,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
         urls: urls.filter(u => u.trim() !== ''),
         isStarred,
         isPinned,
+        isDone,
         isAllDay,
         deadline: finalDeadline as any // Using null to clear
       });
@@ -5518,7 +5709,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [title, notes, urls, isStarred, isPinned, deadline, isMemoModalOpen]);
+  }, [title, notes, urls, isStarred, isPinned, isDone, deadline, isMemoModalOpen]);
 
   const addUrlField = () => setUrls([...urls, '']);
   const updateUrlField = (index: number, val: string) => {
@@ -5620,13 +5811,30 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">{t('TaskDescription')}</label>
                 <textarea 
                   autoFocus
-                  className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-lg font-medium outline-none transition-all resize-none h-24"
+                  className={cn(
+                    "w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-lg font-medium outline-none transition-all resize-none h-24",
+                    isDone && "opacity-60 text-slate-400 line-through font-normal"
+                  )}
                   placeholder={t('DetailsPlaceholder')}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </div>
               <div className="shrink-0 flex items-center gap-2">
+                <div className="flex flex-col items-center gap-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Done')}</label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsDone(!isDone)}
+                    className={cn(
+                      "w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all",
+                      isDone ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-slate-50 border-transparent text-slate-300 hover:border-slate-200"
+                    )}
+                    title={isDone ? t('MarkUndone') : t('MarkDone')}
+                  >
+                    <CheckCircle2 size={24} className={isDone ? "fill-blue-500 text-white" : ""} />
+                  </button>
+                </div>
                 <div className="flex flex-col items-center gap-2">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Pin')}</label>
                   <button 
@@ -5826,6 +6034,19 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
           </div>
           
           <div className="space-y-3">
+            <button 
+              type="button"
+              onClick={() => setIsDone(!isDone)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 border rounded-xl text-xs font-bold transition-all shrink-0",
+                isDone 
+                  ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100" 
+                  : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+              )}
+            >
+              <CheckCircle2 size={16} className={cn("shrink-0", isDone ? "text-blue-500 fill-blue-50" : "text-slate-400")} />
+              {isDone ? t('MarkUndone') : t('MarkDone')}
+            </button>
             {task.category !== 'Urgent' && (
               <button 
                 onClick={() => { onMove('Urgent'); handleSubmit(); onClose(); }}
