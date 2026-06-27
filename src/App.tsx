@@ -118,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.7";
+  const APP_VERSION = "2.5.8";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -299,7 +299,7 @@ export default function App() {
     doneToTrashThresholdDays: 7,
     trashCleanupThresholdDays: 30,
     archiveDoneToTrashDays: 7,
-    archiveInactiveToTrashDays: 90,
+    archiveInactiveToTrashDays: 99999,
     criticalThreshold: 100,
     isLocalBackupEnabled: false,
     localBackupPath: '',
@@ -887,7 +887,7 @@ export default function App() {
           doneToTrashThresholdDays: data.doneToTrashThresholdDays || 7,
           trashCleanupThresholdDays: data.trashCleanupThresholdDays || 30,
           archiveDoneToTrashDays: data.archiveDoneToTrashDays !== undefined ? data.archiveDoneToTrashDays : 7,
-          archiveInactiveToTrashDays: data.archiveInactiveToTrashDays !== undefined ? data.archiveInactiveToTrashDays : 90,
+          archiveInactiveToTrashDays: data.archiveInactiveToTrashDays !== undefined ? data.archiveInactiveToTrashDays : 99999,
           criticalThreshold: data.criticalThreshold || 100,
           isLocalBackupEnabled: data.isLocalBackupEnabled || false,
           localBackupPath: data.localBackupPath || '',
@@ -915,7 +915,7 @@ export default function App() {
           doneToTrashThresholdDays: 7,
           trashCleanupThresholdDays: 30,
           archiveDoneToTrashDays: 7,
-          archiveInactiveToTrashDays: 90,
+          archiveInactiveToTrashDays: 99999,
           criticalThreshold: 100,
           isLocalBackupEnabled: false,
           localBackupPath: '',
@@ -2318,7 +2318,7 @@ export default function App() {
         doneToTrashThresholdDays: 7,
         trashCleanupThresholdDays: 30,
         archiveDoneToTrashDays: 7,
-        archiveInactiveToTrashDays: 90,
+        archiveInactiveToTrashDays: 99999,
         criticalThreshold: 100
       };
 
@@ -4289,7 +4289,7 @@ export default function App() {
                         </div>
                         <select 
                           className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm w-full sm:w-48 shrink-0 h-11"
-                          value={settings.archiveInactiveToTrashDays !== undefined ? settings.archiveInactiveToTrashDays : 90}
+                          value={settings.archiveInactiveToTrashDays !== undefined ? settings.archiveInactiveToTrashDays : 99999}
                           onChange={(e) => saveSettings({ archiveInactiveToTrashDays: parseInt(e.target.value) })}
                         >
                           <option value={7}>7 {t('Days')}</option>
