@@ -118,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.8";
+  const APP_VERSION = "2.5.9";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -271,7 +271,7 @@ export default function App() {
   const [lastBackupTime, setLastBackupTime] = useState<number>(() => {
     return Number(localStorage.getItem('trifocus_last_backup')) || 0;
   });
-  const [archiveFilter, setArchiveFilter] = useState<'all' | '1w' | '1m'>('all');
+  const [archiveFilter, setArchiveFilter] = useState<'all' | '1m' | '3m' | '6m' | '1y'>('all');
   const [trashFilter, setTrashFilter] = useState<'all' | '1w' | '2w'>('all');
 
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -377,6 +377,12 @@ export default function App() {
         'SystemState': 'System State',
         'Search': 'Search',
         'All': 'All',
+        'AllItems': 'All Items',
+        'Older1m': '1 Month Ago',
+        'Older3m': '3 Months Ago',
+        'Older6m': '6 Months Ago',
+        'Older1y': '1 Year Ago',
+        'TimeFilter': 'Time Filter',
         'UrgentSlotLimit': 'Focus Slot Limit',
         'MaxConcurrentUrgent': 'Maximum concurrent priority tasks allowed.',
         'CriticalAlertDesc': 'Maximum ToDo tasks before critical alert. Warning is at 70%.',
@@ -527,6 +533,12 @@ export default function App() {
         'SystemState': 'System State',
         'Search': '検索',
         'All': 'すべて',
+        'AllItems': 'すべてのアイテム',
+        'Older1m': '1ヶ月以上前',
+        'Older3m': '3ヶ月以上前',
+        'Older6m': '6ヶ月以上前',
+        'Older1y': '1年以上前',
+        'TimeFilter': '時間フィルター',
         'UrgentSlotLimit': 'フォーカス枠の上限',
         'MaxConcurrentUrgent': '同時に進められる優先タスクの最大数です。',
         'CriticalAlertDesc': 'ToDoタスクの許容量。70%で警告、100%で限界。',
@@ -697,6 +709,12 @@ export default function App() {
         'SystemState': 'État du système',
         'Search': 'Recherche',
         'All': 'Tout',
+        'AllItems': 'Tous les éléments',
+        'Older1m': 'Plus de 1 mois',
+        'Older3m': 'Plus de 3 mois',
+        'Older6m': 'Plus de 6 mois',
+        'Older1y': 'Plus de 1 an',
+        'TimeFilter': 'Filtre de temps',
         'UrgentSlotLimit': 'Limite de slots Focus',
         'MaxConcurrentUrgent': 'Nombre maximum de tâches prioritaires autorisées.',
         'CriticalAlertDesc': 'Nombre maximum de tâches ToDo avant alerte critique. Alerte à 70%.',
@@ -1353,14 +1371,18 @@ export default function App() {
 
   const groupedArchiveTasks = useMemo(() => {
     const now = Date.now();
-    const oneWeek = 7 * 86400000;
     const oneMonth = 30 * 86400000;
+    const threeMonths = 90 * 86400000;
+    const sixMonths = 180 * 86400000;
+    const oneYear = 365 * 86400000;
     
     const archiveTasks = filteredTasks.filter(t => {
       if (t.category !== 'Archive') return false;
       const age = now - (t.updatedAt || t.createdAt);
-      if (archiveFilter === '1w') return age >= oneWeek;
       if (archiveFilter === '1m') return age >= oneMonth;
+      if (archiveFilter === '3m') return age >= threeMonths;
+      if (archiveFilter === '6m') return age >= sixMonths;
+      if (archiveFilter === '1y') return age >= oneYear;
       return true;
     });
 
@@ -2178,8 +2200,10 @@ export default function App() {
       
       let activeThreshold = thresholdDays;
       if (!activeThreshold) {
-        if (archiveFilter === '1w') activeThreshold = 7;
-        else if (archiveFilter === '1m') activeThreshold = 30;
+        if (archiveFilter === '1m') activeThreshold = 30;
+        else if (archiveFilter === '3m') activeThreshold = 90;
+        else if (archiveFilter === '6m') activeThreshold = 180;
+        else if (archiveFilter === '1y') activeThreshold = 365;
       }
       
       const cutoff = activeThreshold ? now - (activeThreshold * 24 * 60 * 60 * 1000) : null;
@@ -3601,16 +3625,26 @@ export default function App() {
                         )}
                       >
                         <Clock size={10} />
-                        {archiveFilter === 'all' ? 'Time Filter' : archiveFilter}
+                        {archiveFilter === 'all' 
+                          ? t('TimeFilter') 
+                          : archiveFilter === '1m' 
+                          ? t('Older1m') 
+                          : archiveFilter === '3m' 
+                          ? t('Older3m') 
+                          : archiveFilter === '6m' 
+                          ? t('Older6m') 
+                          : t('Older1y')}
                       </button>
                       {showCleanupMenu && (
                         <>
                           <div className="fixed inset-0 z-[80]" onClick={() => setShowCleanupMenu(false)} />
                           <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] z-[81] py-1.5 overflow-hidden">
                             {[
-                              { id: 'all', label: 'All Items' },
-                              { id: '1w', label: 'Older 1w' },
-                              { id: '1m', label: 'Older 1m' }
+                              { id: 'all', label: t('AllItems') },
+                              { id: '1m', label: t('Older1m') },
+                              { id: '3m', label: t('Older3m') },
+                              { id: '6m', label: t('Older6m') },
+                              { id: '1y', label: t('Older1y') }
                             ].map(f => (
                               <button
                                 key={f.id}
@@ -5785,7 +5819,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
                           className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-xl py-1 z-20 overflow-hidden"
                         >
                           <div className="max-h-40 overflow-y-auto custom-scrollbar">
-                            {projects.map(p => (
+                            {projects.filter(p => p !== 'All').map(p => (
                               <button
                                 key={p}
                                 type="button"
@@ -6034,19 +6068,6 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
           </div>
           
           <div className="space-y-3">
-            <button 
-              type="button"
-              onClick={() => setIsDone(!isDone)}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 border rounded-xl text-xs font-bold transition-all shrink-0",
-                isDone 
-                  ? "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100" 
-                  : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
-              )}
-            >
-              <CheckCircle2 size={16} className={cn("shrink-0", isDone ? "text-blue-500 fill-blue-50" : "text-slate-400")} />
-              {isDone ? t('MarkUndone') : t('MarkDone')}
-            </button>
             {task.category !== 'Urgent' && (
               <button 
                 onClick={() => { onMove('Urgent'); handleSubmit(); onClose(); }}
