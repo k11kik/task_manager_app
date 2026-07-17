@@ -118,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.9";
+  const APP_VERSION = "2.5.10";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -5768,9 +5768,9 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="relative w-full max-w-2xl h-full md:h-auto md:max-h-[90vh] bg-white rounded-none md:rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row"
+        className="relative w-full max-w-3xl h-full md:h-auto md:max-h-[90vh] bg-white rounded-none md:rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row"
       >
-        <div className="p-6 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="p-6 md:p-8 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold tracking-tight">{t('TaskDetail')}</h2>
             <div className="flex items-center gap-2">
@@ -5793,109 +5793,107 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-1 space-y-1.5">
-                <div className="flex items-center gap-2 mb-1 relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowProjectPicker(!showProjectPicker)}
-                    className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100/50 hover:bg-indigo-100 transition-colors flex items-center gap-1"
-                  >
-                    {project}
-                    <ChevronDown size={10} />
-                  </button>
-                  
-                  <AnimatePresence>
-                    {showProjectPicker && (
-                      <>
-                        <div 
-                          className="fixed inset-0 z-10" 
-                          onClick={() => setShowProjectPicker(false)}
-                        />
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-xl py-1 z-20 overflow-hidden"
-                        >
-                          <div className="max-h-40 overflow-y-auto custom-scrollbar">
-                            {projects.filter(p => p !== 'All').map(p => (
-                              <button
-                                key={p}
-                                type="button"
-                                onClick={() => {
-                                  setProject(p);
-                                  setShowProjectPicker(false);
-                                }}
-                                className={cn(
-                                  "w-full text-left px-3 py-2 text-[11px] font-bold hover:bg-slate-50 transition-colors flex items-center justify-between",
-                                  project === p ? "text-indigo-600 bg-indigo-50/50" : "text-slate-600"
-                                )}
-                              >
-                                {p}
-                                {project === p && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
-                              </button>
-                            ))}
-                          </div>
-                        </motion.div>
-                      </>
-                    )}
-                  </AnimatePresence>
-                </div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">{t('TaskDescription')}</label>
-                <textarea 
-                  autoFocus
-                  className={cn(
-                    "w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-lg font-medium outline-none transition-all resize-none h-24",
-                    isDone && "opacity-60 text-slate-400 line-through font-normal"
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 flex-wrap">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowProjectPicker(!showProjectPicker)}
+                  className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-100/50 hover:bg-indigo-100 transition-colors flex items-center gap-1"
+                >
+                  {project}
+                  <ChevronDown size={10} />
+                </button>
+                
+                <AnimatePresence>
+                  {showProjectPicker && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={() => setShowProjectPicker(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-xl py-1 z-20 overflow-hidden"
+                      >
+                        <div className="max-h-40 overflow-y-auto custom-scrollbar">
+                          {projects.filter(p => p !== 'All').map(p => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => {
+                                setProject(p);
+                                setShowProjectPicker(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-3 py-2 text-[11px] font-bold hover:bg-slate-50 transition-colors flex items-center justify-between",
+                                project === p ? "text-indigo-600 bg-indigo-50/50" : "text-slate-600"
+                              )}
+                            >
+                              {p}
+                              {project === p && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </>
                   )}
-                  placeholder={t('DetailsPlaceholder')}
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
+                </AnimatePresence>
               </div>
-              <div className="shrink-0 flex items-center gap-2">
-                <div className="flex flex-col items-center gap-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Done')}</label>
-                  <button 
-                    type="button"
-                    onClick={() => setIsDone(!isDone)}
-                    className={cn(
-                      "w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all",
-                      isDone ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-slate-50 border-transparent text-slate-300 hover:border-slate-200"
-                    )}
-                    title={isDone ? t('MarkUndone') : t('MarkDone')}
-                  >
-                    <CheckCircle2 size={24} className={isDone ? "fill-blue-500 text-white" : ""} />
-                  </button>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Pin')}</label>
-                  <button 
-                    type="button"
-                    onClick={() => setIsPinned(!isPinned)}
-                    className={cn(
-                      "w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all",
-                      isPinned ? "bg-indigo-50 border-indigo-200 text-indigo-500" : "bg-slate-50 border-transparent text-slate-300 hover:border-slate-200"
-                    )}
-                  >
-                    <Pin size={24} className={cn("rotate-45", isPinned && "fill-indigo-500")} />
-                  </button>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Star')}</label>
-                  <button 
-                    type="button"
-                    onClick={() => setIsStarred(!isStarred)}
-                    className={cn(
-                      "w-12 h-12 rounded-2xl border-2 flex items-center justify-center transition-all",
-                      isStarred ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-slate-50 border-transparent text-slate-300 hover:border-slate-200"
-                    )}
-                  >
-                    <Star size={24} className={isStarred ? "fill-amber-500" : ""} />
-                  </button>
-                </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button 
+                  type="button"
+                  onClick={() => setIsDone(!isDone)}
+                  className={cn(
+                    "h-8 px-2.5 rounded-lg border flex items-center gap-1.5 text-[11px] font-bold transition-all",
+                    isDone ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-slate-50 border-transparent text-slate-400 hover:border-slate-200"
+                  )}
+                  title={isDone ? t('MarkUndone') : t('MarkDone')}
+                >
+                  <CheckCircle2 size={14} className={isDone ? "fill-blue-500 text-white" : ""} />
+                  <span>{t('Done')}</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsPinned(!isPinned)}
+                  className={cn(
+                    "h-8 px-2.5 rounded-lg border flex items-center gap-1.5 text-[11px] font-bold transition-all",
+                    isPinned ? "bg-indigo-50 border-indigo-200 text-indigo-500" : "bg-slate-50 border-transparent text-slate-400 hover:border-slate-200"
+                  )}
+                  title={t('Pin')}
+                >
+                  <Pin size={14} className={cn("rotate-45", isPinned && "fill-indigo-500")} />
+                  <span>{t('Pin')}</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsStarred(!isStarred)}
+                  className={cn(
+                    "h-8 px-2.5 rounded-lg border flex items-center gap-1.5 text-[11px] font-bold transition-all",
+                    isStarred ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-slate-50 border-transparent text-slate-400 hover:border-slate-200"
+                  )}
+                  title={t('Star')}
+                >
+                  <Star size={14} className={isStarred ? "fill-amber-500" : ""} />
+                  <span>{t('Star')}</span>
+                </button>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">{t('TaskDescription')}</label>
+              <textarea 
+                autoFocus
+                className={cn(
+                  "w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-lg font-medium outline-none transition-all resize-none h-28",
+                  isDone && "opacity-60 text-slate-400 line-through font-normal"
+                )}
+                placeholder={t('DetailsPlaceholder')}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
             </div>
 
             <div className="space-y-1.5">
