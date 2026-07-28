@@ -118,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.10";
+  const APP_VERSION = "2.5.11";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -129,7 +129,7 @@ export default function App() {
   const [newTaskNotes, setNewTaskNotes] = useState('');
   const [newTaskUrls, setNewTaskUrls] = useState<string[]>(['']);
   const [newTaskDeadline, setNewTaskDeadline] = useState<string>('');
-  const [isTaskAllDay, setIsTaskAllDay] = useState(false);
+  const [isTaskAllDay, setIsTaskAllDay] = useState(true);
   const [newTaskUrl, setNewTaskUrl] = useState(''); // Compatibility check if still used in layout
   const [isPickingDaily, setIsPickingDaily] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash' | 'calendar'>('dashboard');
@@ -344,6 +344,10 @@ export default function App() {
         'NoFocus': 'No ToDo Tasks',
         'Expired': 'Expired Deadlines',
         'Approaching': 'Approaching Deadlines',
+        'Pinned': 'Pinned',
+        'PinnedGlobal': 'Pinned (Global)',
+        'ExpiredGlobal': 'Expired Deadlines (Global)',
+        'ApproachingGlobal': 'Approaching Deadlines (Global)',
         'Extract': 'Extract',
         'SystemArchive': 'System Archive',
         'TaskEntry': 'New Task Entry',
@@ -462,6 +466,7 @@ export default function App() {
         'ContextSubtasks': 'Context Subtasks',
         'UrlPlaceholder': 'URL Placeholder',
         'DetailsPlaceholder': 'Task detail... (Cmd/Ctrl+Enter to save)',
+        'BroadViewMemoPlaceholder': 'Deep dive into context, sub-tasks, or brainstorm ideas here...',
         'Clear': 'Clear',
         'Pin': 'Pin',
         'TaskDescription': 'Task Description',
@@ -506,6 +511,10 @@ export default function App() {
         'NoFocus': 'ToDoはありません',
         'Expired': '期限切れ',
         'Approaching': 'まもなく期限',
+        'Pinned': 'ピン留め',
+        'PinnedGlobal': 'ピン留め (全体)',
+        'ExpiredGlobal': '期限切れ (全体)',
+        'ApproachingGlobal': 'まもなく期限 (全体)',
         'Extract': '抽出',
         'SystemArchive': 'アーカイブ',
         'TaskEntry': 'タスクの追加',
@@ -577,6 +586,7 @@ export default function App() {
         'Urls': 'リンク',
         'Add': '追加',
         'UrlPlaceholder': 'https://... (Ctrl+Enterで保存)',
+        'BroadViewMemoPlaceholder': '詳細なコンテキスト、サブタスク、アイデアのメモなど...',
         'AddToFocus': 'ToDoに追加',
         'TaskDescription': 'タスク内容',
         'Clear': 'クリア',
@@ -682,6 +692,10 @@ export default function App() {
         'NoFocus': 'Aucune tâche ToDo',
         'Expired': 'Échéances dépassées',
         'Approaching': 'Échéances proches',
+        'Pinned': 'Épinglés',
+        'PinnedGlobal': 'Épinglés (Global)',
+        'ExpiredGlobal': 'Échéances dépassées (Global)',
+        'ApproachingGlobal': 'Échéances proches (Global)',
         'Extract': 'Extraire',
         'SystemArchive': 'Archives Système',
         'TaskEntry': 'Nouvelle tâche',
@@ -744,15 +758,16 @@ export default function App() {
         'ContinueWithGoogle': 'Continuer avec Google',
         'ProjectCode': 'Code projet',
         'TaskDetail': 'Détails de la tâche',
-        'ContextSubtasks': 'Contexte et sous-tâches...',
-        'DetailsPlaceholder': 'Saisir les détails...',
+        'ContextSubtasks': 'Contexte, sous-tâches... (Cmd/Ctrl+Entrée pour enregistrer)',
+        'DetailsPlaceholder': 'Détails... (Cmd/Ctrl+Entrée pour enregistrer)',
         'ExampleProjects': 'Ex: CORE, DEV',
         'Memos': 'Mémos',
         'Expand': 'Agrandir',
         'Shrink': 'Réduire',
         'Urls': 'Liens',
         'Add': 'Ajouter',
-        'UrlPlaceholder': 'https://...',
+        'UrlPlaceholder': 'https://... (Cmd/Ctrl+Entrée pour enregistrer)',
+        'BroadViewMemoPlaceholder': 'Approfondissez le contexte, les sous-tâches ou les idées ici...',
         'Clear': 'Effacer',
         'Pin': 'Épingler',
         'TaskDescription': 'Description de la tâche',
@@ -1490,6 +1505,7 @@ export default function App() {
       setNewTaskNotes('');
       setNewTaskUrls(['']);
       setNewTaskDeadline('');
+      setIsTaskAllDay(true);
       setMessage({ text: "Task added to Focus list.", type: 'info' });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'tasks');
@@ -2979,7 +2995,7 @@ export default function App() {
                     <input 
                       list="project-suggestions"
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                      placeholder="e.g. CORE, DEV"
+                      placeholder={t('ExampleProjects')}
                       value={newTaskProject}
                       onChange={(e) => setNewTaskProject(e.target.value)}
                       onKeyDown={(e) => {
@@ -2995,7 +3011,7 @@ export default function App() {
                   <label className="text-xs font-semibold text-slate-600">{t('TaskDetail')} <span className="text-red-500">*</span></label>
                   <textarea 
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none" 
-                    placeholder="Details... (Cmd/Ctrl+Enter to save)"
+                    placeholder={t('DetailsPlaceholder')}
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                     onKeyDown={(e) => {
@@ -3005,13 +3021,13 @@ export default function App() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-600 uppercase tracking-widest text-[9px] opacity-60 flex items-center justify-between">
-                    <span>Memos</span>
+                    <span>{t('Memos')}</span>
                     <button 
                       type="button" 
                       onClick={() => setIsNewTaskMemoExpanded(!isNewTaskMemoExpanded)}
                       className="text-indigo-600 hover:underline p-1"
                     >
-                      {isNewTaskMemoExpanded ? 'Shrink' : 'Expand'}
+                      {isNewTaskMemoExpanded ? t('Shrink') : t('Expand')}
                     </button>
                   </label>
                   <textarea 
@@ -3019,7 +3035,7 @@ export default function App() {
                       "w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none transition-all duration-300",
                       isNewTaskMemoExpanded ? "h-64" : "h-16"
                     )}
-                    placeholder="Context, sub-tasks... (Cmd/Ctrl+Enter to save)"
+                    placeholder={t('ContextSubtasks')}
                     value={newTaskNotes}
                     onChange={(e) => setNewTaskNotes(e.target.value)}
                     onKeyDown={(e) => {
@@ -3029,9 +3045,9 @@ export default function App() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-600 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60"><LinkIcon size={12} /> URLs</span>
+                    <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60"><LinkIcon size={12} /> {t('Urls')}</span>
                     {newTaskUrls[newTaskUrls.length - 1]?.trim() && (
-                      <button type="button" onClick={() => setNewTaskUrls([...newTaskUrls, ''])} className="text-[9px] text-indigo-600 hover:underline">+ Add</button>
+                      <button type="button" onClick={() => setNewTaskUrls([...newTaskUrls, ''])} className="text-[9px] text-indigo-600 hover:underline">+ {t('Add')}</button>
                     )}
                   </label>
                   {newTaskUrls.map((u, i) => (
@@ -3043,7 +3059,7 @@ export default function App() {
                             "w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] focus:ring-2 focus:ring-indigo-500 outline-none",
                             u.trim() && "pr-8"
                           )}
-                          placeholder="https://... (Cmd/Ctrl+Enter to save)"
+                          placeholder={t('UrlPlaceholder')}
                           value={u}
                           onChange={(e) => {
                             const next = [...newTaskUrls];
@@ -3447,7 +3463,7 @@ export default function App() {
                     <div className="space-y-2 mb-4">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600 bg-red-100/50 px-2 py-1.5 rounded-lg border border-red-200 flex items-center gap-2">
                         <AlertCircle size={12} strokeWidth={3} />
-                        {t('Expired')} (Global)
+                        {t('ExpiredGlobal')}
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
@@ -3479,7 +3495,7 @@ export default function App() {
                     <div className="space-y-2 mb-8">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 bg-amber-50/50 px-2 py-1.5 rounded-lg border border-amber-100 flex items-center gap-2">
                         <AlertTriangle size={12} strokeWidth={3} />
-                        {t('Approaching')} (Global)
+                        {t('ApproachingGlobal')}
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
@@ -3511,7 +3527,7 @@ export default function App() {
                     <div className="space-y-2 mb-8">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-lg border border-indigo-100 flex items-center gap-2">
                         <Pin size={12} strokeWidth={3} className="rotate-45" />
-                        {t('Pinned')} (Global)
+                        {t('PinnedGlobal')}
                       </h4>
                       <div className={cn(
                         "grid grid-cols-1 gap-2.5",
@@ -3727,7 +3743,7 @@ export default function App() {
                     <div className="flex items-center gap-4 px-2">
                       <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 flex items-center gap-1.5">
                         <Pin size={10} strokeWidth={3} className="rotate-45" />
-                        {t('Pinned')} (Global)
+                        {t('PinnedGlobal')}
                       </h4>
                       <div className="h-px flex-1 bg-indigo-100"></div>
                     </div>
@@ -5922,6 +5938,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
                   onChange={setNotes}
                   onSave={handleSubmit}
                   onClose={() => setIsMemoModalOpen(false)}
+                  placeholder={t('BroadViewMemoPlaceholder')}
                 />
               )}
             </AnimatePresence>
@@ -6138,7 +6155,7 @@ function EditTaskModal({ task, onClose, onSave, onMove, onDelete, t, projects }:
   );
 }
 
-function MemoModal({ value, onChange, onSave, onClose }: { value: string; onChange: (v: string) => void; onSave: () => void; onClose: () => void }) {
+function MemoModal({ value, onChange, onSave, onClose, placeholder }: { value: string; onChange: (v: string) => void; onSave: () => void; onClose: () => void; placeholder?: string }) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -6195,7 +6212,7 @@ function MemoModal({ value, onChange, onSave, onClose }: { value: string; onChan
         <div className="flex-1 p-6">
           <textarea 
             className="w-full h-full p-8 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] text-lg font-medium text-slate-700 outline-none focus:bg-white focus:border-indigo-500 transition-all resize-none custom-scrollbar shadow-inner"
-            placeholder="Deep dive into context, sub-tasks, or brainstorm ideas here..."
+            placeholder={placeholder || "Deep dive into context, sub-tasks, or brainstorm ideas here..."}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => {
