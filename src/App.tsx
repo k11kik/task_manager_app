@@ -118,7 +118,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.11";
+  const APP_VERSION = "2.5.12";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -466,6 +466,7 @@ export default function App() {
         'ContextSubtasks': 'Context Subtasks',
         'UrlPlaceholder': 'URL Placeholder',
         'DetailsPlaceholder': 'Task detail... (Cmd/Ctrl+Enter to save)',
+        'ExampleProjects': 'e.g. CORE, DEV',
         'BroadViewMemoPlaceholder': 'Deep dive into context, sub-tasks, or brainstorm ideas here...',
         'Clear': 'Clear',
         'Pin': 'Pin',
