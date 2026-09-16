@@ -5,6 +5,8 @@ import {
   signInWithRedirect, 
   getRedirectResult, 
   signOut,
+  setPersistence,
+  browserLocalPersistence,
   UserCredential
 } from 'firebase/auth';
 import { 
@@ -30,6 +32,12 @@ try {
 
 export const db = firestoreDb; // CRITICAL: The app will break without this line
 export const auth = getAuth(app);
+
+// 認証の永続化を IndexedDB / LocalStorage に明示的に設定（リダイレクト復帰時のセッション消失を防止）
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.error("Auth persistence setup failed:", err);
+});
+
 export const googleProvider = new GoogleAuthProvider();
 
 export const clearFirestoreCache = async () => {
@@ -51,7 +59,7 @@ export const signIn = async (forceConsent = false): Promise<void> => {
   if (forceConsent) {
     googleProvider.setCustomParameters({ prompt: 'consent select_account' });
   } else {
-    googleProvider.setCustomParameters({});
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
   }
   // ポップアップ(signInWithPopup)ではなく、画面全体をGoogle認証画面に遷移させる
   await signInWithRedirect(auth, googleProvider);
