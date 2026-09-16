@@ -78,7 +78,7 @@ import {
 import { ja, fr, enUS } from 'date-fns/locale';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
-import { auth, db, signIn, logOut, checkRedirectResult, parseAuthError, AuthErrorInfo } from './lib/firebase';
+import { auth, db, signIn, logOut } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import Papa from 'papaparse';
 import { 
@@ -121,303 +121,6 @@ export default function App() {
   const APP_VERSION = "2.5.13";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState<AuthErrorInfo | null>(null);
-
-  // メール認証フォーム用の状態
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-  // 1. アプリ起動時に Google リダイレクト結果 ＆ 認証状態を監視
-  useEffect(() => {
-    let isMounted = true;
-
-    const handleInitialAuth = async () => {
-      try {
-        setAuthLoading(true);
-        // リダイレクト復帰時のチェック
-        const redirectUser = await checkRedirectResult();
-        if (redirectUser && isMounted) {
-          setUser(redirectUser.user);
-          setAuthError(null);
-        }
-      } catch (err: any) {
-        console.error("Redirect Login Processing Error:", err);
-        if (isMounted) {
-          setAuthError(parseAuthError(err));
-        }
-      } finally {
-        if (isMounted) {
-          setAuthLoading(false);
-        }
-      }
-    };
-
-    handleInitialAuth();
-
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (isMounted) {
-        setUser(u);
-        setAuthLoading(false);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, []);
-
-  // 2. Google ログイン
-  const handleGoogleSignIn = async () => {
-    try {
-      setAuthError(null);
-      setActionLoading(true);
-      await signInWithGoogle();
-    } catch (err: any) {
-      setActionLoading(false);
-      setAuthError(parseAuthError(err));
-    }
-  };
-
-  // 3. メール/パスワード ログイン・新規登録
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) return;
-
-    try {
-      setAuthError(null);
-      setActionLoading(true);
-
-      if (authMode === 'signup') {
-        const res = await signUpWithEmail(email, password);
-        setUser(res.user);
-      } else {
-        const res = await signInWithEmail(email, password);
-        setUser(res.user);
-      }
-    } catch (err: any) {
-      setAuthError(parseAuthError(err));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // 4. ログアウト
-  const handleSignOut = async () => {
-    try {
-      await logOut();
-      setUser(null);
-    } catch (err) {
-      console.error("Logout Error:", err);
-    }
-  };
-
-  // 美しいデザインの待機（ローディング）画面
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-4">
-        <div className="relative flex items-center justify-center mb-6">
-          <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-          <Zap className="w-6 h-6 text-indigo-400 absolute animate-pulse" />
-        </div>
-        <h2 className="text-xl font-bold tracking-wider text-slate-200">NavFOR</h2>
-        <p className="text-sm text-slate-400 mt-2 font-mono">認証状態を読み込み中...</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* ナビゲーションバー */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="bg-indigo-600 p-2 rounded-lg">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <span className="font-bold text-lg tracking-wide text-white">NavFOR</span>
-              <span className="ml-2 text-xs text-indigo-400 font-mono">v{APP_VERSION}</span>
-            </div>
-          </div>
-
-          {user && (
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="Avatar" className="w-6 h-6 rounded-full" />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold">
-                    {user.email?.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <span className="text-xs font-medium text-slate-300 max-w-[150px] truncate">
-                  {user.displayName || user.email}
-                </span>
-              </div>
-              <button
-                onClick={handleSignOut}
-                className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition border border-slate-700"
-              >
-                ログアウト
-              </button>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* メインエリア */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-6 flex flex-col justify-center items-center">
-        {!user ? (
-          /* 未ログイン時：美しく統合された認証カード */
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-white mb-2">NavFOR へようこそ</h2>
-              <p className="text-sm text-slate-400">
-                大学Wi-Fi等の制限環境に対応した認証システム
-              </p>
-            </div>
-
-            {/* エラー表示 */}
-            {authError && (
-              <div className="mb-6 p-4 bg-red-950/50 border border-red-800/80 rounded-xl text-xs text-red-200 flex items-start space-x-3">
-                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold mb-1">{authError.title}</p>
-                  <p className="text-red-300/90 mb-2">{authError.message}</p>
-                  <p className="text-red-400/80 pt-2 border-t border-red-900/50">
-                    💡 <strong>対策:</strong> {authError.suggestion}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* 認証モード切り替えタブ */}
-            <div className="flex bg-slate-800/60 p-1 rounded-xl mb-6 text-xs font-medium border border-slate-700/50">
-              <button
-                type="button"
-                onClick={() => setAuthMode('signin')}
-                className={`flex-1 py-2 rounded-lg transition ${
-                  authMode === 'signin' 
-                    ? 'bg-indigo-600 text-white shadow-md' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                ログイン
-              </button>
-              <button
-                type="button"
-                onClick={() => setAuthMode('signup')}
-                className={`flex-1 py-2 rounded-lg transition ${
-                  authMode === 'signup' 
-                    ? 'bg-indigo-600 text-white shadow-md' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                新規アカウント登録
-              </button>
-            </div>
-
-            {/* メール認証フォーム */}
-            <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">メールアドレス</label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your-email@example.com"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">パスワード (6文字以上)</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={actionLoading}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition flex items-center justify-center space-x-2 shadow-lg shadow-indigo-600/20 disabled:opacity-50"
-              >
-                {actionLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : authMode === 'signup' ? (
-                  <>
-                    <UserPlus className="w-4 h-4" />
-                    <span>メールで新規登録する</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    <span>メールでログイン</span>
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="relative flex items-center justify-center my-6">
-              <div className="border-t border-slate-800 w-full"></div>
-              <span className="bg-slate-900 px-3 text-xs text-slate-500 absolute">または</span>
-            </div>
-
-            {/* Googleログインボタン */}
-            <button
-              onClick={handleGoogleSignIn}
-              disabled={actionLoading}
-              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl border border-slate-700 transition flex items-center justify-center space-x-3 disabled:opacity-50"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z" />
-                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
-                <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9z" />
-                <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z" />
-              </svg>
-              <span>Googleでログイン（プロキシで制限される場合あり）</span>
-            </button>
-          </div>
-        ) : (
-          /* ログイン完了時の画面 */
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-xl">
-            <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-400">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">ログイン完了！</h3>
-            <p className="text-sm text-slate-400 mb-6">
-              ようこそ、<span className="text-indigo-400 font-semibold">{user.email}</span> さん
-            </p>
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-400 text-left mb-6">
-              <p className="font-semibold text-slate-300 mb-1">💡 認証ステータス</p>
-              <p>メール認証/Google認証が正常に動作しています。Sorbonneなどの制限ネットワークでも通信切断されません。</p>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
-  );
-
-  // Track swipe cooldown
-  const lastSwipeTime = React.useRef(0);
-  const touchStart = React.useRef({ x: 0, y: 0 });
-  const accumulatedX = React.useRef(0);
-  
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<string>('All');
@@ -435,8 +138,11 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<string>('General');
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings'>('urgent');
-
   
+  // Track swipe cooldown
+  const lastSwipeTime = React.useRef(0);
+  const touchStart = React.useRef({ x: 0, y: 0 });
+  const accumulatedX = React.useRef(0);
   const swipeLocked = React.useRef(false);
   const lockTimer = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -1177,6 +883,7 @@ export default function App() {
   // Browser Exit Confirmation
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Only show confirmation if no backup path is set
       if (!dirHandle) {
         const msg = "Local backup folder is not configured. Please set a backup path in Settings to ensure your logs are saved locally.";
         e.preventDefault();
@@ -1189,30 +896,7 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [dirHandle]);
 
-  // Google Redirect Auth Result Handler & Initial Load Check
-  useEffect(() => {
-    const handleRedirect = async () => {
-      try {
-        const result = await checkRedirectResult();
-        if (result && result.user) {
-          setMessage({ 
-            text: `Welcome back, ${result.user.displayName || result.user.email}!`, 
-            type: 'info' 
-          });
-        }
-      } catch (err: any) {
-        const authErr = parseAuthError(err);
-        setMessage({ 
-          text: `${authErr.title}: ${authErr.message}`, 
-          type: 'error' 
-        });
-      }
-    };
-
-    handleRedirect();
-  }, []);
-
-  // Auth State Listener
+  // Auth State
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -1221,7 +905,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  
   // Settings Sync
   useEffect(() => {
     if (!user) return;
@@ -2094,6 +1777,14 @@ export default function App() {
       setIsPickingDaily(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'batch/tasks');
+    }
+  };
+
+  const handleSignIn = async () => {
+    try {
+      await signIn();
+    } catch (err) {
+      setMessage({ text: "Sign in failed.", type: 'error' });
     }
   };
 
