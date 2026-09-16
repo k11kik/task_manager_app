@@ -135,7 +135,6 @@ export default function App() {
   const [linkPassword, setLinkPassword] = useState('');
   const [isLinking, setIsLinking] = useState(false);
 
-  const [authPassword, setAuthPassword] = useState('');
   // 現在のGoogleアカウントにパスワードを連携するハンドラ（設定画面等で実行）
   const handleLinkPassword = async (e: React.FormEvent) => {
     e.preventDefault();
