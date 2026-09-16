@@ -5585,7 +5585,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
       </div>
     </div>
   );
-};
 
   React.useEffect(() => {
     if (!showMenu) return;
