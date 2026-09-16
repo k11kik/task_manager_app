@@ -23,7 +23,7 @@ let firestoreDb;
 try {
   firestoreDb = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    experimentalForceLongPolling: true // 厳格なプロキシ・Wi-Fi環境対策
+    experimentalForceLongPolling: true // 厳格なプロキシ・学内Wi-Fi環境対策 (WebSocket遮断回避)
   }, firebaseConfig.firestoreDatabaseId);
 } catch (e) {
   firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -44,7 +44,6 @@ export const clearFirestoreCache = async () => {
   }
 };
 
-// Google サインイン (通常環境用)
 export const signInWithGoogle = async (forceConsent = false) => {
   if (forceConsent) {
     googleProvider.setCustomParameters({ prompt: 'consent select_account' });
@@ -58,15 +57,15 @@ export const signInWithGoogle = async (forceConsent = false) => {
   };
 };
 
-// 互換性のための既存別名
+// 既存コードとの互換性用
 export const signIn = signInWithGoogle;
 
-// メール/パスワード ログイン (厳格なWi-Fi環境・プロキシ用)
+// メール/パスワード ログイン (厳格なWi-Fi環境用)
 export const signInWithEmail = async (email: string, pass: string) => {
   return await signInWithEmailAndPassword(auth, email, pass);
 };
 
-// メール/パスワード アカウント新規作成
+// メール/パスワード 新規アカウント登録
 export const signUpWithEmail = async (email: string, pass: string) => {
   return await createUserWithEmailAndPassword(auth, email, pass);
 };
