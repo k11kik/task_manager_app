@@ -895,7 +895,7 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [dirHandle]);
 
-  // Google Redirect Auth Result Handler
+  // Google Redirect Auth Result Handler & Initial Load Check
   useEffect(() => {
     const handleRedirect = async () => {
       try {
@@ -914,6 +914,33 @@ export default function App() {
         });
       }
     };
+
+    handleRedirect();
+  }, []);
+
+  // Auth State Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sign In Trigger Function (Used by UI buttons)
+  const handleSignIn = async () => {
+    try {
+      setAuthLoading(true);
+      await signIn(); // Initiates full-page redirect to Google
+    } catch (err: any) {
+      setAuthLoading(false);
+      const authErr = parseAuthError(err);
+      setMessage({ 
+        text: `${authErr.title}: ${authErr.message}`, 
+        type: 'error' 
+      });
+    }
+  };
 
     handleRedirect();
   }, []);
