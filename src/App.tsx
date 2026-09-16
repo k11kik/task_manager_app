@@ -2456,7 +2456,7 @@ export default function App() {
               className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
             >
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center transition-transform shadow-lg shadow-indigo-100 group-active:scale-95 overflow-hidden border border-slate-100">
-                <img src="/icon-192.png" alt="Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                <img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
               </div>
               <div className="flex flex-col items-start leading-none">
                 <h1 className="text-sm font-black tracking-tighter text-slate-800 uppercase">
