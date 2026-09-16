@@ -78,7 +78,7 @@ import {
 import { ja, fr, enUS } from 'date-fns/locale';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
-import { auth, db, signIn, signInWithEmail, signUpWithEmail, linkEmailPasswordToAccount, logOut } from './lib/firebase';
+import { auth, db, signIn, logOut } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import Papa from 'papaparse';
 import { 
@@ -119,25 +119,8 @@ const THEME_CATEGORIES = [
 
 export default function App() {
   const APP_VERSION = "2.5.13";
-
-  // Authentication State
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-
-  // Email / Password Form State
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [isSignUpMode, setIsSignUpMode] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
-  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
-  const [showEmailForm, setShowEmailForm] = useState(false);
-
-  // Password Link State in Settings
-  const [linkPassword, setLinkPassword] = useState('');
-  const [isLinking, setIsLinking] = useState(false);
-
-  // Tasks & View Management State
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<string>('All');
@@ -147,961 +130,109 @@ export default function App() {
   const [newTaskUrls, setNewTaskUrls] = useState<string[]>(['']);
   const [newTaskDeadline, setNewTaskDeadline] = useState<string>('');
   const [isTaskAllDay, setIsTaskAllDay] = useState(true);
+  const [newTaskUrl, setNewTaskUrl] = useState(''); // Compatibility check if still used in layout
+  const [isPickingDaily, setIsPickingDaily] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash' | 'calendar'>('dashboard');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'error' | 'info' } | null>(null);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<string>('General');
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings'>('urgent');
-
-  const [archiveFilter, setArchiveFilter] = useState<'all' | '1m' | '3m' | '6m' | '1y'>('all');
-  const [trashFilter, setTrashFilter] = useState<'all' | '1w' | '2w'>('all');
-  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
-  const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
-
-  const [settings, setSettings] = useState({
-    urgentLimit: 3,
-    deadlineThreshold: 3,
-    archiveThresholdDays: 30,
-    doneToTrashThresholdDays: 7,
-    trashCleanupThresholdDays: 30,
-    archiveDoneToTrashDays: 7,
-    archiveInactiveToTrashDays: 99999,
-    criticalThreshold: 100,
-    isLocalBackupEnabled: false,
-    localBackupPath: '',
-    displayMode: 'standard' as 'compact' | 'standard' | 'large',
-    displayModeFocus: 'standard' as 'compact' | 'standard' | 'large',
-    displayModeTodo: 'standard' as 'compact' | 'standard' | 'large',
-    language: 'ja' as 'en' | 'ja' | 'fr',
-    sections: ['General', 'Work', 'Personal']
-  });
-
-  // Gestures & Swipe refs
-  const lastSwipeTime = useRef(0);
-  const touchStart = useRef({ x: 0, y: 0 });
-  const accumulatedX = useRef(0);
-  const swipeLocked = useRef(false);
-  const lockTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  // Track swipe cooldown
+  const lastSwipeTime = React.useRef(0);
+  const touchStart = React.useRef({ x: 0, y: 0 });
+  const accumulatedX = React.useRef(0);
+  const swipeLocked = React.useRef(false);
+  const lockTimer = React.useRef<NodeJS.Timeout | null>(null);
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const now = Date.now();
+    // クールダウン時間を少し短めに設定 (PCの操作感を考慮)
     if (now - lastSwipeTime.current < 350) return;
     lastSwipeTime.current = now;
     accumulatedX.current = 0;
 
-    const modes: ('dashboard' | 'calendar' | 'archive' | 'trash' | 'settings')[] = ['dashboard', 'calendar', 'archive', 'trash', 'settings'];
+    const modes: ('dashboard' | 'archive' | 'trash' | 'calendar' | 'settings')[] = ['dashboard', 'calendar', 'archive', 'trash', 'settings'];
     const currentIndex = modes.indexOf(viewMode);
+    
+    const mobileViews: ('summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings')[] = ['summary', 'urgent', 'focus', 'calendar', 'archive', 'trash', 'settings'];
+    const currentMobileIndex = mobileViews.indexOf(mobileView as any);
 
-    if (direction === 'right' && currentIndex > 0) setViewMode(modes[currentIndex - 1]);
-    if (direction === 'left' && currentIndex < modes.length - 1) setViewMode(modes[currentIndex + 1]);
+    if (window.innerWidth >= 1024) {
+      if (direction === 'right' && currentIndex > 0) setViewMode(modes[currentIndex - 1]);
+      if (direction === 'left' && currentIndex < modes.length - 1) setViewMode(modes[currentIndex + 1]);
+    } else {
+      if (mobileView === 'calendar' || viewMode === 'calendar') return;
+      if (direction === 'right' && currentMobileIndex > 0) setMobileView(mobileViews[currentMobileIndex - 1] as any);
+      if (direction === 'left' && currentMobileIndex < mobileViews.length - 1) setMobileView(mobileViews[currentMobileIndex + 1] as any);
+      
+      const nextIndex = direction === 'right' ? currentMobileIndex - 1 : currentMobileIndex + 1;
+      if (nextIndex >= 0 && nextIndex < mobileViews.length) {
+        const mv = mobileViews[nextIndex];
+        if (mv === 'calendar') setViewMode('calendar');
+        else if (mv === 'archive') setViewMode('archive');
+        else if (mv === 'trash') setViewMode('trash');
+        else if (mv === 'settings') setViewMode('settings');
+        else setViewMode('dashboard');
+      }
+    }
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+    const handleWheel = (e: WheelEvent) => {
+      // モバイル版のカレンダー表示中のみ、独自のスワイプ処理を行わずにブラウザに任せる（重さを解消）
+      if (window.innerWidth < 1024 && (viewMode === 'calendar' || mobileView === 'calendar')) return;
 
-  useEffect(() => {
-    if (!user) {
-      setTasks([]);
-      return;
-    }
-
-    const tasksRef = collection(db, 'users', user.uid, 'tasks');
-    const unsubscribeTasks = onSnapshot(tasksRef, (snapshot) => {
-      const fetchedTasks: Task[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Task));
-      setTasks(fetchedTasks);
-    }, (error) => {
-      console.error("Error fetching tasks:", error);
-      setMessage({ text: "タスクの同期に失敗しました", type: "error" });
-    });
-
-    const settingsRef = doc(db, 'users', user.uid, 'settings', 'config');
-    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setSettings(prev => ({ ...prev, ...docSnap.data() }));
+      // 垂直スクロールが支配的な場合は無視
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        accumulatedX.current = 0;
+        return;
       }
-    });
 
-    return () => {
-      unsubscribeTasks();
-      unsubscribeSettings();
+      // 横スクロール検知
+      if (Math.abs(e.deltaX) > 2) {
+        // ブラウザの「戻る/進む」ジェスチャーを防止（可能な場合）
+        if (Math.abs(e.deltaX) > 10 && e.cancelable) {
+          e.preventDefault();
+        }
+
+        // ロック中の処理
+        if (swipeLocked.current) {
+          // 逆方向に強く回された場合はロックを解除して即座に反応できるようにする
+          if ((accumulatedX.current > 0 && e.deltaX < -10) || (accumulatedX.current < 0 && e.deltaX > 10)) {
+            swipeLocked.current = false;
+            accumulatedX.current = 0;
+          } else {
+            return;
+          }
+        }
+
+        accumulatedX.current += e.deltaX;
+
+        // PCでの閾値を調整 (15-20程度でより軽く)
+        const threshold = 18;
+        if (Math.abs(accumulatedX.current) > threshold) {
+          handleSwipe(accumulatedX.current > 0 ? 'left' : 'right');
+          
+          // ロック開始
+          swipeLocked.current = true;
+          
+          // タイマーによる強制ロック解除 (慣性が止まらない場合への備え)
+          if (lockTimer.current) clearTimeout(lockTimer.current);
+          lockTimer.current = setTimeout(() => {
+            swipeLocked.current = false;
+            accumulatedX.current = 0;
+          }, 350); // 0.35秒後に自動解放
+        }
+      } else {
+        // 微小な動きになったら蓄積をリセットし、ロックを解除
+        if (Math.abs(e.deltaX) < 1.5) {
+          accumulatedX.current = 0;
+          swipeLocked.current = false;
+        }
+      }
     };
-  }, [user]);
-
-  useEffect(() => {
-    if (message && message.type !== 'error') {
-      const timer = setTimeout(() => setMessage(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [message]);
-
-  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
-    setAuthSuccessMsg(null);
-    setIsSubmittingAuth(true);
-
-    try {
-      if (isSignUpMode) {
-        await signUpWithEmail(authEmail, authPassword);
-      } else {
-        await signInWithEmail(authEmail, authPassword);
-      }
-    } catch (err: any) {
-      console.error("Auth error:", err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        setAuthError('メールアドレスまたはパスワードが正しくありません。');
-      } else if (err.code === 'auth/email-already-in-use') {
-        setAuthError('このメールアドレスは既に登録されています。Googleでログイン後、設定画面からパスワード設定を行ってください。');
-      } else if (err.code === 'auth/weak-password') {
-        setAuthError('パスワードは6文字以上で設定してください。');
-      } else {
-        setAuthError('認証エラーが発生しました。通信環境を確認してください。');
-      }
-    } finally {
-      setIsSubmittingAuth(false);
-    }
-  };
-
-  const handleLinkPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
-    setAuthSuccessMsg(null);
-    setIsLinking(true);
-
-    try {
-      await linkEmailPasswordToAccount(linkPassword);
-      setAuthSuccessMsg('学内Wi-Fi用のパスワード設定が完了しました！これでメールログインでも同じデータが開けます。');
-      setLinkPassword('');
-    } catch (err: any) {
-      console.error("Link error:", err);
-      if (err.code === 'auth/credential-already-in-use') {
-        setAuthError('このパスワード/認証情報は既に他のアカウントに紐付けられています。');
-      } else {
-        setAuthError('連携に失敗しました: ' + err.message);
-      }
-    } finally {
-      setIsLinking(false);
-    }
-  };
-
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim() || !user) return;
-
-    const filteredUrls = newTaskUrls.filter(u => u.trim().length > 0);
-    const newTask: Omit<Task, 'id'> = {
-      title: newTaskTitle.trim(),
-      project: newTaskProject.trim() || 'General',
-      section: activeSection,
-      category: 'Focus',
-      completed: false,
-      notes: newTaskNotes,
-      urls: filteredUrls,
-      deadline: newTaskDeadline || undefined,
-      isAllDay: isTaskAllDay,
-      pinned: false,
-      createdAt: Date.now()
-    };
-
-    try {
-      await addDoc(collection(db, 'users', user.uid, 'tasks'), newTask);
-      setNewTaskTitle('');
-      setNewTaskNotes('');
-      setNewTaskUrls(['']);
-      setNewTaskDeadline('');
-      setMessage({ text: 'タスクを追加しました', type: 'info' });
-    } catch (err) {
-      console.error("Error adding task:", err);
-      setMessage({ text: 'タスクの追加に失敗しました', type: 'error' });
-    }
-  };
-
-  const handleToggleTask = async (task: Task) => {
-    if (!user) return;
-    const taskRef = doc(db, 'users', user.uid, 'tasks', task.id);
-    const completed = !task.completed;
-    const completedAt = completed ? Date.now() : undefined;
-
-    try {
-      await updateDoc(taskRef, { completed, completedAt });
-    } catch (err) {
-      console.error("Error updating task status:", err);
-    }
-  };
-
-  const handleMoveToTrash = async (task: Task) => {
-    if (!user) return;
-    const taskRef = doc(db, 'users', user.uid, 'tasks', task.id);
-    try {
-      await updateDoc(taskRef, {
-        category: 'Trash',
-        deletedAt: Date.now()
-      });
-      setMessage({ text: 'ゴミ箱に移動しました', type: 'info' });
-    } catch (err) {
-      console.error("Error deleting task:", err);
-    }
-  };
-
-  const handleTogglePin = async (task: Task) => {
-    if (!user) return;
-    const taskRef = doc(db, 'users', user.uid, 'tasks', task.id);
-    try {
-      await updateDoc(taskRef, { pinned: !task.pinned });
-    } catch (err) {
-      console.error("Error toggling pin:", err);
-    }
-  };
-
-  const handleSaveEditedTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTask || !user) return;
-    const taskRef = doc(db, 'users', user.uid, 'tasks', editingTask.id);
-    try {
-      await updateDoc(taskRef, {
-        title: editingTask.title,
-        project: editingTask.project,
-        notes: editingTask.notes,
-        urls: editingTask.urls?.filter(u => u.trim().length > 0) || [],
-        deadline: editingTask.deadline,
-        category: editingTask.category
-      });
-      setEditingTask(null);
-      setMessage({ text: 'タスクを更新しました', type: 'info' });
-    } catch (err) {
-      console.error("Error updating editing task:", err);
-    }
-  };
-
-  const projects = useMemo(() => {
-    const set = new Set<string>(['All']);
-    tasks.forEach(t => {
-      if (t.project) set.add(t.project);
-    });
-    return Array.from(set);
-  }, [tasks]);
-
-  const filteredTasks = useMemo(() => {
-    return tasks.filter(t => {
-      const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            t.notes?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesProject = selectedProject === 'All' || t.project === selectedProject;
-      return matchesSearch && matchesProject;
-    });
-  }, [tasks, searchTerm, selectedProject]);
-
-  const urgentTasks = useMemo(() => {
-    return filteredTasks.filter(t => t.category === 'Urgent' && !t.completed);
-  }, [filteredTasks]);
-
-  const focusTasks = useMemo(() => {
-    return filteredTasks.filter(t => (t.category === 'Focus' || !t.category) && !t.completed);
-  }, [filteredTasks]);
-
-  const archiveTasks = useMemo(() => {
-    return tasks.filter(t => t.category === 'Archive' || (t.completed && t.category !== 'Trash'));
-  }, [tasks]);
-
-  const trashTasks = useMemo(() => {
-    return tasks.filter(t => t.category === 'Trash');
-  }, [tasks]);
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-slate-800 flex items-center justify-center gap-2">
-              <Zap className="w-6 h-6 text-indigo-600 fill-indigo-600" />
-              NavFOR
-            </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              タスク＆プロジェクト管理アプリ
-            </p>
-          </div>
-
-          {authError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{authError}</span>
-            </div>
-          )}
-
-          {/* Primary: Google Sign-In Button */}
-          <button
-            onClick={() => signIn()}
-            type="button"
-            className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium py-3 px-4 rounded-xl transition-all shadow-sm mb-4 text-sm"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-            </svg>
-            Googleでログイン (通常環境用)
-          </button>
-
-          {/* Toggle Accordion for Campus Wi-Fi / Proxy */}
-          <div className="mt-6 pt-4 border-t border-slate-100 text-center">
-            <button
-              type="button"
-              onClick={() => setShowEmailForm(!showEmailForm)}
-              className="text-xs text-slate-500 hover:text-indigo-600 font-medium flex items-center justify-center gap-1 mx-auto"
-            >
-              <span>{showEmailForm ? 'メールログインフォームを閉じる' : '学内Wi-Fi・制限環境用 メールログインはこちら'}</span>
-              <ChevronDown className={cn("w-3 h-3 transition-transform", showEmailForm && "rotate-180")} />
-            </button>
-          </div>
-
-          {/* Email / Password Form */}
-          {showEmailForm && (
-            <form onSubmit={handleEmailAuthSubmit} className="space-y-3 mt-4 pt-4 border-t border-dashed border-slate-200">
-              <p className="text-[11px] text-slate-400 mb-2">
-                ※学内プロキシ等でGoogleポップアップが開けない場合に使用します。
-              </p>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">メールアドレス</label>
-                <input
-                  type="email"
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="name@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">パスワード</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmittingAuth}
-                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
-              >
-                <LogIn className="w-4 h-4" />
-                {isSubmittingAuth ? '処理中...' : isSignUpMode ? '新規アカウント作成' : 'メールでログイン'}
-              </button>
-
-              <div className="text-center mt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSignUpMode(!isSignUpMode);
-                    setAuthError(null);
-                  }}
-                  className="text-[11px] text-indigo-600 hover:underline"
-                >
-                  {isSignUpMode ? 'すでに登録済みの方（ログインへ）' : '初めての方（メールで新規登録）'}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans antialiased text-slate-800">
-      {/* Toast Notification Bar */}
-      <AnimatePresence>
-        {message && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className={cn(
-              "fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 border",
-              message.type === 'error' ? "bg-red-50 text-red-700 border-red-200" : "bg-slate-900 text-white border-slate-800"
-            )}
-          >
-            {message.type === 'error' ? <AlertCircle className="w-4 h-4 text-red-500" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-            <span>{message.text}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Navigation Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setViewMode('dashboard')}>
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-200">
-              <Zap className="w-4 h-4 fill-white" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold leading-none text-slate-900">NavFOR</h1>
-              <span className="text-[10px] text-slate-400 font-mono">v{APP_VERSION}</span>
-            </div>
-          </div>
-
-          {/* Desktop Tab Switcher */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-medium">
-            <button
-              onClick={() => setViewMode('dashboard')}
-              className={cn("px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5", viewMode === 'dashboard' ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900")}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              ダッシュボード
-            </button>
-            <button
-              onClick={() => setViewMode('calendar')}
-              className={cn("px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5", viewMode === 'calendar' ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900")}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              カレンダー
-            </button>
-            <button
-              onClick={() => setViewMode('archive')}
-              className={cn("px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5", viewMode === 'archive' ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900")}
-            >
-              <ArchiveIcon className="w-3.5 h-3.5" />
-              アーカイブ ({archiveTasks.length})
-            </button>
-            <button
-              onClick={() => setViewMode('trash')}
-              className={cn("px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5", viewMode === 'trash' ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900")}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              ゴミ箱 ({trashTasks.length})
-            </button>
-            <button
-              onClick={() => setViewMode('settings')}
-              className={cn("px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5", viewMode === 'settings' ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900")}
-            >
-              <SettingsIcon className="w-3.5 h-3.5" />
-              設定
-            </button>
-          </nav>
-        </div>
-
-        {/* User Badge & Logout */}
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
-            <UserIcon className="w-3.5 h-3.5 text-slate-400" />
-            <span className="max-w-[160px] truncate">{user.email}</span>
-          </div>
-          <button
-            onClick={() => logOut()}
-            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors font-medium"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">ログアウト</span>
-          </button>
-        </div>
-      </header>
-
-      {}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
-        {/* DASHBOARD VIEW */}
-        {viewMode === 'dashboard' && (
-          <div className="space-y-6">
-            {/* Quick Task Creation Form */}
-            <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
-              <form onSubmit={handleAddTask} className="space-y-3">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    required
-                    placeholder="新しいタスクを入力..."
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                    className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                  />
-                  <input
-                    type="text"
-                    placeholder="プロジェクト名 (任意)"
-                    value={newTaskProject}
-                    onChange={(e) => setNewTaskProject(e.target.value)}
-                    className="sm:w-44 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-100 shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    追加
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
-                  <div className="flex items-center gap-1.5 text-slate-500">
-                    <Clock className="w-3.5 h-3.5" />
-                    <input
-                      type="date"
-                      value={newTaskDeadline}
-                      onChange={(e) => setNewTaskDeadline(e.target.value)}
-                      className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="メモ・補足..."
-                    value={newTaskNotes}
-                    onChange={(e) => setNewTaskNotes(e.target.value)}
-                    className="flex-1 min-w-[180px] px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-              </form>
-            </div>
-
-            {/* Filter & Search Toolbar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="relative flex-1 max-w-xs">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="検索..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              {/* Project Filter Pills */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
-                {projects.map(proj => (
-                  <button
-                    key={proj}
-                    onClick={() => setSelectedProject(proj)}
-                    className={cn(
-                      "px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all",
-                      selectedProject === proj
-                        ? "bg-slate-900 text-white"
-                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                    )}
-                  >
-                    {proj === 'All' ? 'すべて' : proj}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Task Columns Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Focus (Urgent) Column */}
-              <div className="bg-white p-4 rounded-2xl border border-red-100 shadow-sm">
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-red-50">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-red-500 fill-red-500" />
-                    <h3 className="font-bold text-sm text-slate-800">Focus (優先枠)</h3>
-                    <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-semibold border border-red-100">
-                      {urgentTasks.length} / {settings.urgentLimit}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {urgentTasks.map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onToggle={handleToggleTask}
-                      onDelete={handleMoveToTrash}
-                      onPin={handleTogglePin}
-                      onEdit={setEditingTask}
-                    />
-                  ))}
-                  {urgentTasks.length === 0 && (
-                    <div className="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
-                      優先タスクはありません
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ToDo (Focus Queue) Column */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <Target className="w-4 h-4 text-indigo-600" />
-                    <h3 className="font-bold text-sm text-slate-800">ToDo (通常キュー)</h3>
-                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-semibold">
-                      {focusTasks.length}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {focusTasks.map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onToggle={handleToggleTask}
-                      onDelete={handleMoveToTrash}
-                      onPin={handleTogglePin}
-                      onEdit={setEditingTask}
-                    />
-                  ))}
-                  {focusTasks.length === 0 && (
-                    <div className="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
-                      タスクはありません
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {}
-        {viewMode === 'calendar' && (
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-indigo-600" />
-                {format(calendarDate, 'yyyy年 M月', { locale: ja })}
-              </h2>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setCalendarDate(subMonths(calendarDate, 1))}
-                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setCalendarDate(new Date())}
-                  className="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium"
-                >
-                  今日
-                </button>
-                <button
-                  onClick={() => setCalendarDate(addMonths(calendarDate, 1))}
-                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Calendar Days Grid */}
-            <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-xl overflow-hidden border border-slate-200">
-              {['日', '月', '火', '水', '木', '金', '土'].map((day, idx) => (
-                <div key={day} className={cn("bg-slate-50 py-2 text-center text-xs font-semibold", idx === 0 && "text-red-500", idx === 6 && "text-indigo-500")}>
-                  {day}
-                </div>
-              ))}
-              {eachDayOfInterval({
-                start: startOfWeek(startOfMonth(calendarDate)),
-                end: endOfWeek(endOfMonth(calendarDate))
-              }).map((date) => {
-                const dayTasks = tasks.filter(t => t.deadline && isSameDay(new Date(t.deadline), date) && !t.completed && t.category !== 'Trash');
-                const isCurrentMonth = isSameMonth(date, calendarDate);
-
-                return (
-                  <div
-                    key={date.toISOString()}
-                    className={cn(
-                      "bg-white min-h-[90px] p-1.5 flex flex-col justify-start transition-colors",
-                      !isCurrentMonth && "bg-slate-50/50 text-slate-300",
-                      isSameDay(date, new Date()) && "bg-indigo-50/30"
-                    )}
-                  >
-                    <span className={cn(
-                      "text-xs font-semibold mb-1 w-5 h-5 flex items-center justify-center rounded-full",
-                      isSameDay(date, new Date()) && "bg-indigo-600 text-white"
-                    )}>
-                      {format(date, 'd')}
-                    </span>
-                    <div className="space-y-1 overflow-y-auto max-h-[60px]">
-                      {dayTasks.map(task => (
-                        <div
-                          key={task.id}
-                          onClick={() => setEditingTask(task)}
-                          className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 p-1 rounded truncate cursor-pointer hover:bg-indigo-100"
-                        >
-                          {task.title}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {}
-        {viewMode === 'archive' && (
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <ArchiveIcon className="w-5 h-5 text-slate-600" />
-                完了済み・アーカイブ一覧 ({archiveTasks.length})
-              </h2>
-            </div>
-
-            <div className="space-y-2">
-              {archiveTasks.map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onToggle={handleToggleTask}
-                  onDelete={handleMoveToTrash}
-                  onPin={handleTogglePin}
-                  onEdit={setEditingTask}
-                />
-              ))}
-              {archiveTasks.length === 0 && (
-                <div className="text-center py-12 text-xs text-slate-400">
-                  アーカイブされたタスクはありません
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {}
-        {viewMode === 'trash' && (
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <Trash2 className="w-5 h-5 text-red-500" />
-                ゴミ箱 ({trashTasks.length})
-              </h2>
-            </div>
-
-            <div className="space-y-2">
-              {trashTasks.map(task => (
-                <div key={task.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium line-through text-slate-500">{task.title}</h4>
-                    <span className="text-[10px] text-slate-400">{task.project}</span>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      if (!user) return;
-                      await deleteDoc(doc(db, 'users', user.uid, 'tasks', task.id));
-                      setMessage({ text: '完全に削除しました', type: 'info' });
-                    }}
-                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg text-xs font-medium"
-                  >
-                    完全削除
-                  </button>
-                </div>
-              ))}
-              {trashTasks.length === 0 && (
-                <div className="text-center py-12 text-xs text-slate-400">
-                  ゴミ箱は空です
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {}
-        {viewMode === 'settings' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-              <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <SettingsIcon className="w-5 h-5 text-indigo-600" />
-                アカウント設定・学内Wi-Fi対策
-              </h2>
-
-              <form onSubmit={handleLinkPassword} className="max-w-md space-y-3 p-4 bg-indigo-50/50 rounded-xl border border-indigo-100">
-                <h3 className="text-xs font-bold text-indigo-900 flex items-center gap-2">
-                  <LinkIcon className="w-4 h-4 text-indigo-600" />
-                  学内Wi-Fi用 パスワード設定（データ共有）
-                </h3>
-                <p className="text-xs text-indigo-700/80 leading-relaxed">
-                  現在のGoogleアカウントにパスワードを設定します。これにより、学内Wi-Fiなどの制限環境でもメールログインで同じタスクデータをそのまま開けるようになります。
-                </p>
-
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={linkPassword}
-                  onChange={(e) => setLinkPassword(e.target.value)}
-                  placeholder="設定するパスワード (6文字以上)"
-                  className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-
-                <button
-                  type="submit"
-                  disabled={isLinking}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-xs transition-colors"
-                >
-                  {isLinking ? '設定中...' : 'パスワードをアカウントに連携'}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {}
-      {editingTask && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-slate-800 text-sm">タスクの編集</h3>
-              <button onClick={() => setEditingTask(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditedTask} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">タイトル</label>
-                <input
-                  type="text"
-                  required
-                  value={editingTask.title}
-                  onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">プロジェクト</label>
-                <input
-                  type="text"
-                  value={editingTask.project}
-                  onChange={(e) => setEditingTask({ ...editingTask, project: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">カテゴリー</label>
-                <select
-                  value={editingTask.category}
-                  onChange={(e) => setEditingTask({ ...editingTask, category: e.target.value as Category })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="Focus">ToDo (通常)</option>
-                  <option value="Urgent">Focus (優先枠)</option>
-                  <option value="Archive">アーカイブ</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">メモ</label>
-                <textarea
-                  rows={3}
-                  value={editingTask.notes || ''}
-                  onChange={(e) => setEditingTask({ ...editingTask, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingTask(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700"
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white"
-                >
-                  保存
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface TaskCardProps {
-  task: Task;
-  onToggle: (task: Task) => void;
-  onDelete: (task: Task) => void;
-  onPin: (task: Task) => void;
-  onEdit: (task: Task) => void;
-}
-
-function TaskCard({ task, onToggle, onDelete, onPin, onEdit }: TaskCardProps) {
-  return (
-    <div className={cn(
-      "p-3 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-all shadow-2xs flex items-center justify-between gap-3 group",
-      task.completed && "opacity-60 bg-slate-50",
-      task.pinned && "border-amber-200 bg-amber-50/30"
-    )}>
-      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        <button
-          onClick={() => onToggle(task)}
-          className="text-slate-400 hover:text-indigo-600 transition-colors shrink-0"
-        >
-          {task.completed ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-50" />
-          ) : (
-            <Circle className="w-5 h-5" />
-          )}
-        </button>
-
-        <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onEdit(task)}>
-          <div className="flex items-center gap-2">
-            <h4 className={cn("text-xs font-semibold truncate text-slate-800", task.completed && "line-through text-slate-400")}>
-              {task.title}
-            </h4>
-            {task.project && (
-              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium shrink-0">
-                {task.project}
-              </span>
-            )}
-          </div>
-          {task.notes && (
-            <p className="text-[11px] text-slate-400 truncate mt-0.5">{task.notes}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity shrink-0">
-        <button
-          onClick={() => onPin(task)}
-          className={cn("p-1 rounded-md hover:bg-slate-100", task.pinned ? "text-amber-500" : "text-slate-400")}
-        >
-          <Pin className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => onDelete(task)}
-          className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-
-  
-
-  // ---------------------------------
-  
 
     const handleTouchStart = (e: TouchEvent) => {
       touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -1140,7 +271,9 @@ function TaskCard({ task, onToggle, onDelete, onPin, onEdit }: TaskCardProps) {
   const [lastBackupTime, setLastBackupTime] = useState<number>(() => {
     return Number(localStorage.getItem('trifocus_last_backup')) || 0;
   });
-  
+  const [archiveFilter, setArchiveFilter] = useState<'all' | '1m' | '3m' | '6m' | '1y'>('all');
+  const [trashFilter, setTrashFilter] = useState<'all' | '1w' | '2w'>('all');
+
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
@@ -5443,6 +4576,399 @@ function TaskCard({ task, onToggle, onDelete, onPin, onEdit }: TaskCardProps) {
     </div>
   );
 }
+
+interface TaskCardProps {
+  task: Task;
+  onToggle: () => void;
+  onMove: (cat: Category) => void;
+  onDelete: () => void;
+  onEdit: () => void;
+  onStar: () => void;
+  onPin: () => void;
+  t: (key: string) => string;
+  variant?: 'Urgent' | 'Focus' | 'Archive' | 'Trash';
+  displayMode?: 'compact' | 'standard' | 'large';
+  deadlineThreshold?: number;
+}
+
+const TaskCard: React.FC<TaskCardProps> = ({ 
+  task, onToggle, onMove, onDelete, onEdit, onStar, onPin, t,
+  variant = 'Focus',
+  displayMode = 'standard',
+  deadlineThreshold = 3
+}) => {
+  const [showMenu, setShowMenu] = useState(false);
+  const [openUpwards, setOpenUpwards] = useState(false);
+  const [openToRight, setOpenToRight] = useState(false);
+  const buttonRef = React.useRef<HTMLDivElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  const toggleMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showMenu && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceRight = viewportWidth - rect.right;
+      
+      setOpenUpwards(spaceBelow < 250); 
+      
+      if (spaceRight >= 180) { // w-44 is 176px, adding a small buffer
+        setOpenToRight(true);
+      } else {
+        setOpenToRight(false);
+      }
+    }
+    setShowMenu(!showMenu);
+  };
+
+  React.useEffect(() => {
+    if (!showMenu) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if ((buttonRef.current && buttonRef.current.contains(target)) ||
+          (menuRef.current && menuRef.current.contains(target))) {
+        return;
+      }
+      setShowMenu(false);
+    };
+    window.addEventListener('mousedown', handleGlobalClick, true);
+    return () => window.removeEventListener('mousedown', handleGlobalClick, true);
+  }, [showMenu]);
+
+  if (displayMode === 'compact') {
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 5 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          onEdit();
+        }}
+        className={cn(
+          "bg-white rounded-lg p-2.5 shadow-sm border border-slate-100 group hover:border-indigo-300 transition-all flex items-center gap-3 cursor-pointer",
+          variant === 'Urgent' && "border-l-4 border-l-red-500",
+          task.isDone && "grayscale opacity-50 shadow-none",
+          showMenu && "relative z-30 shadow-xl border-indigo-200"
+        )}
+      >
+        <button 
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          className={cn(
+            "w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0",
+            task.isDone ? "bg-blue-500 border-blue-500" : "border-slate-300 hover:border-blue-400"
+          )}
+        >
+          {task.isDone && <CheckCircle2 size={12} className="text-white" />}
+        </button>
+
+        <div className="flex-1 min-w-0 pr-2">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-[9px] font-mono font-bold text-slate-400">
+               ({formatDate(task.createdAt)})
+            </span>
+            {task.deadline && (
+              <span className={cn(
+                "text-[9px] font-bold px-1.5 py-0.5 rounded leading-none flex items-center gap-1",
+                (task.deadline - Date.now() <= deadlineThreshold * 86400000) 
+                  ? "bg-red-50 text-red-600 border border-red-100" 
+                  : "bg-slate-100 text-slate-500"
+              )}>
+                <Clock size={10} />
+                {task.isAllDay ? format(task.deadline, 'MM/dd') : format(task.deadline, 'MM/dd HH:mm')}
+              </span>
+            )}
+            <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded leading-none shrink-0 truncate max-w-[80px]">
+              [{task.project}]
+            </span>
+          </div>
+          <p className={cn(
+            "text-xs font-semibold text-slate-800 truncate",
+            task.isDone && "line-through text-slate-400"
+          )}>
+            {task.title}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="hidden md:inline text-[9px] font-black text-slate-300 tabular-nums">
+            {format(task.updatedAt, 'MM/dd HH:mm')}
+          </span>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onPin(); }}
+            className={cn(
+              "p-1 rounded transition-colors",
+              task.isPinned ? "text-indigo-600" : "text-slate-400 md:text-slate-200 md:hover:text-indigo-400"
+            )}
+            title={task.isPinned ? "Unpin task" : "Pin task"}
+          >
+            <Pin size={14} className={cn("rotate-45", task.isPinned && "fill-indigo-600")} />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onStar(); }}
+            className={cn(
+              "p-1 rounded transition-colors",
+              task.isStarred ? "text-amber-500" : "text-slate-400 md:text-slate-200 md:hover:text-amber-400"
+            )}
+          >
+            <Star size={14} className={task.isStarred ? "fill-amber-500" : ""} />
+          </button>
+
+          {/* Shortcut buttons for mobile parity */}
+          {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
+            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-1 px-1.5 hover:bg-red-50 text-red-500 rounded bg-red-50/30 md:bg-transparent" title={t('MoveToUrgent')}>
+              <Zap size={14} />
+            </button>
+          )}
+          {(variant === 'Archive' || variant === 'Trash' || variant === 'Urgent') && (
+            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-1 px-1.5 hover:bg-indigo-50 text-indigo-500 rounded bg-indigo-50/30 md:bg-transparent" title={t('RestoreToFocus')}>
+              <Target size={14} />
+            </button>
+          )}
+          
+          <div className="relative" ref={buttonRef}>
+            <button onClick={toggleMenu} className="p-1 hover:bg-slate-100 text-slate-400 rounded bg-slate-50 md:bg-transparent">
+              <MoreVertical size={14} />
+            </button>
+            {showMenu && createPortal(
+              <div 
+                ref={menuRef}
+                className={cn(
+                  "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[100] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
+                )}
+                style={{
+                  top: openUpwards ? 'auto' : (buttonRef.current?.getBoundingClientRect().bottom || 0) + 4,
+                  bottom: openUpwards ? window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0) + 4 : 'auto',
+                  left: openToRight 
+                    ? Math.max(8, (buttonRef.current?.getBoundingClientRect().left || 0)) 
+                    : Math.min(window.innerWidth - 184, (buttonRef.current?.getBoundingClientRect().right || 0) - 176),
+                }}
+              >
+                  {variant !== 'Urgent' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
+                      <Zap size={12} className="text-red-400" /> {t('MoveToUrgent')}
+                    </button>
+                  )}
+                  {variant !== 'Focus' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-indigo-600 border-b border-slate-50 flex items-center gap-2">
+                      <Target size={12} className="text-indigo-400" /> {t('RestoreToFocus')}
+                    </button>
+                  )}
+                  {variant !== 'Archive' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Archive'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-600 border-b border-slate-50 flex items-center gap-2">
+                      <ArchiveIcon size={12} className="text-slate-400" /> {t('ArchiveTask')}
+                    </button>
+                  )}
+                  {variant !== 'Trash' ? (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Trash'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                       <Trash2 size={12} className="text-red-400" /> {t('MoveToTrash')}
+                    </button>
+                  ) : (
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                      <Trash2 size={12} className="text-red-400" /> {t('DeletePermanently')}
+                    </button>
+                  )}
+                </div>,
+                document.body
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      onClick={(e) => {
+        // Prevent clicking the card from triggering edit if we are clicking a button
+        if ((e.target as HTMLElement).closest('button')) return;
+        onEdit();
+      }}
+      className={cn(
+        "bg-white rounded-xl shadow-sm border border-slate-200 group hover:border-indigo-300 transition-all flex flex-col cursor-pointer",
+        displayMode === 'large' ? "p-5 md:p-6 gap-3" : "p-3 md:p-4",
+        variant === 'Urgent' && "border-l-4 border-l-red-500",
+        variant === 'Archive' && "opacity-70 grayscale",
+        task.isDone && "grayscale opacity-50",
+        showMenu && "relative z-30 shadow-xl border-indigo-200"
+      )}
+    >
+      <div className="flex items-start justify-between mb-1.5 min-w-0">
+        <div className="flex flex-col gap-0.5 min-w-0 pr-1">
+          {task.deadline && (
+            <>
+              <div className={cn(
+                "flex items-center gap-1 font-black uppercase tracking-tighter shrink-0",
+                displayMode === 'large' ? "text-[11px]" : "text-[9px]",
+                (task.deadline - Date.now()) < 0 ? "text-red-600" : 
+                (task.deadline - Date.now()) <= (deadlineThreshold * 86400000) ? "text-amber-600" : "text-slate-400"
+              )}>
+                <Clock size={displayMode === 'large' ? 12 : 10} />
+                <span>{task.isAllDay ? format(task.deadline, 'MM/dd') : format(task.deadline, 'MM/dd HH:mm')}</span>
+              </div>
+              <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 truncate opacity-70">
+                <span>({format(task.deadline, 'yyyyMMdd')})</span>
+                <span className="text-indigo-400/60">[{task.project}]</span>
+              </div>
+            </>
+          )}
+          {!task.deadline && (
+            <div className="text-[8px] font-bold text-indigo-400/60 truncate">
+              [{task.project}]
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0 ml-auto pt-0.5">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onPin(); }}
+            className={cn(
+              "p-1 rounded transition-colors group/pin",
+              task.isPinned ? "text-indigo-600" : "text-slate-300 hover:text-indigo-400"
+            )}
+            title={task.isPinned ? "Unpin task" : "Pin task"}
+          >
+            <Pin size={displayMode === 'large' ? 14 : 12} className={cn("rotate-45", task.isPinned && "fill-indigo-600")} />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onStar(); }}
+            className={cn(
+              "p-1 rounded transition-colors group/star",
+              task.isStarred ? "text-amber-500" : "text-slate-300 hover:text-amber-400"
+            )}
+            title={task.isStarred ? "Unstar task" : "Star task"}
+          >
+            {task.isStarred ? <Star size={displayMode === 'large' ? 14 : 12} className="fill-amber-500" /> : <Star size={displayMode === 'large' ? 14 : 12} />}
+          </button>
+          {(variant === 'Archive' || variant === 'Trash') && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onMove('Focus'); }}
+              className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-0.5 ml-1"
+            >
+              RESTORE
+            </button>
+          )}
+        </div>
+      </div>
+      <p className={cn(
+        "font-semibold text-slate-800 leading-tight mb-2 break-words", 
+        displayMode === 'large' ? "text-sm md:text-lg" : "text-xs md:text-sm",
+        task.isDone && "line-through text-slate-400"
+      )}>
+        {task.title}
+      </p>
+
+      {task.urls && task.urls.length > 0 && (
+        <div className={cn("flex flex-wrap gap-1.5 mb-2", displayMode === 'large' && "gap-2 mb-3")}>
+          {task.urls.map((url, idx) => (
+            <a 
+              key={idx}
+              href={url.startsWith('http') ? url : `https://${url}`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                "flex items-center gap-1 font-bold text-indigo-600 hover:text-indigo-800 transition-colors group/link bg-indigo-50/50 rounded border border-indigo-100/50 max-w-full",
+                displayMode === 'large' ? "text-[10px] px-2 py-1" : "text-[9px] px-1.5 py-0.5"
+              )}
+            >
+              <LinkIcon size={displayMode === 'large' ? 12 : 10} className="shrink-0 group-hover/link:rotate-12 transition-transform" />
+              <span className={cn("truncate", displayMode === 'large' ? "max-w-[180px]" : "max-w-[100px]")}>{url.replace(/^https?:\/\//, '')}</span>
+            </a>
+          ))}
+        </div>
+      )}
+      
+      {task.notes && (
+        <p className={cn(
+          "text-slate-500 mb-2 leading-relaxed italic",
+          displayMode === 'large' ? "text-[11px] bg-slate-50/80 p-2.5 rounded-lg border border-slate-100/80 block whitespace-pre-wrap line-clamp-3" : "text-[10px] line-clamp-2"
+        )}>
+          {task.notes}
+        </p>
+      )}
+      
+      <div className="flex items-center justify-between border-t border-slate-50 pt-2 mt-auto">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            className={cn(
+              "w-4 h-4 rounded border-2 transition-all flex items-center justify-center",
+              task.isDone ? "bg-blue-500 border-blue-500" : "border-slate-300 hover:border-blue-400"
+            )}
+          >
+            {task.isDone && <CheckCircle2 size={10} className="text-white" />}
+          </button>
+          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{format(task.updatedAt, 'MMM d HH:mm')}</span>
+        </div>
+
+        <div className="flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+          {variant !== 'Urgent' && variant !== 'Archive' && variant !== 'Trash' && (
+            <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); }} className="p-2 md:p-1 hover:bg-red-50 text-red-500 rounded bg-red-50/30 md:bg-transparent" title={t('MoveToUrgent')}>
+              <Zap size={14} className="md:w-2.5 md:h-2.5" />
+            </button>
+          )}
+          {(variant === 'Archive' || variant === 'Trash' || variant === 'Urgent') && (
+            <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); }} className="p-2 md:p-1 hover:bg-indigo-50 text-indigo-500 rounded bg-indigo-50/30 md:bg-transparent" title={t('RestoreToFocus')}>
+              <Target size={14} className="md:w-2.5 md:h-2.5" />
+            </button>
+          )}
+          <div className="relative" ref={buttonRef}>
+            <button onClick={toggleMenu} className="p-2 md:p-1 hover:bg-slate-100 text-slate-400 rounded bg-slate-50 md:bg-transparent">
+              <MoreVertical size={14} className="md:w-2.5 md:h-2.5" />
+            </button>
+            {showMenu && createPortal(
+              <div 
+                ref={menuRef}
+                className={cn(
+                  "fixed w-44 bg-white border border-indigo-200 rounded-xl shadow-2xl z-[100] py-1 font-bold text-[10px] uppercase tracking-wider overflow-hidden"
+                )}
+                style={{
+                  top: openUpwards ? 'auto' : (buttonRef.current?.getBoundingClientRect().bottom || 0) + 4,
+                  bottom: openUpwards ? window.innerHeight - (buttonRef.current?.getBoundingClientRect().top || 0) + 4 : 'auto',
+                  left: openToRight 
+                    ? Math.max(8, (buttonRef.current?.getBoundingClientRect().left || 0)) 
+                    : Math.min(window.innerWidth - 184, (buttonRef.current?.getBoundingClientRect().right || 0) - 176),
+                }}
+              >
+                  {variant !== 'Urgent' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Urgent'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 border-b border-slate-50 flex items-center gap-2">
+                      <Zap size={12} className="text-red-400" /> {t('MoveToUrgent')}
+                    </button>
+                  )}
+                  {variant !== 'Focus' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Focus'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-indigo-600 border-b border-slate-50 flex items-center gap-2">
+                      <Target size={12} className="text-indigo-400" /> {t('RestoreToFocus')}
+                    </button>
+                  )}
+                  {variant !== 'Archive' && (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Archive'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-600 border-b border-slate-50 flex items-center gap-2">
+                      <ArchiveIcon size={12} className="text-slate-400" /> {t('ArchiveTask')}
+                    </button>
+                  )}
+                  {variant !== 'Trash' ? (
+                    <button onClick={(e) => { e.stopPropagation(); onMove('Trash'); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                       <Trash2 size={12} className="text-red-400" /> {t('MoveToTrash')}
+                    </button>
+                  ) : (
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                      <Trash2 size={12} className="text-red-400" /> {t('DeletePermanently')}
+                    </button>
+                  )}
+                </div>,
+                document.body
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
 
 function CalendarView({ tasks, onEdit, t, locale }: { tasks: Task[]; onEdit: (t: Task) => void; t: (key: string) => string; locale: any }) {
   const [currentDate, setCurrentDate] = useState(new Date());
