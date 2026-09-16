@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   LayoutGrid,
   Calendar, 
@@ -26,9 +26,22 @@ import {
   Tag,
   Mail,
   Lock,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  ChevronRight as ChevronRightIcon,
+  Download,
+  Upload,
+  ExternalLink,
+  GripVertical,
+  FileText,
+  Globe,
+  Undo2,
+  Redo2,
+  Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { DragDropContext, Droppable, Draggable as DraggableDnd, DropResult } from '@hello-pangea/dnd';
+const Draggable = DraggableDnd as any;
 import { 
   format, 
   startOfMonth, 
@@ -54,6 +67,7 @@ import {
   linkEmailPasswordToAccount 
 } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import Papa from 'papaparse';
 import { 
   collection, 
   doc, 
@@ -61,14 +75,16 @@ import {
   setDoc, 
   deleteDoc, 
   updateDoc, 
-  addDoc 
+  addDoc,
+  writeBatch
 } from 'firebase/firestore';
 
 export default function App() {
-  const APP_VERSION = "2.5.14";
+  const APP_VERSION = "2.6.0";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // Authentication State
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [isSignUpMode, setIsSignUpMode] = useState(false);
@@ -78,18 +94,25 @@ export default function App() {
   const [linkPassword, setLinkPassword] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   
+  // App Data & Tasks State
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<string>('All');
+  
+  // Task Creation Form State
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskProject, setNewTaskProject] = useState('');
   const [newTaskNotes, setNewTaskNotes] = useState('');
+  const [newTaskUrls, setNewTaskUrls] = useState<string[]>(['']);
   const [newTaskDeadline, setNewTaskDeadline] = useState<string>('');
   const [newTaskCategory, setNewTaskCategory] = useState<Category>('Focus');
+  
+  // View & UI Navigation
   const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash' | 'calendar'>('dashboard');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [message, setMessage] = useState<{ text: string, type: 'error' | 'info' } | null>(null);
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
   const urgentLimit = 3;
 
@@ -189,11 +212,12 @@ export default function App() {
     if (!newTaskTitle.trim() || !user) return;
 
     try {
+      const validUrls = newTaskUrls.map(u => u.trim()).filter(u => u.length > 0);
       const taskData: Omit<Task, 'id'> = {
         title: newTaskTitle.trim(),
         project: newTaskProject.trim() || 'General',
         notes: newTaskNotes.trim(),
-        urls: [],
+        urls: validUrls,
         deadline: newTaskDeadline || null,
         isAllDay: true,
         category: newTaskCategory,
@@ -207,6 +231,7 @@ export default function App() {
       setNewTaskTitle('');
       setNewTaskProject('');
       setNewTaskNotes('');
+      setNewTaskUrls(['']);
       setNewTaskDeadline('');
       setMessage({ text: 'タスクを追加しました', type: 'info' });
     } catch (err: any) {
@@ -271,12 +296,14 @@ export default function App() {
     e.preventDefault();
     if (!editingTask || !user) return;
     try {
+      const validUrls = (editingTask.urls || []).map(u => u.trim()).filter(u => u.length > 0);
       await updateDoc(doc(db, 'users', user.uid, 'tasks', editingTask.id), {
         title: editingTask.title,
         project: editingTask.project,
         category: editingTask.category,
         deadline: editingTask.deadline || null,
         notes: editingTask.notes || '',
+        urls: validUrls,
         updatedAt: new Date().toISOString()
       });
       setEditingTask(null);
@@ -285,6 +312,20 @@ export default function App() {
       console.error('Edit error:', err);
       setMessage({ text: '更新に失敗しました', type: 'error' });
     }
+  };
+
+  const handleAddUrlField = () => {
+    setNewTaskUrls([...newTaskUrls, '']);
+  };
+
+  const handleRemoveUrlField = (index: number) => {
+    setNewTaskUrls(newTaskUrls.filter((_, i) => i !== index));
+  };
+
+  const handleUrlChange = (index: number, value: string) => {
+    const updated = [...newTaskUrls];
+    updated[index] = value;
+    setNewTaskUrls(updated);
   };
 
   const projects = useMemo(() => {
@@ -321,14 +362,64 @@ export default function App() {
     return filteredTasks.filter(t => t.category === 'Trash');
   }, [filteredTasks]);
 
+  const toggleProjectCollapse = (projName: string) => {
+    setCollapsedProjects(prev => {
+      const next = new Set(prev);
+      if (next.has(projName)) next.delete(projName);
+      else next.add(projName);
+      return next;
+    });
+  };
+
+  const onDragEnd = async (result: DropResult) => {
+    const { source, destination, draggableId } = result;
+    if (!destination || !user) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    const targetCategory = destination.droppableId as Category;
+    const taskToMove = tasks.find(t => t.id === draggableId);
+    if (!taskToMove) return;
+
+    try {
+      await updateDoc(doc(db, 'users', user.uid, 'tasks', taskToMove.id), {
+        category: targetCategory,
+        pinned: targetCategory === 'Urgent',
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Drag and drop update error:", err);
+    }
+  };
+
+  const exportToCSV = () => {
+    const data = tasks.map(t => ({
+      Title: t.title,
+      Project: t.project,
+      Category: t.category,
+      Deadline: t.deadline || '',
+      Completed: t.completed ? 'YES' : 'NO',
+      Notes: t.notes || '',
+      URLs: (t.urls || []).join(';')
+    }));
+    const csv = Papa.unparse(data);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `navfor_tasks_${format(new Date(), 'yyyyMMdd')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (!user && !authLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         {/* Visual Background Accents */}
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="max-w-md w-full bg-slate-800/90 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-700/60 relative z-10 text-slate-100">
+        <div className="max-w-md w-full bg-slate-900/90 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-800 relative z-10 text-slate-100">
           <div className="text-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 mx-auto mb-4 border border-indigo-400/30">
               <Zap className="w-7 h-7 fill-white" />
@@ -345,7 +436,7 @@ export default function App() {
           )}
 
           {/* Login Switcher Tabs */}
-          <div className="flex bg-slate-900/60 p-1 rounded-2xl mb-6 text-xs font-semibold border border-slate-700/50">
+          <div className="flex bg-slate-950/80 p-1 rounded-2xl mb-6 text-xs font-semibold border border-slate-800">
             <button
               type="button"
               onClick={() => setShowEmailForm(false)}
@@ -404,7 +495,7 @@ export default function App() {
                     required
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-900/80 border border-slate-700/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-slate-500"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-slate-500"
                     placeholder="name@example.com"
                   />
                 </div>
@@ -420,7 +511,7 @@ export default function App() {
                     minLength={6}
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-900/80 border border-slate-700/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-slate-500"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-slate-500"
                     placeholder="••••••••"
                   />
                 </div>
@@ -467,7 +558,7 @@ export default function App() {
               "fixed top-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-2xl text-xs font-semibold flex items-center gap-2.5 border backdrop-blur-md",
               message.type === 'error' 
                 ? "bg-red-500/20 border-red-500/40 text-red-200" 
-                : "bg-slate-800/90 border-slate-700 text-slate-100"
+                : "bg-slate-900/90 border-slate-800 text-slate-100"
             )}
           >
             {message.type === 'error' ? <AlertCircle className="w-4 h-4 text-red-400 shrink-0" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
@@ -562,12 +653,12 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Main Content Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-8">
-        {/* DASHBOARD VIEW */}
+        {}
         {viewMode === 'dashboard' && (
           <div className="space-y-6">
-            {/* Task Creation Component */}
+            {/* Task Creation Form Card */}
             <div className="bg-slate-900/90 p-5 rounded-3xl shadow-xl border border-slate-800 space-y-4">
               <form onSubmit={handleAddTask} className="space-y-3">
                 <div className="flex flex-col lg:flex-row gap-3">
@@ -624,6 +715,44 @@ export default function App() {
                     className="flex-1 min-w-[200px] px-3.5 py-1.5 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
+
+                {/* Multiple URL Fields */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span className="flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
+                      参考URLリスト
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAddUrlField}
+                      className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium text-[11px]"
+                    >
+                      <Plus className="w-3 h-3" />
+                      URLを追加
+                    </button>
+                  </div>
+                  {newTaskUrls.map((url, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        value={url}
+                        onChange={(e) => handleUrlChange(idx, e.target.value)}
+                        className="flex-1 px-3 py-1.5 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      {newTaskUrls.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUrlField(idx)}
+                          className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </form>
             </div>
 
@@ -658,80 +787,124 @@ export default function App() {
               </div>
             </div>
 
-            {/* Main Task Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Focus List Column */}
-              <div className="bg-slate-900/80 p-5 rounded-3xl border border-red-500/20 shadow-xl space-y-3">
-                <div className="flex items-center justify-between pb-3 border-b border-red-500/20">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-xl bg-red-500/20 flex items-center justify-center border border-red-500/30">
-                      <Zap className="w-4 h-4 text-red-400 fill-red-400" />
-                    </div>
-                    <h3 className="font-bold text-sm text-slate-100">Focus (最優先枠)</h3>
-                    <span className="text-xs bg-red-500/20 text-red-300 px-2.5 py-0.5 rounded-full font-bold border border-red-500/30">
-                      {urgentTasks.length} / {urgentLimit}
-                    </span>
-                  </div>
-                </div>
+            {/* Drag Drop Interactive Grid */}
+            <DragDropContext onDragEnd={onDragEnd}>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Urgent / Focus Droppable Area */}
+                <Droppable droppableId="Urgent">
+                  {(provided: any, snapshot: any) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={cn(
+                        "bg-slate-900/80 p-5 rounded-3xl border shadow-xl space-y-3 transition-colors",
+                        snapshot.isDraggingOver ? "border-red-500/60 bg-red-950/10" : "border-red-500/20"
+                      )}
+                    >
+                      <div className="flex items-center justify-between pb-3 border-b border-red-500/20">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-xl bg-red-500/20 flex items-center justify-center border border-red-500/30">
+                            <Zap className="w-4 h-4 text-red-400 fill-red-400" />
+                          </div>
+                          <h3 className="font-bold text-sm text-slate-100">Focus (最優先枠)</h3>
+                          <span className="text-xs bg-red-500/20 text-red-300 px-2.5 py-0.5 rounded-full font-bold border border-red-500/30">
+                            {urgentTasks.length} / {urgentLimit}
+                          </span>
+                        </div>
+                      </div>
 
-                <div className="space-y-2.5 min-h-[120px]">
-                  {urgentTasks.map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onToggle={handleToggleTask}
-                      onDelete={handleMoveToTrash}
-                      onPin={handleTogglePin}
-                      onEdit={setEditingTask}
-                    />
-                  ))}
-                  {urgentTasks.length === 0 && (
-                    <div className="text-center py-10 text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-1">
-                      <Sparkles className="w-5 h-5 text-slate-600 mb-1" />
-                      優先枠に固定されたタスクはありません
+                      <div className="space-y-2.5 min-h-[140px]">
+                        {urgentTasks.map((task, index) => (
+                          <Draggable key={task.id} draggableId={task.id} index={index}>
+                            {(dragProvided: any) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                {...dragProvided.dragHandleProps}
+                              >
+                                <TaskCard
+                                  task={task}
+                                  onToggle={handleToggleTask}
+                                  onDelete={handleMoveToTrash}
+                                  onPin={handleTogglePin}
+                                  onEdit={setEditingTask}
+                                />
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                        {urgentTasks.length === 0 && (
+                          <div className="text-center py-10 text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-1">
+                            <Sparkles className="w-5 h-5 text-slate-600 mb-1" />
+                            ここにドラッグして最優先タスクに設定
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
-                </div>
-              </div>
+                </Droppable>
 
-              {/* ToDo List Column */}
-              <div className="bg-slate-900/80 p-5 rounded-3xl border border-slate-800 shadow-xl space-y-3">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-                      <Target className="w-4 h-4 text-indigo-400" />
-                    </div>
-                    <h3 className="font-bold text-sm text-slate-100">ToDo (通常キュー)</h3>
-                    <span className="text-xs bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full font-bold border border-slate-700">
-                      {focusTasks.length}
-                    </span>
-                  </div>
-                </div>
+                {/* Focus / ToDo Droppable Area */}
+                <Droppable droppableId="Focus">
+                  {(provided: any, snapshot: any) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={cn(
+                        "bg-slate-900/80 p-5 rounded-3xl border shadow-xl space-y-3 transition-colors",
+                        snapshot.isDraggingOver ? "border-indigo-500/60 bg-indigo-950/10" : "border-slate-800"
+                      )}
+                    >
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+                            <Target className="w-4 h-4 text-indigo-400" />
+                          </div>
+                          <h3 className="font-bold text-sm text-slate-100">ToDo (通常キュー)</h3>
+                          <span className="text-xs bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full font-bold border border-slate-700">
+                            {focusTasks.length}
+                          </span>
+                        </div>
+                      </div>
 
-                <div className="space-y-2.5 min-h-[120px]">
-                  {focusTasks.map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onToggle={handleToggleTask}
-                      onDelete={handleMoveToTrash}
-                      onPin={handleTogglePin}
-                      onEdit={setEditingTask}
-                    />
-                  ))}
-                  {focusTasks.length === 0 && (
-                    <div className="text-center py-10 text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-1">
-                      <Layers className="w-5 h-5 text-slate-600 mb-1" />
-                      通常タスクはありません
+                      <div className="space-y-2.5 min-h-[140px]">
+                        {focusTasks.map((task, index) => (
+                          <Draggable key={task.id} draggableId={task.id} index={index}>
+                            {(dragProvided: any) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                {...dragProvided.dragHandleProps}
+                              >
+                                <TaskCard
+                                  task={task}
+                                  onToggle={handleToggleTask}
+                                  onDelete={handleMoveToTrash}
+                                  onPin={handleTogglePin}
+                                  onEdit={setEditingTask}
+                                />
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                        {focusTasks.length === 0 && (
+                          <div className="text-center py-10 text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-1">
+                            <Layers className="w-5 h-5 text-slate-600 mb-1" />
+                            通常タスクはありません
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
-                </div>
+                </Droppable>
               </div>
-            </div>
+            </DragDropContext>
           </div>
         )}
 
-        {/* CALENDAR VIEW */}
+        {}
         {viewMode === 'calendar' && (
           <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl space-y-5">
             <div className="flex items-center justify-between">
@@ -807,7 +980,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ARCHIVE VIEW */}
+        {}
         {viewMode === 'archive' && (
           <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -837,7 +1010,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TRASH VIEW */}
+        {}
         {viewMode === 'trash' && (
           <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -883,7 +1056,7 @@ export default function App() {
           </div>
         )}
 
-        {/* SETTINGS VIEW */}
+        {}
         {viewMode === 'settings' && (
           <div className="space-y-6">
             <div className="bg-slate-900 rounded-3xl p-6 shadow-xl border border-slate-800 space-y-4">
@@ -916,11 +1089,26 @@ export default function App() {
                 </button>
               </form>
             </div>
+
+            <div className="bg-slate-900 rounded-3xl p-6 shadow-xl border border-slate-800 space-y-4">
+              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2.5">
+                <Download className="w-5 h-5 text-indigo-400" />
+                データのバックアップ (CSV)
+              </h2>
+              <p className="text-xs text-slate-400">すべてのタスクをCSVファイル形式でダウンロードできます。</p>
+              <button
+                onClick={exportToCSV}
+                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold py-2.5 px-5 rounded-xl text-xs transition-colors flex items-center gap-2"
+              >
+                <Download className="w-4 h-4 text-indigo-400" />
+                CSV形式でエクスポート
+              </button>
+            </div>
           </div>
         )}
       </main>
 
-      {/* Editing Task Modal */}
+      {}
       {editingTask && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 max-w-lg w-full rounded-3xl p-6 shadow-2xl border border-slate-800 space-y-4 text-slate-100">
@@ -986,6 +1174,42 @@ export default function App() {
                 />
               </div>
 
+              {/* Editing URLs */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">参考URL</label>
+                {(editingTask.urls || []).map((url, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mb-2">
+                    <input
+                      type="url"
+                      value={url}
+                      onChange={(e) => {
+                        const updated = [...(editingTask.urls || [])];
+                        updated[idx] = e.target.value;
+                        setEditingTask({ ...editingTask, urls: updated });
+                      }}
+                      className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = (editingTask.urls || []).filter((_, i) => i !== idx);
+                        setEditingTask({ ...editingTask, urls: updated });
+                      }}
+                      className="p-1 text-slate-500 hover:text-red-400"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setEditingTask({ ...editingTask, urls: [...(editingTask.urls || []), ''] })}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> URLを追加
+                </button>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -1022,11 +1246,15 @@ const TaskCard: React.FC<TaskCardProps> = ({
 }) => {
   return (
     <div className={cn(
-      "p-3.5 bg-slate-950/80 border border-slate-800 rounded-2xl hover:border-slate-700 transition-all shadow-md flex items-center justify-between gap-3 group",
+      "p-3.5 bg-slate-950/80 border border-slate-800 rounded-2xl hover:border-slate-700 transition-all shadow-md flex items-center justify-between gap-3 group relative",
       task.completed && "opacity-50 bg-slate-950/40",
       task.pinned && "border-amber-500/40 bg-amber-500/5"
     )}>
       <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="cursor-grab text-slate-600 hover:text-slate-400 shrink-0">
+          <GripVertical className="w-4 h-4" />
+        </div>
+
         <button
           onClick={() => onToggle(task)}
           className="text-slate-500 hover:text-indigo-400 transition-colors shrink-0"
@@ -1049,15 +1277,32 @@ const TaskCard: React.FC<TaskCardProps> = ({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 mt-1">
+
+          <div className="flex flex-wrap items-center gap-3 mt-1.5">
             {task.deadline && (
-              <span className="text-[10px] text-indigo-300 flex items-center gap-1">
-                <Clock className="w-3 h-3" />
+              <span className="text-[10px] text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20">
+                <Clock className="w-3 h-3 text-indigo-400" />
                 {task.deadline}
               </span>
             )}
             {task.notes && (
               <p className="text-[11px] text-slate-400 truncate max-w-[200px]">{task.notes}</p>
+            )}
+            {task.urls && task.urls.length > 0 && (
+              <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                {task.urls.map((url, i) => (
+                  <a
+                    key={i}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 hover:underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    URL{task.urls!.length > 1 ? ` ${i + 1}` : ''}
+                  </a>
+                ))}
+              </div>
             )}
           </div>
         </div>
