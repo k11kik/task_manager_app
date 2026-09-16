@@ -935,21 +935,12 @@ export default function App() {
     } catch (err: any) {
       setAuthLoading(false);
       const authErr = parseAuthError(err);
-      setMessage({ 
-        text: `${authErr.title}: ${authErr.message}`, 
-        type: 'error' 
+      setMessage({
+        text: `${authErr.title}: ${authErr.message}`,
+        type: 'error'
       });
     }
   };
-
-  // Auth State Listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
 
   // Settings Sync
   useEffect(() => {
