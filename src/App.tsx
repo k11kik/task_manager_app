@@ -942,10 +942,7 @@ export default function App() {
     }
   };
 
-    handleRedirect();
-  }, []);
-
-  // Auth State
+  // Auth State Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
