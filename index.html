@@ -8,19 +8,19 @@
     <meta property="og:title" content="NavFOR" />
     <meta property="og:description" content="Navigation Focus Objectives &amp; Results (目的にフォーカスし、結果へと導くナビゲーションシステム)" />
     
-    <!-- 一般的なブラウザ用 (Viteが base パスを自動プレフィックス処理) -->
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/icon-16.png">
+    <!-- 先頭に ./ を付けて相対パスにする（Viteのバグ・誤参照を防止） -->
+    <link rel="icon" type="image/x-icon" href="./favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icon-16.png">
 
     <!-- iPhone/iPadホーム画面用 -->
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 
     <!-- PWAマニフェスト -->
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#ffffff">
     
-    <!-- 標準Web App用（警告回避）およびiOS用 -->
+    <!-- 標準Web App用およびiOS用 -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
