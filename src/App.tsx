@@ -78,7 +78,7 @@ import {
 import { ja, fr, enUS } from 'date-fns/locale';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
-import { auth, db, signIn, logOut, checkRedirectResult, parseAuthError } from './lib/firebase';
+import { auth, db, signIn, logOut, checkRedirectResult, parseAuthError, AuthErrorInfo } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import Papa from 'papaparse';
 import { 
@@ -95,6 +95,145 @@ import {
   getDoc,
   writeBatch
 } from 'firebase/firestore';
+
+export function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [authError, setAuthError] = useState<AuthErrorInfo | null>(null);
+
+  // 1. アプリ起動時にリダイレクト結果の受け取りとAuth状態の監視を行う
+  useEffect(() => {
+    let isMounted = true;
+
+    const handleInitialAuth = async () => {
+      try {
+        setAuthLoading(true);
+
+        // Googleからのリダイレクト戻りをチェック
+        const redirectUser = await checkRedirectResult();
+        if (redirectUser && isMounted) {
+          setUser(redirectUser.user);
+          setAuthError(null);
+        }
+      } catch (err: any) {
+        console.error("Redirect Login Processing Error:", err);
+        if (isMounted) {
+          const parsed = parseAuthError(err);
+          setAuthError(parsed);
+        }
+      } finally {
+        if (isMounted) {
+          setAuthLoading(false);
+        }
+      }
+    };
+
+    handleInitialAuth();
+
+    // Auth状態の常時監視
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (isMounted) {
+        setUser(u);
+        setAuthLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  // 2. ログインボタン押下処理（リダイレクト方式）
+  const handleSignIn = async () => {
+    try {
+      setAuthError(null);
+      setAuthLoading(true);
+      await signIn(); // 画面ごとGoogle認証へ遷移
+    } catch (err: any) {
+      setAuthLoading(false);
+      const parsed = parseAuthError(err);
+      setAuthError(parsed);
+    }
+  };
+
+  // 3. ログアウト処理
+  const handleSignOut = async () => {
+    try {
+      await logOut();
+      setUser(null);
+    } catch (err) {
+      console.error("Logout Error:", err);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center p-6">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-300 font-medium">認証状態を確認中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 p-8">
+      <div className="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
+        <h1 className="text-2xl font-bold mb-4 text-center">NavFOR</h1>
+
+        {/* エラーが発生している場合の警告表示 */}
+        {authError && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+            <p className="font-bold mb-1">⚠️ {authError.title}</p>
+            <p className="mb-2">{authError.message}</p>
+            <p className="text-xs text-red-500 dark:text-red-400 border-t border-red-200 dark:border-red-800/50 pt-2 mt-2">
+              💡 <strong>対策方法:</strong> {authError.suggestion}
+            </p>
+          </div>
+        )}
+
+        {!user ? (
+          <div className="text-center space-y-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              ログインしてタスクやプロジェクトの同期を開始します。
+            </p>
+            <button
+              onClick={handleSignIn}
+              className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow transition flex items-center justify-center space-x-2"
+            >
+              <span>Googleアカウントでログイン</span>
+            </button>
+            <p className="text-xs text-gray-400 mt-2">
+              ※ 大学Wi-Fi等の制限環境に対応するためリダイレクト方式で接続します
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+              {user.photoURL && (
+                <img src={user.photoURL} alt="Avatar" className="w-10 h-10 rounded-full" />
+              )}
+              <div className="overflow-hidden">
+                <p className="font-medium text-sm truncate">{user.displayName || 'ユーザー'}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="w-full py-2 px-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium rounded-lg text-sm transition"
+            >
+              ログアウト
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default App;
 
 // Add types for File System Access API
 declare global {
