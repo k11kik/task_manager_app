@@ -5530,35 +5530,62 @@ interface TaskCardProps {
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ 
-  task, onToggle, onMove, onDelete, onEdit, onStar, onPin, t,
-  variant = 'Focus',
-  displayMode = 'standard',
-  deadlineThreshold = 3
+  task, onToggle, onDelete, onPin, onEdit 
 }) => {
-  const [showMenu, setShowMenu] = useState(false);
-  const [openUpwards, setOpenUpwards] = useState(false);
-  const [openToRight, setOpenToRight] = useState(false);
-  const buttonRef = React.useRef<HTMLDivElement>(null);
-  const menuRef = React.useRef<HTMLDivElement>(null);
+  return (
+    <div className={cn(
+      "p-3 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-all shadow-2xs flex items-center justify-between gap-3 group",
+      task.completed && "opacity-60 bg-slate-50",
+      task.pinned && "border-amber-200 bg-amber-50/30"
+    )}>
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <button
+          onClick={() => onToggle(task)}
+          className="text-slate-400 hover:text-indigo-600 transition-colors shrink-0"
+        >
+          {task.completed ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-50" />
+          ) : (
+            <Circle className="w-5 h-5" />
+          )}
+        </button>
 
-  const toggleMenu = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!showMenu && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceRight = viewportWidth - rect.right;
-      
-      setOpenUpwards(spaceBelow < 250); 
-      
-      if (spaceRight >= 180) { // w-44 is 176px, adding a small buffer
-        setOpenToRight(true);
-      } else {
-        setOpenToRight(false);
-      }
-    }
-    setShowMenu(!showMenu);
-  };
+        <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onEdit(task)}>
+          <div className="flex items-center gap-2">
+            <h4 className={cn("text-xs font-semibold truncate text-slate-800", task.completed && "line-through text-slate-400")}>
+              {task.title}
+            </h4>
+            {task.project && (
+              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium shrink-0">
+                {task.project}
+              </span>
+            )}
+          </div>
+          {task.notes && (
+            <p className="text-[11px] text-slate-400 truncate mt-0.5">{task.notes}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity shrink-0">
+        {onPin && (
+          <button
+            onClick={() => onPin(task)}
+            className={cn("p-1 rounded-md hover:bg-slate-100", task.pinned ? "text-amber-500" : "text-slate-400")}
+          >
+            <Pin className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(task)}
+          className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
   React.useEffect(() => {
     if (!showMenu) return;
