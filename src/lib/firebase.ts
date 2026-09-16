@@ -8,7 +8,7 @@ const app = initializeApp(firebaseConfig);
 let firestoreDb;
 try {
   firestoreDb = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     experimentalAutoDetectLongPolling: true
   }, firebaseConfig.firestoreDatabaseId);
 } catch (e) {
