@@ -9,7 +9,7 @@ let firestoreDb;
 try {
   firestoreDb = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    experimentalAutoDetectLongPolling: true
+    experimentalForceLongPolling: true
   }, firebaseConfig.firestoreDatabaseId);
 } catch (e) {
   firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
