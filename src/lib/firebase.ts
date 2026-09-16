@@ -5,7 +5,9 @@ import {
   signInWithPopup, 
   signOut,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  linkWithCredential
 } from 'firebase/auth';
 import { 
   initializeFirestore, 
@@ -57,7 +59,6 @@ export const signInWithGoogle = async (forceConsent = false) => {
   };
 };
 
-// 既存コードとの互換性用
 export const signIn = signInWithGoogle;
 
 // メール/パスワード ログイン (厳格なWi-Fi環境用)
@@ -68,6 +69,15 @@ export const signInWithEmail = async (email: string, pass: string) => {
 // メール/パスワード 新規アカウント登録
 export const signUpWithEmail = async (email: string, pass: string) => {
   return await createUserWithEmailAndPassword(auth, email, pass);
+};
+
+// 既存のGoogleアカウント（現在ログイン中）にパスワードを紐付ける関数
+export const linkEmailPasswordToAccount = async (pass: string) => {
+  if (!auth.currentUser || !auth.currentUser.email) {
+    throw new Error("ログイン中のユーザーが存在しないか、メールアドレスを取得できません。");
+  }
+  const credential = EmailAuthProvider.credential(auth.currentUser.email, pass);
+  return await linkWithCredential(auth.currentUser, credential);
 };
 
 export const logOut = () => signOut(auth);
