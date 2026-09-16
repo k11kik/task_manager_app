@@ -7,7 +7,9 @@ import {
   signOut,
   setPersistence,
   browserLocalPersistence,
-  UserCredential
+  UserCredential,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
 } from 'firebase/auth';
 import { 
   initializeFirestore, 
@@ -30,10 +32,10 @@ try {
   firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 }
 
-export const db = firestoreDb; // CRITICAL: The app will break without this line
+export const db = firestoreDb;
 export const auth = getAuth(app);
 
-// 認証の永続化を IndexedDB / LocalStorage に明示的に設定（リダイレクト復帰時のセッション消失を防止）
+// 認証の永続化を IndexedDB / LocalStorage に明示的に設定
 setPersistence(auth, browserLocalPersistence).catch((err) => {
   console.error("Auth persistence setup failed:", err);
 });
@@ -52,22 +54,33 @@ export const clearFirestoreCache = async () => {
 };
 
 /**
- * Googleログインを開始します（リダイレクト方式）。
- * ポップアップがブロックされる環境（大学Wi-FiプロキシやSafari）でも通信切断を回避できます。
+ * Google ログインを開始（リダイレクト方式）
  */
-export const signIn = async (forceConsent = false): Promise<void> => {
+export const signInWithGoogle = async (forceConsent = false): Promise<void> => {
   if (forceConsent) {
     googleProvider.setCustomParameters({ prompt: 'consent select_account' });
   } else {
     googleProvider.setCustomParameters({ prompt: 'select_account' });
   }
-  // ポップアップ(signInWithPopup)ではなく、画面全体をGoogle認証画面に遷移させる
   await signInWithRedirect(auth, googleProvider);
 };
 
 /**
- * リダイレクト後にアプリに戻ってきた際、ログイン結果を取得します。
- * App component の useEffect 等でアプリ起動時に呼び出してください。
+ * メールアドレス＆パスワードで新規アカウント登録
+ */
+export const signUpWithEmail = (email: string, pass: string): Promise<UserCredential> => {
+  return createUserWithEmailAndPassword(auth, email, pass);
+};
+
+/**
+ * メールアドレス＆パスワードでログイン
+ */
+export const signInWithEmail = (email: string, pass: string): Promise<UserCredential> => {
+  return signInWithEmailAndPassword(auth, email, pass);
+};
+
+/**
+ * リダイレクト後にアプリに戻ってきた際、ログイン結果を取得
  */
 export const checkRedirectResult = async (): Promise<UserCredential | null> => {
   try {
@@ -102,12 +115,30 @@ export function parseAuthError(err: any): AuthErrorInfo {
     };
   }
 
-  if (code === 'auth/popup-blocked') {
+  if (code === 'auth/email-already-in-use') {
     return {
       code,
-      title: 'ポップアップがブロックされました',
-      message: 'ブラウザのポップアップブロック機能によりログイン画面を開けませんでした。',
-      suggestion: 'リダイレクト方式によるログインをお試しいただくか、ブラウザのポップアップ許可を設定してください。'
+      title: '登録済みのメールアドレスです',
+      message: 'このメールアドレスは既に登録されています。',
+      suggestion: '「ログイン」タブに切り替えてログインをお試しください。'
+    };
+  }
+
+  if (code === 'auth/wrong-password' || code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+    return {
+      code,
+      title: 'ログイン失敗',
+      message: 'メールアドレスまたはパスワードが正しくありません。',
+      suggestion: '入力内容を再度ご確認のうえお試しください。'
+    };
+  }
+
+  if (code === 'auth/weak-password') {
+    return {
+      code,
+      title: 'パスワードが短すぎます',
+      message: 'パスワードは6文字以上で設定してください。',
+      suggestion: '6文字以上の英数字や記号を組み合わせたパスワードを入力してください。'
     };
   }
 
@@ -115,6 +146,6 @@ export function parseAuthError(err: any): AuthErrorInfo {
     code,
     title: `認証エラー (${code})`,
     message: rawMessage,
-    suggestion: 'ネットワーク接続やブラウザの設定をご確認ください。'
+    suggestion: 'ネットワーク接続や入力内容をご確認ください。'
   };
 }
