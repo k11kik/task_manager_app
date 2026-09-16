@@ -121,23 +121,12 @@ export default function App() {
   const APP_VERSION = "2.5.13";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProject, setSelectedProject] = useState<string>('All');
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskProject, setNewTaskProject] = useState('');
-  const [newTaskNotes, setNewTaskNotes] = useState('');
-  const [newTaskUrls, setNewTaskUrls] = useState<string[]>(['']);
-  const [newTaskDeadline, setNewTaskDeadline] = useState<string>('');
-  const [isTaskAllDay, setIsTaskAllDay] = useState(true);
-  const [newTaskUrl, setNewTaskUrl] = useState(''); // Compatibility check if still used in layout
-  const [isPickingDaily, setIsPickingDaily] = useState(false);
-  const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash' | 'calendar'>('dashboard');
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [message, setMessage] = useState<{ text: string, type: 'error' | 'info' } | null>(null);
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-  const [activeSection, setActiveSection] = useState<string>('General');
-  const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings'>('urgent');
+  const [authError, setAuthError] = useState<AuthErrorInfo | null>(null);
+
+  // Track swipe cooldown
+  const lastSwipeTime = React.useRef(0);
+  const touchStart = React.useRef({ x: 0, y: 0 });
+  const accumulatedX = React.useRef(0);
 
   // 1. アプリ起動時に Google リダイレクト認証結果を処理
   useEffect(() => {
@@ -204,9 +193,6 @@ export default function App() {
     }
   };
 
-  // Track swipe cooldown
-  const lastSwipeTime = useRef(0);
-
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -264,10 +250,25 @@ export default function App() {
     </div>
   );
   
-  // Track swipe cooldown
-  const lastSwipeTime = React.useRef(0);
-  const touchStart = React.useRef({ x: 0, y: 0 });
-  const accumulatedX = React.useRef(0);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProject, setSelectedProject] = useState<string>('All');
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskProject, setNewTaskProject] = useState('');
+  const [newTaskNotes, setNewTaskNotes] = useState('');
+  const [newTaskUrls, setNewTaskUrls] = useState<string[]>(['']);
+  const [newTaskDeadline, setNewTaskDeadline] = useState<string>('');
+  const [isTaskAllDay, setIsTaskAllDay] = useState(true);
+  const [newTaskUrl, setNewTaskUrl] = useState(''); // Compatibility check if still used in layout
+  const [isPickingDaily, setIsPickingDaily] = useState(false);
+  const [viewMode, setViewMode] = useState<'dashboard' | 'archive' | 'settings' | 'trash' | 'calendar'>('dashboard');
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [message, setMessage] = useState<{ text: string, type: 'error' | 'info' } | null>(null);
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [activeSection, setActiveSection] = useState<string>('General');
+  const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings'>('urgent');
+
+  
   const swipeLocked = React.useRef(false);
   const lockTimer = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -1052,21 +1053,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Sign In Trigger Function (Used by UI buttons)
-  const handleSignIn = async () => {
-    try {
-      setAuthLoading(true);
-      await signIn(); // Initiates full-page redirect to Google
-    } catch (err: any) {
-      setAuthLoading(false);
-      const authErr = parseAuthError(err);
-      setMessage({
-        text: `${authErr.title}: ${authErr.message}`,
-        type: 'error'
-      });
-    }
-  };
-
+  
   // Settings Sync
   useEffect(() => {
     if (!user) return;
