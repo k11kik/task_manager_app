@@ -265,6 +265,7 @@ export default function App() {
         </div>
       </div>
     );
+  }
   
   // Track swipe cooldown
   const lastSwipeTime = React.useRef(0);
