@@ -78,7 +78,7 @@ import {
 import { ja, fr, enUS } from 'date-fns/locale';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
-import { auth, db, signIn, logOut } from './lib/firebase';
+import { auth, db, signIn, signInWithEmail, signUpWithEmail, linkEmailPasswordToAccount, logOut } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import Papa from 'papaparse';
 import { 
@@ -122,12 +122,71 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // 認証用ステート
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
-  
+  const [showEmailForm, setShowEmailForm] = useState(false); // メールフォームの表示切り替え
+
+  // 設定画面での連携用ステート
+  const [linkPassword, setLinkPassword] = useState('');
+  const [isLinking, setIsLinking] = useState(false);
+
+  const [authPassword, setAuthPassword] = useState('');
+  // 現在のGoogleアカウントにパスワードを連携するハンドラ（設定画面等で実行）
+  const handleLinkPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccessMsg(null);
+    setIsLinking(true);
+
+    try {
+      await linkEmailPasswordToAccount(linkPassword);
+      setAuthSuccessMsg('学内Wi-Fi用のパスワード設定が完了しました！これでメールログインでも同じデータが開けます。');
+      setLinkPassword('');
+    } catch (err: any) {
+      console.error("Link error:", err);
+      if (err.code === 'auth/credential-already-in-use') {
+        setAuthError('このパスワード/認証情報は既に他のアカウントに紐付けられています。');
+      } else {
+        setAuthError('連携に失敗しました: ' + err.message);
+      }
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccessMsg(null);
+    setIsSubmittingAuth(true);
+
+    try {
+      if (isSignUpMode) {
+        await signUpWithEmail(authEmail, authPassword);
+      } else {
+        await signInWithEmail(authEmail, authPassword);
+      }
+    } catch (err: any) {
+      console.error("Auth error:", err);
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setAuthError('メールアドレスまたはパスワードが正しくありません。');
+      } else if (err.code === 'auth/email-already-in-use') {
+        setAuthError('このメールアドレスは既に登録されています。Googleでログイン後、設定画面からパスワード設定を行ってください。');
+      } else if (err.code === 'auth/weak-password') {
+        setAuthError('パスワードは6文字以上で設定してください。');
+      } else {
+        setAuthError('認証エラーが発生しました。通信環境を確認してください。');
+      }
+    } finally {
+      setIsSubmittingAuth(false);
+    }
+  };
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<string>('All');
@@ -146,32 +205,6 @@ export default function App() {
   const [activeSection, setActiveSection] = useState<string>('General');
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings'>('urgent');
 
-  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
-    setIsSubmittingAuth(true);
-
-    try {
-      if (isSignUpMode) {
-        await signUpWithEmail(authEmail, authPassword);
-      } else {
-        await signInWithEmail(authEmail, authPassword);
-      }
-    } catch (err: any) {
-      console.error("Auth error:", err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        setAuthError('メールアドレスまたはパスワードが正しくありません。');
-      } else if (err.code === 'auth/email-already-in-use') {
-        setAuthError('このメールアドレスは既に登録されています。');
-      } else if (err.code === 'auth/weak-password') {
-        setAuthError('パスワードは6文字以上で設定してください。');
-      } else {
-        setAuthError('認証エラーが発生しました。通信環境を確認してください。');
-      }
-    } finally {
-      setIsSubmittingAuth(false);
-    }
-  };
 
   if (!user && !authLoading) {
     return (
@@ -180,7 +213,7 @@ export default function App() {
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-slate-800">NavFOR</h1>
             <p className="text-xs text-slate-500 mt-1">
-              {isSignUpMode ? '新規アカウント作成' : 'ログインして開始'}
+              タスク＆プロジェクト管理アプリ
             </p>
           </div>
 
@@ -191,11 +224,11 @@ export default function App() {
             </div>
           )}
 
-          {/* Google Sign-In Button */}
+          {/* メイン: Google Sign-In Button */}
           <button
             onClick={() => signIn()}
             type="button"
-            className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium py-2.5 px-4 rounded-xl transition-all shadow-sm mb-4 text-sm"
+            className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium py-3 px-4 rounded-xl transition-all shadow-sm mb-4 text-sm"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -203,65 +236,75 @@ export default function App() {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
             </svg>
-            Googleでログイン
+            Googleでログイン (通常環境用)
           </button>
 
-          <div className="relative my-5">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
-            <div className="relative flex justify-center text-[10px] text-slate-400 uppercase tracking-wider">
-              <span className="bg-white px-2">学内Wi-Fi用 メールログイン</span>
-            </div>
-          </div>
-
-          {/* Email / Password Form */}
-          <form onSubmit={handleEmailAuthSubmit} className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">メールアドレス</label>
-              <input
-                type="email"
-                required
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="name@example.com"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">パスワード</label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="••••••••"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmittingAuth}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              <LogIn className="w-4 h-4" />
-              {isSubmittingAuth ? '処理中...' : isSignUpMode ? '新規アカウント作成' : 'メールでログイン'}
-            </button>
-          </form>
-
-          <div className="mt-4 text-center">
+          {/* オプション切り替え用アコーディオン・ボタン */}
+          <div className="mt-6 pt-4 border-t border-slate-100 text-center">
             <button
               type="button"
-              onClick={() => {
-                setIsSignUpMode(!isSignUpMode);
-                setAuthError(null);
-              }}
-              className="text-xs text-indigo-600 hover:underline"
+              onClick={() => setShowEmailForm(!showEmailForm)}
+              className="text-xs text-slate-500 hover:text-indigo-600 font-medium flex items-center justify-center gap-1 mx-auto"
             >
-              {isSignUpMode ? 'すでにアカウントをお持ちの方はこちら' : 'メール認証のアカウント作成はこちら'}
+              <span>{showEmailForm ? 'メールログインフォームを閉じる' : '学内Wi-Fi・制限環境用 メールログインはこちら'}</span>
+              <ChevronDown className={cn("w-3 h-3 transition-transform", showEmailForm && "rotate-180")} />
             </button>
           </div>
+
+          {/* Email / Password Form (オプション表示) */}
+          {showEmailForm && (
+            <form onSubmit={handleEmailAuthSubmit} className="space-y-3 mt-4 pt-4 border-t border-dashed border-slate-200">
+              <p className="text-[11px] text-slate-400 mb-2">
+                ※学内プロキシ等でGoogleポップアップが開けない場合に使用します。
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">メールアドレス</label>
+                <input
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="name@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">パスワード</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="••••••••"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingAuth}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+              >
+                <LogIn className="w-4 h-4" />
+                {isSubmittingAuth ? '処理中...' : isSignUpMode ? '新規アカウント作成' : 'メールでログイン'}
+              </button>
+
+              <div className="text-center mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSignUpMode(!isSignUpMode);
+                    setAuthError(null);
+                  }}
+                  className="text-[11px] text-indigo-600 hover:underline"
+                >
+                  {isSignUpMode ? 'すでに登録済みの方（ログインへ）' : '初めての方（メールで新規登録）'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     );
