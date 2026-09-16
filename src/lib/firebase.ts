@@ -1,14 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
-  signOut,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  EmailAuthProvider,
-  linkWithCredential
-} from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, terminate, clearIndexedDbPersistence } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -23,7 +14,7 @@ try {
   firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 }
 
-export const db = firestoreDb;
+export const db = firestoreDb; // CRITICAL: The app will break without this line
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -31,6 +22,7 @@ export const clearFirestoreCache = async () => {
   try {
     await terminate(db);
     await clearIndexedDbPersistence(db);
+    // Note: The app will need to reload or re-initialize db after this
     return true;
   } catch (err) {
     console.error("Failed to clear Firestore cache:", err);
@@ -38,7 +30,7 @@ export const clearFirestoreCache = async () => {
   }
 };
 
-export const signInWithGoogle = async (forceConsent = false) => {
+export const signIn = async (forceConsent = false) => {
   if (forceConsent) {
     googleProvider.setCustomParameters({ prompt: 'consent select_account' });
   } else {
@@ -50,26 +42,4 @@ export const signInWithGoogle = async (forceConsent = false) => {
     credential: GoogleAuthProvider.credentialFromResult(result)
   };
 };
-
-export const signIn = signInWithGoogle;
-
-// メール/パスワード ログイン
-export const signInWithEmail = async (email: string, pass: string) => {
-  return await signInWithEmailAndPassword(auth, email, pass);
-};
-
-// メール/パスワード 新規アカウント登録
-export const signUpWithEmail = async (email: string, pass: string) => {
-  return await createUserWithEmailAndPassword(auth, email, pass);
-};
-
-// 既存のGoogleアカウントにパスワードを連携
-export const linkEmailPasswordToAccount = async (pass: string) => {
-  if (!auth.currentUser || !auth.currentUser.email) {
-    throw new Error("ログイン中のユーザーが存在しないか、メールアドレスを取得できません。");
-  }
-  const credential = EmailAuthProvider.credential(auth.currentUser.email, pass);
-  return await linkWithCredential(auth.currentUser, credential);
-};
-
 export const logOut = () => signOut(auth);
