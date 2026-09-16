@@ -1817,14 +1817,6 @@ export default function App() {
     }
   };
 
-  const handleSignIn = async () => {
-    try {
-      await signIn();
-    } catch (err) {
-      setMessage({ text: "Sign in failed.", type: 'error' });
-    }
-  };
-
   const getCSVData = () => {
     const headers = ['ID', 'Category', 'Workspace', 'Project', 'Title', 'Notes', 'URLs', 'IsDone', 'IsStarred', 'Deadline', 'CreatedAt', 'UpdatedAt', 'UserID'];
     const rows = tasks.map(t => [
