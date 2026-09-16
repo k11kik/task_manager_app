@@ -1084,7 +1084,6 @@ function TaskCard({ task, onToggle, onDelete, onPin, onEdit }: TaskCardProps) {
       </div>
     </div>
   );
-}
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const now = Date.now();
