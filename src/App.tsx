@@ -78,7 +78,7 @@ import {
 import { ja, fr, enUS } from 'date-fns/locale';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
-import { auth, db, signIn, logOut } from './lib/firebase';
+import { auth, db, signIn, logOut, checkRedirectResult, parseAuthError } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import Papa from 'papaparse';
 import { 
@@ -883,7 +883,6 @@ export default function App() {
   // Browser Exit Confirmation
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Only show confirmation if no backup path is set
       if (!dirHandle) {
         const msg = "Local backup folder is not configured. Please set a backup path in Settings to ensure your logs are saved locally.";
         e.preventDefault();
@@ -895,6 +894,29 @@ export default function App() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [dirHandle]);
+
+  // Google Redirect Auth Result Handler
+  useEffect(() => {
+    const handleRedirect = async () => {
+      try {
+        const result = await checkRedirectResult();
+        if (result && result.user) {
+          setMessage({ 
+            text: `Welcome back, ${result.user.displayName || result.user.email}!`, 
+            type: 'info' 
+          });
+        }
+      } catch (err: any) {
+        const authErr = parseAuthError(err);
+        setMessage({ 
+          text: `${authErr.title}: ${authErr.message}`, 
+          type: 'error' 
+        });
+      }
+    };
+
+    handleRedirect();
+  }, []);
 
   // Auth State
   useEffect(() => {
