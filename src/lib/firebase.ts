@@ -25,7 +25,7 @@ let firestoreDb;
 try {
   firestoreDb = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    experimentalForceLongPolling: true // 厳格なプロキシ・学内Wi-Fi環境対策 (WebSocket遮断回避)
+    experimentalForceLongPolling: true // 学内Wi-Fi・厳格プロキシ環境対策
   }, firebaseConfig.firestoreDatabaseId);
 } catch (e) {
   firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -61,7 +61,7 @@ export const signInWithGoogle = async (forceConsent = false) => {
 
 export const signIn = signInWithGoogle;
 
-// メール/パスワード ログイン (厳格なWi-Fi環境用)
+// メール/パスワード ログイン (学内Wi-Fi等でポップアップ不可な環境用)
 export const signInWithEmail = async (email: string, pass: string) => {
   return await signInWithEmailAndPassword(auth, email, pass);
 };
@@ -71,7 +71,7 @@ export const signUpWithEmail = async (email: string, pass: string) => {
   return await createUserWithEmailAndPassword(auth, email, pass);
 };
 
-// 既存のGoogleアカウント（現在ログイン中）にパスワードを紐付ける関数
+// 既存のGoogleアカウントにパスワードを連携する関数
 export const linkEmailPasswordToAccount = async (pass: string) => {
   if (!auth.currentUser || !auth.currentUser.email) {
     throw new Error("ログイン中のユーザーが存在しないか、メールアドレスを取得できません。");
