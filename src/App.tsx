@@ -2898,7 +2898,7 @@ export default function App() {
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
               >
                 <LogIn size={16} />
-                <span className="hidden sm:inline">{t('SignIn')}</span>
+                <span className="hidden sm:inline">{t('Sign In')}</span>
               </button>
             )}
           </div>
