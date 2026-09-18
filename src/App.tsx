@@ -48,7 +48,11 @@ import {
   RefreshCcw,
   Pin,
   PinOff,
-  GripVertical
+  GripVertical,
+  KeyRound,
+  Shield,
+  Mail,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DragDropContext, Droppable, Draggable as DraggableDnd } from '@hello-pangea/dnd';
@@ -78,7 +82,17 @@ import {
 import { ja, fr, enUS } from 'date-fns/locale';
 import { Category, Task } from './types';
 import { cn, formatDate } from './lib/utils';
-import { auth, db, signIn, logOut } from './lib/firebase';
+import { 
+  auth, 
+  db, 
+  signIn, 
+  logOut,
+  checkRedirectResult,
+  linkEmailPasswordToCurrentUser,
+  hasPasswordAuth,
+  hasGoogleAuth
+} from './lib/firebase';
+import { AuthModal } from './components/AuthModal';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import Papa from 'papaparse';
 import { 
@@ -118,7 +132,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.5.13";
+  const APP_VERSION = "2.6.1";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -138,6 +152,12 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [activeSection, setActiveSection] = useState<string>('General');
   const [mobileView, setMobileView] = useState<'summary' | 'urgent' | 'focus' | 'calendar' | 'archive' | 'trash' | 'settings'>('urgent');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalInitialTab, setAuthModalInitialTab] = useState<'google' | 'email' | 'signup' | 'reset'>('google');
+  const [linkingPassword, setLinkingPassword] = useState('');
+  const [isLinkingLoading, setIsLinkingLoading] = useState(false);
+  const [linkingMessage, setLinkingMessage] = useState<{ text: string, type: 'error' | 'success' } | null>(null);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
   
   // Track swipe cooldown
   const lastSwipeTime = React.useRef(0);
@@ -898,9 +918,15 @@ export default function App() {
 
   // Auth State
   useEffect(() => {
+    checkRedirectResult().catch((e) => {
+      console.warn("Redirect check error:", e);
+    });
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
+      if (u) {
+        setMessage(null);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -1780,11 +1806,45 @@ export default function App() {
     }
   };
 
-  const handleSignIn = async () => {
+  const handleSignIn = (tab: 'google' | 'email' | 'signup' | 'reset' = 'google') => {
+    setAuthModalInitialTab(tab);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleLinkPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkingPassword || linkingPassword.length < 6) {
+      setLinkingMessage({ 
+        text: settings.language === 'ja' 
+          ? 'パスワードは6文字以上で入力してください。' 
+          : 'Password must be at least 6 characters.',
+        type: 'error' 
+      });
+      return;
+    }
+    setIsLinkingLoading(true);
+    setLinkingMessage(null);
     try {
-      await signIn();
-    } catch (err) {
-      setMessage({ text: "Sign in failed.", type: 'error' });
+      await linkEmailPasswordToCurrentUser(linkingPassword);
+      setLinkingMessage({ 
+        text: settings.language === 'ja'
+          ? 'メールとパスワードを正常に連携しました！大学Wi-Fi等の制限環境でも、このメールアドレスと設定したパスワードでログインできます。'
+          : 'Successfully linked password! You can now log in via email and this password on campus Wi-Fi.',
+        type: 'success' 
+      });
+      setLinkingPassword('');
+      setShowPasswordChange(false);
+      if (auth.currentUser) {
+        await auth.currentUser.reload();
+        setUser({ ...auth.currentUser });
+      }
+    } catch (err: any) {
+      setLinkingMessage({ 
+        text: err?.message || (settings.language === 'ja' ? '連携に失敗しました。' : 'Failed to link password.'),
+        type: 'error' 
+      });
+    } finally {
+      setIsLinkingLoading(false);
     }
   };
 
@@ -2894,7 +2954,7 @@ export default function App() {
               </>
             ) : (
               <button 
-                onClick={() => handleSignIn()}
+                onClick={() => handleSignIn('google')}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
               >
                 <LogIn size={16} />
@@ -2975,11 +3035,24 @@ export default function App() {
                 <p className="text-sm opacity-80 leading-relaxed">Sign in to securely access your NavFOR system across all devices with real-time sync.</p>
               </div>
               <button 
-                onClick={() => handleSignIn()}
-                className="w-full py-4 bg-white text-indigo-600 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
+                onClick={() => handleSignIn('google')}
+                className="w-full py-3.5 bg-white text-indigo-600 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2.5 active:scale-95 shadow-md"
               >
-                <LogIn size={18} />
-                Continue with Google
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-4 h-4" alt="" />
+                <span>{t('ContinueWithGoogle')}</span>
+              </button>
+              <button 
+                onClick={() => handleSignIn('email')}
+                className="text-xs text-indigo-100 hover:text-white underline underline-offset-2 transition-colors font-medium -mt-2 flex items-center gap-1.5"
+              >
+                <Mail size={13} />
+                <span>
+                  {settings.language === 'ja' 
+                    ? 'メールログイン / 連携' 
+                    : settings.language === 'fr'
+                    ? 'Connexion e-mail / Lier'
+                    : 'Email Login / Link'}
+                </span>
               </button>
             </div>
           ) : (
@@ -4371,26 +4444,138 @@ export default function App() {
                             <p className="text-xs text-slate-500">{t('SyncToCloudDesc')}</p>
                           </div>
                           {!user ? (
-                            <button 
-                              onClick={() => handleSignIn()}
-                              className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm w-full sm:w-auto justify-center h-11"
-                            >
-                              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-4 h-4" alt="" />
-                              {t('ContinueWithGoogle')}
-                            </button>
+                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                              <button 
+                                onClick={() => handleSignIn('google')}
+                                className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm justify-center h-11"
+                              >
+                                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-4 h-4" alt="" />
+                                <span>{t('ContinueWithGoogle')}</span>
+                              </button>
+                              <button 
+                                onClick={() => handleSignIn('email')}
+                                className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-100 transition-all shadow-sm justify-center h-11"
+                              >
+                                <Mail size={15} />
+                                <span>{settings.language === 'ja' ? 'メールログイン / 連携' : settings.language === 'fr' ? 'Connexion E-mail' : 'Email Sign In / Link'}</span>
+                              </button>
+                            </div>
                           ) : (
                             <div className="flex items-center gap-3 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 w-full sm:w-auto justify-center sm:justify-start h-11">
-                              <div className="w-8 h-8 rounded-full overflow-hidden border border-white shadow-sm flex-shrink-0">
+                              <div className="w-8 h-8 rounded-full overflow-hidden border border-white shadow-sm flex-shrink-0 bg-emerald-100 flex items-center justify-center text-emerald-800">
                                 {user.photoURL ? <img src={user.photoURL} alt="" /> : <UserIcon size={14} className="m-2" />}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-[10px] font-bold text-emerald-800 truncate">{user.displayName || user.email}</p>
                                 <p className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">{t('CloudSynced')}</p>
                               </div>
-                              <button onClick={logOut} className="text-xs font-bold text-emerald-800/40 hover:text-emerald-800 ml-2">&times;</button>
+                              <button onClick={logOut} className="text-xs font-bold text-emerald-800/40 hover:text-emerald-800 ml-2" title={t('LogOut')}>&times;</button>
                             </div>
                           )}
                         </div>
+
+                        {/* If user is logged in: show provider badges & campus Wi-Fi password link card */}
+                        {user && (
+                          <div className="mt-4 p-4 rounded-xl bg-white border border-slate-200 shadow-sm space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-slate-700">
+                                  {settings.language === 'ja' ? '連携アカウント状態:' : 'Linked Accounts:'}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  {hasGoogleAuth(user) && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-2.5 h-2.5" alt="" />
+                                      Google
+                                    </span>
+                                  )}
+                                  {hasPasswordAuth(user) ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <CheckCircle2 size={11} />
+                                      {settings.language === 'ja' ? 'メール・パスワード設定済' : 'Password Linked'}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                      <AlertCircle size={11} />
+                                      {settings.language === 'ja' ? 'パスワード未設定' : 'No Password Set'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {hasPasswordAuth(user) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPasswordChange(!showPasswordChange)}
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-bold"
+                                >
+                                  {showPasswordChange 
+                                    ? (settings.language === 'ja' ? '閉じる' : 'Close') 
+                                    : (settings.language === 'ja' ? 'パスワードを変更' : 'Change Password')}
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 text-xs text-slate-600 space-y-2">
+                              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                                <Shield size={14} className="text-indigo-600" />
+                                <span>
+                                  {settings.language === 'ja' 
+                                    ? '学内Wi-Fi（Sorbonne大等）対策：メール・パスワード連携' 
+                                    : 'Campus Wi-Fi Security (Password Setup)'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] leading-relaxed text-slate-500">
+                                {hasPasswordAuth(user)
+                                  ? (settings.language === 'ja'
+                                      ? `✓ 設定完了済みです。Sorbonne大などの学内Wi-FiでGoogle認証が遮断される場合でも、メールアドレス「${user.email}」と設定したパスワードでログインできます（データは同一のまま引き継がれます）。`
+                                      : `✓ Setup complete. When on strict campus Wi-Fi where Google popups fail, you can sign in directly using ${user.email} and this password.`)
+                                  : (settings.language === 'ja'
+                                      ? `Sorbonne大などの学内Wi-FiではGoogleログインのポップアップが遮断されることがあります。ここでパスワードを設定すると、現在のGoogleアカウント（${user.email}）と同一のユーザーID・データ（タスクや設定）を保持したまま、メール＆パスワードでログインできるようになります。`
+                                      : `On strict campus Wi-Fi where Google popups fail, set a password below to allow direct email sign-in with ${user.email} while keeping all your tasks and settings intact.`)}
+                              </p>
+
+                              {(!hasPasswordAuth(user) || showPasswordChange) && (
+                                <form onSubmit={handleLinkPassword} className="space-y-2 pt-1">
+                                  {linkingMessage && (
+                                    <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                                      linkingMessage.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    }`}>
+                                      {linkingMessage.type === 'error' ? <AlertCircle size={14} className="shrink-0" /> : <CheckCircle2 size={14} className="shrink-0" />}
+                                      <span>{linkingMessage.text}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-col sm:flex-row gap-2">
+                                    <div className="relative flex-1">
+                                      <Lock size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                                      <input
+                                        type="password"
+                                        required
+                                        minLength={6}
+                                        value={linkingPassword}
+                                        onChange={(e) => setLinkingPassword(e.target.value)}
+                                        placeholder={settings.language === 'ja' ? '連携用パスワード（6文字以上）' : 'Set password (6+ chars)'}
+                                        className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                      />
+                                    </div>
+                                    <button
+                                      type="submit"
+                                      disabled={isLinkingLoading}
+                                      className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shrink-0 flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                                    >
+                                      <KeyRound size={13} />
+                                      <span>
+                                        {isLinkingLoading 
+                                          ? (settings.language === 'ja' ? '設定中...' : 'Saving...') 
+                                          : (settings.language === 'ja' ? 'パスワードを設定して連携' : 'Save & Link Password')}
+                                      </span>
+                                    </button>
+                                  </div>
+                                </form>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Local Backup */}
@@ -4572,6 +4757,12 @@ export default function App() {
             projects={projects}
           />
         )}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          language={settings.language}
+          initialTab={authModalInitialTab}
+        />
       </AnimatePresence>
     </div>
   );

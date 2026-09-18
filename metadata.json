@@ -2,5 +2,7 @@
   "name": "NavFOR",
   "description": "Navigation Focus Objectives & Results (目的にフォーカスし、結果へと導くナビゲーションシステム)",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
