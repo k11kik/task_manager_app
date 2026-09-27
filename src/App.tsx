@@ -132,7 +132,7 @@ const THEME_CATEGORIES = [
 ];
 
 export default function App() {
-  const APP_VERSION = "2.6.1";
+  const APP_VERSION = "2.6.2";
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -158,6 +158,7 @@ export default function App() {
   const [isLinkingLoading, setIsLinkingLoading] = useState(false);
   const [linkingMessage, setLinkingMessage] = useState<{ text: string, type: 'error' | 'success' } | null>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [showV3Banner, setShowV3Banner] = useState(true);
   
   // Track swipe cooldown
   const lastSwipeTime = React.useRef(0);
@@ -2505,6 +2506,44 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* NavFOR v3 Announcement Banner */}
+      {showV3Banner && (
+        <div className="bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 text-white px-4 py-2 shrink-0 relative z-[95] shadow-sm">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm font-medium pr-6">
+            <span className="truncate sm:whitespace-normal text-center">
+              {settings.language === 'ja'
+                ? '🎉 NavFOR version3が利用可能です！'
+                : settings.language === 'fr'
+                ? '🎉 NavFOR version 3 est maintenant disponible !'
+                : '🎉 NavFOR version 3 is now available!'}
+            </span>
+            <a
+              href="https://k11kik.github.io/navfor3/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-3 py-1 bg-white text-indigo-600 hover:bg-indigo-50 rounded-full text-[11px] sm:text-xs font-black tracking-tight shadow-sm transition-all hover:scale-[1.02] active:scale-95 shrink-0"
+            >
+              <span>
+                {settings.language === 'ja'
+                  ? '新しいNavFOR v3を試す'
+                  : settings.language === 'fr'
+                  ? 'Essayer le nouveau NavFOR v3'
+                  : 'Try the new NavFOR v3'}
+              </span>
+              <ArrowUpRight size={13} className="shrink-0" />
+            </a>
+          </div>
+          <button
+            onClick={() => setShowV3Banner(false)}
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-1 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+            title={settings.language === 'ja' ? '閉じる' : settings.language === 'fr' ? 'Fermer' : 'Dismiss'}
+            aria-label={settings.language === 'ja' ? '閉じる' : settings.language === 'fr' ? 'Fermer' : 'Dismiss'}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Header Navigation */}
       <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex justify-between items-center shrink-0 relative z-[100]">
